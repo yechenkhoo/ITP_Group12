@@ -1,0 +1,75 @@
+{% extends 'dashboard.html' %}
+{% load static tailwind_tags %}
+
+{% block dashboard_content %}
+<div class="flex h-full w-full p-6">
+
+  <!-- Rounded card that fits whole div -->
+  <div class="relative flex-row rounded-lg bg-white shadow-lg p-4 h-full w-full overflow-auto">
+
+    <!-- Title that lies in the card -->
+    <h1 class="text-2xl font-poppins text-gray-800">Live Video Feed</h1>
+      
+    <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-white/10" />
+
+    <!-- Put other content here, this is below the title -->
+    <div class="flex flex-col gap-2 md:flex-row md:gap-4">
+      <button class="bg-indigo-500 hover:bg-indigo-400 py-2 px-4 rounded-lg text-white w-full md:h-auto" id="live-button">
+        <p class="whitespace-nowrap text-white font-poppins">Start Video Feed</p> 
+      </button>
+  
+      <button class="bg-indigo-500 hover:bg-indigo-400 py-2 px-4 rounded-lg text-white w-full md:h-auto" id="start-recording-button">
+        <p class="whitespace-nowrap text-white font-poppins">Start Recording</p> 
+      </button>
+    </div>
+
+    <div class="w-full py-2 overflow-hidden">
+      <img 
+        id="video-feed" 
+        class="w-full h-100 bg-gray-200 flex items-center justify-center" 
+        src="" 
+        alt="Live View Feed"
+        onerror="this.style.display='none'; document.getElementById('error-placeholder').style.display='flex';"
+      />
+      <!-- Placeholder for Error -->
+      <div 
+        id="error-placeholder" 
+        class="hidden w-full h-64 bg-gray-100 text-center text-gray-500 flex items-center justify-center">
+          Live view feed is not available. Please check the connection.
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+  // Start live view
+  document.getElementById('live-button').addEventListener('click', function() {
+    const videoFeed = document.getElementById('video-feed');
+    const liveStreamURL = '/home/live_stream/'; // URL for Django live feed
+
+    // Update the src attribute to start streaming
+    videoFeed.src = liveStreamURL;
+
+    // Make the placeholder hidden and ensure the video is visible
+    document.getElementById('error-placeholder').style.display = 'none';
+    videoFeed.style.display = 'block';
+    
+    
+  });
+
+    // Start recording
+    document.getElementById('start-recording-button').addEventListener('click', function() {
+      fetch('/home/start_recording/', { method: 'POST' })
+        .then(response => {
+              if (!response.ok) {
+                throw new Error(`HTTP error! Status: ${response.status}`);
+              }
+              return response.json();
+          })
+          .then(data => alert(data.message))
+          .catch(error => alert("Error starting recording: " + error.message));
+      });
+</script>
+
+{% endblock dashboard_content %}

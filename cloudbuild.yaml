@@ -1,0 +1,30 @@
+steps:
+  # Step 1: Navigate to the Tensorflow folder and build the Docker image
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['build', '-t', 'gcr.io/teak-droplet-438006-b0/itp-se-team13', './Computer_Vision/Mediapipe']
+
+  # Step 2: Push the Docker image to Google Container Registry (GCR)
+  - name: 'gcr.io/cloud-builders/docker'
+    args: ['push', 'gcr.io/teak-droplet-438006-b0/itp-se-team13']
+
+  # Step 3: Deploy the container to Cloud Run
+  - name: 'gcr.io/cloud-builders/gcloud'
+    args: ['run', 'deploy', 'itp-se-team13', 
+           '--image', 'gcr.io/teak-droplet-438006-b0/itp-se-team13', 
+           '--region', 'asia-southeast1', 
+           '--platform', 'managed', 
+           '--allow-unauthenticated']
+
+  # Optional: Add a step to list the contents of the Tensorflow folder
+  - name: 'alpine'
+    entrypoint: 'sh'
+    args:
+      - '-c'
+      - |
+        echo "Listing contents of ./Computer_Vision/Mediapipe directory:"
+        ls ./Computer_Vision/Mediapipe
+timeout: '1600s'
+
+options:
+  logging: CLOUD_LOGGING_ONLY
+  machineType: 'N1_HIGHCPU_8'

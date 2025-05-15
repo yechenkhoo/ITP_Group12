@@ -1,0 +1,8 @@
+venv/
+.venv/
+ITP_WEBAPP/settings.py/
+ITP_WEBAPP/media/
+ITP_WEBAPP/staticfiles/
+env/
+
+../env/

@@ -1,0 +1,51 @@
+{% extends 'dashboard.html' %} 
+{% load static tailwind_tags %} 
+{% block dashboard_content %}
+<div class="relative items-center flex h-full w-full p-6">
+  <!-- Rounded card that fits whole div -->
+  <div class="relative  flex-row rounded-lg bg-white shadow-lg p-4 h-full w-full">
+    <!-- Header for the card -->
+    <div class="flex items-center justify-between">
+      
+      <h1 class="text-xl font-poppins text-gray-800">Upload New Model</h1>
+      
+    </div>
+    <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-white/10" />
+
+    <!--Admin Form-->
+    <div class="p-6">
+      <!-- Modal Body -->
+      <form action="{% url 'create_account' %}" method="POST" enctype="multipart/form-data" class="max-w-lg mx-auto p-6 bg-white shadow-md rounded-lg">
+        {% csrf_token %}
+    
+        <!-- File Upload Field -->
+        <!-- Button Upload -->
+        <div class="w-full p-4 border border-gray-200 rounded-lg bg-white shadow-sm text-center">
+            <label
+              for="modelFile"
+              class="inline-block bg-indigo-600 text-white text-sm font-medium py-2 px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            >
+              Upload Video
+            </label>
+            <input id="modelFile" name="modelFile" type="file" accept="video/*" class="hidden" />
+            <p id="fileDBName" class="text-sm text-gray-600 mt-2 italic">No file selected</p>
+          </div>
+    
+        <!-- Submit Button -->
+        <div class="text-center py-4">
+            <button 
+                type="submit" 
+                class="w-full px-4 py-2 text-white bg-indigo-600 rounded-lg font-medium hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-600 transition-colors duration-300"
+            >
+                Upload
+            </button>
+        </div>
+    </form>
+    
+    </div>
+    
+    
+  </div>
+</div>
+
+{% endblock %}

@@ -1,0 +1,42 @@
+{% extends 'dashboard.html' %} 
+{% load static tailwind_tags %} 
+{% block dashboard_content %}
+<div class="relative items-center flex h-full w-full p-6">
+  <!-- Rounded card that fits whole div -->
+  <div class="relative  flex-row rounded-lg bg-white shadow-lg p-4 h-full w-full">
+    {% include 'CreateAccount_component.html' %}
+    {% include 'upload_component.html' %}
+    <!-- Header for the card -->
+    <div class="flex items-center justify-between">
+      
+      <h1 class="md:text-xl text-md font-poppins text-gray-800">My Students</h1>
+      <button
+        class="bg-gray-500 text-white px-2 py-2 rounded hover:bg-gray-300 md:text-md text-xs h-fit" id="openModalBtn"
+      >
+        Create
+      </button>
+    </div>
+    <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-white/10" />
+
+    <!-- Grid content should go left-to-right -->
+
+    <div class="grid md:grid-cols-6 grid-cols-2 gap-4">
+      {% for student in students %}
+      <a href="{% url 'dashboard_dataSpace' student.id %}" 
+        class="triggerArea"
+        data-student-id="{{ student.id }}" 
+        data-student-name="{{ student.Name }}">
+        <div class="bg-indigo-500 hover:bg-indigo-400 hover:shadow-lg p-2 shadow-md rounded flex items-center gap-4 mx-auto">
+            <i class="fa-solid fa-folder text-white"></i>
+            <p class="whitespace-nowrap truncate text-white font-poppins md:text-md text-sm">{{ student.Name }}</p>
+        </div>
+        </a>
+        {% endfor %}
+    </div>
+  </div>
+</div>
+
+<script src="{% static 'js/dashboard_popupAccountModal.js' %}"></script>
+<script src="{% static 'js/dashboard_popupModalDnD.js' %}"></script>
+
+{% endblock %}

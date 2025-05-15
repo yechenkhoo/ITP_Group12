@@ -1,0 +1,122 @@
+{% extends 'base.html' %}
+{% load static tailwind_tags %}
+{% block content %}
+<body>
+  
+  <div class="flex flex-wrap bg-gray-100 w-full h-screen overflow-auto">
+    <!-- Hamburger Menu Button for Small Screens -->
+    <div class="flex row w-full bg-white md:hidden justify-between items-center" id="hamburger">
+      <button  class="p-4 md:hidden top-2 left-2 z-50">
+        <i class="fa-solid fa-bars text-2xl text-gray-700"></i>
+      </button>
+
+      <!-- Profile Section -->
+      <div class="flex items-center space-x-4 p-2 mb-0 pr-6">
+        <div>
+          <h4 class="font-semibold text-sm text-gray-700 capitalize font-poppins tracking-wide">
+            {{ Name }}
+          </h4>
+          <span class="text-sm tracking-wide flex justify-end space-x-1">
+            <span class="text-gray-600">{{ Role }}</span>
+          </span>
+        </div>
+      </div>
+
+    </div>
+    <!-- Sidebar -->
+    <div id="sidebar" class="w-full md:w-2/12 bg-white rounded p-3 shadow-lg flex-col md:fixed md:h-full hidden md:visible md:flex">
+      
+      <!-- Profile Section -->
+      <div class="flex items-center space-x-4 p-2 mb-0 md:flex md:visible hidden">
+        <div>
+          <h4 class="font-semibold text-lg text-gray-700 capitalize truncate font-poppins tracking-wide">
+            {{ Name }}
+          </h4>
+          <span class="text-sm tracking-wide flex items-center space-x-1">
+            <span class="text-gray-600 font-poppins text-md">{{ Role }}</span>
+          </span>
+        </div>
+      </div>
+      
+      <!-- Navigation Menu -->
+      <ul class="md:space-y-2 text-sm flex flex-col md:flex-col justify-around md:justify-start md:pt-5">
+        {% if Role == 'admin' %}
+        <li>
+          <!-- Home in side navbar -->
+          <a href="{% url 'home' %}" class="flex items-center truncate space-x-3 text-gray-700 p-2 rounded-md font-medium
+          {% if '/home/dataSpace/' in request.path or request.path == '/home/' %}bg-gray-200{% endif %} 
+          hover:bg-gray-200 focus:shadow-outline">
+            <span class="text-gray-600">
+              <i class="fa-solid fa-desktop"></i>
+            </span>
+            <span>Create Coach</span>
+          </a>
+        </li>
+
+        <li>
+          <!-- Home in side navbar -->
+          <a href="{% url 'admin_model' %}" class="flex items-center truncate space-x-3 text-gray-700 p-2 rounded-md font-medium
+          {% if '/home/model/' in request.path %}bg-gray-200{% endif %} 
+          hover:bg-gray-200 focus:shadow-outline">
+            <span class="text-gray-600">
+              <i class="fa-solid fa-desktop"></i>
+            </span>
+            <span>Upload Model</span>
+          </a>
+        </li>
+
+        {% else %}
+
+        <li>
+          <!-- Home in side navbar -->
+          <a href="{% url 'home' %}" class="flex items-center truncate space-x-3 text-gray-700 p-2 rounded-md font-medium
+          {% if '/home/dataSpace/' in request.path or request.path == '/home/' %}bg-gray-200{% endif %} 
+          hover:bg-gray-200 focus:shadow-outline">
+            <span class="text-gray-600">
+              <i class="fa-solid fa-desktop"></i>
+            </span>
+            {% if Role == 'coach' %}
+            <span>View Students</span>
+            {% else %} 
+            <span>My Data Space</span>
+            {% endif %}
+          </a>
+        </li>
+
+        <!-- Live video feed in side navbar -->
+         <li class = "py-2">
+          <a href="{% url 'dashboard_videoFeed' %}" class="flex items-center truncate space-x-3 text-gray-700 p-2 rounded-md font-medium 
+          {% if request.path == '/home/video_feed/' %}bg-gray-200{% endif %}
+          hover:bg-gray-200 focus:bg-gray-200 focus:shadow-outline">
+            <span class="text-gray-600">
+              <i class="fa-solid fa-gear"></i>
+            </span>
+            <span>Live Video Feed</span>
+          </a>
+        </li>
+        {% endif %}
+
+        <li>
+          <a href="{% url 'logout' %}" class="flex items-center space-x-3 text-gray-700 p-2 rounded-md font-medium 
+          hover:bg-gray-200 focus:bg-gray-200 focus:shadow-outline">
+            <span class="text-gray-600">
+              <i class="fa-solid fa-arrow-right-from-bracket"></i>
+            </span>
+            <span>Log out</span>
+          </a>
+        </li>
+      </ul>
+    </div>
+
+    <!-- Main Content Area -->
+    <div class="h-full w-full md:w-10/12 md:ml-auto">
+      {% block dashboard_content %}
+      {% endblock dashboard_content %}
+    </div>
+</div>
+
+<script src="{% static 'js/hamburger.js' %}"></script>
+
+  
+</body>
+{% endblock content %}

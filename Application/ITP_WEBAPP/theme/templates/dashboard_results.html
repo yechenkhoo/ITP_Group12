@@ -1,0 +1,122 @@
+{% extends 'dashboard.html' %}
+{% load static tailwind_tags %}
+{% load custom_filters %}
+{% block dashboard_content %}
+<div class="flex h-full w-full md:p-6 p-1 pt-0">
+  
+  <!-- Rounded card that fits whole div -->
+  <div class="flex flex-col rounded-lg p-4 h-full w-full overflow-auto">    
+
+    
+    <div class="top-6 left-6 mb-2">
+      <a href="{% url 'dashboard_dataSpace' studentID %}" class="inline-flex items-center p-2 text-sm font-medium text-gray-600 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+        <!-- Icon (optional) -->
+        <svg class="w-5 h-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+        </svg>
+        <p class = "md:visible hidden ml-2">Back</p>
+      </a>
+    </div>
+    <!-- Video section -->
+    <div class="flex flex-col justify-center items-center mb-4" style="height: 80%;">
+      <video id="video-player" class="aspect-auto h-full rounded-lg mb-2" controls>
+        <source src="{{ video_url }}" type="video/mp4">
+        Your browser does not support the video tag.
+      </video>
+      
+    </div>
+    
+    <!-- Table with Data Points -->
+    <div class="mb-4">
+      <!-- <h2 class="text-xl font-medium text-gray-800 mb-2">Data Points</h2> -->
+      <div class="overflow-x-auto rounded-lg">
+        <table class="min-w-full border-b">
+          <thead class="bg-gray-100">
+            <tr>
+              {% for column in columns %}
+                <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">{{ column }}</th>
+              {% endfor %}
+              <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">Hip Turn</td>
+              <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">Hip Bend</td>
+              <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">Shoulder Sway</td>
+              <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">Hip Sway</td>
+            </tr>
+
+          </thead>
+          <tbody class="bg-white">
+            {% for row in full_data %}
+              {% with row|get_item:"Overall Status" as status %}
+                <tr class="border-b hover:bg-indigo-200
+                  {% if status == 'Good' %} bg-green-100 
+                  {% elif status == 'Bad' %} bg-yellow-100 
+                  {% elif status == 'Very Bad' %} bg-red-100 
+                  {% else %} bg-white 
+                  {% endif %}"
+                  data-timestamp="{{ row|get_item:'Time Frame' }}">
+                    {% for column in columns  %}
+                      <td class="px-3 py-4 whitespace-nowrap">
+                        <div class="inline-flex items-center px-3 py-1 md:text-sm text-xs font-medium rounded-full
+                          {% with column_status_mapping|get_item:column as status_column %}
+                              {% if status_column %}
+                                  {% if row|get_item:status_column == 'Good' %} bg-green-100 text-green-800
+                                  {% elif row|get_item:status_column == 'Bad' %} bg-yellow-100 text-yellow-800
+                                  {% elif row|get_item:status_column == 'Very Bad' %} bg-red-100 text-red-800
+                                  {% else %} bg-gray-200 text-gray-800
+                                  {% endif %}
+                              {% endif %}
+                          {% endwith %}">
+                          {{ row|get_item:column }}
+                        </div>
+                    </td>
+                    {% endfor %}
+                    <td class="px-6 py-4 whitespace-nowrap">-</td>
+                    <td class="px-6 py-4 whitespace-nowrap">-</td>
+                    <td class="px-6 py-4 whitespace-nowrap">-</td>
+                    <td class="px-6 py-4 whitespace-nowrap">-</td>
+                </tr>
+                {% endwith %}
+            {% endfor %}
+        </tbody>
+        </table>
+      </div>
+    </div>
+    <form action="{% url 'results' studentID videoId %}" method="POST">
+    {% csrf_token %}
+    <div class="mx-auto mt-4 rounded-lg w-full">
+      <!-- Input for new feedback -->
+      <div class="flex items-center mb-4 w-full">
+        <input 
+          type="text" 
+          name="feedback"
+          placeholder="Create a new feedback" 
+          class="flex-grow w-full md:text-md text-sm p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        />
+        <button 
+          type="submit" 
+          class="ml-2 flex-shrink-0 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        >
+          +
+        </button>
+      </div>
+    </form>
+
+  
+      {% for feedback in comments %}
+      <!-- Chat message -->
+      <div class="p-4 md:mb-4 mb-2 bg-white rounded-lg shadow">
+          <div class="flex justify-between mb-2">
+              <span class="md:text-md text-sm font-medium italic text-gray-600">{{ feedback.CommentedBy}}</span>
+              <span class="md:text-sm text-xs font-medium text-gray-600"> {{ feedback.DateCommented }}</span>
+          </div>
+          <p class="md:text-sm text-xs text-gray-700">
+            {{ feedback.Comment }}
+          </p>
+      </div>
+      {% endfor %}
+  </div>
+  
+    
+  </div>
+</div>
+<script src="{% static 'js/video-player.js' %}"></script>
+{% endblock dashboard_content %}

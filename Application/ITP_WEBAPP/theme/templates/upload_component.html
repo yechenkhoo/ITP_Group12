@@ -1,0 +1,120 @@
+<!-- Modal Background -->
+<div id="Uploadmodal" class="absolute inset-0 flex items-center justify-center z-50 h-full w-full hidden pr-6">
+    <!-- Modal Container -->
+    <div class="bg-white rounded-lg shadow-lg h-fit w-fit p-6">
+      <!-- Modal Header -->
+      <div class="flex justify-between items-center mb-4">
+        <h2 class="text-xl font-semibold">Upload Video</h2>
+        <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+          <!-- Close button (X icon) -->
+          <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+          </svg>
+        </button>
+      </div>
+      
+      <!-- Student DataSpace -->
+      {% if '/home/dataSpace/' in request.path %}
+      <form action="{% url 'dashboard_dataSpace' studentID %}" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <!-- Video Name and Video Type -->
+        <div class="flex-row justify-between mb-4">
+
+          <!-- File Input and Display -->
+
+          <!-- Button Upload -->
+          <div class="w-full p-4 border border-gray-200 rounded-lg bg-white shadow-sm text-center">
+            <label
+              for="videoDBFile"
+              class="inline-block bg-indigo-600 text-white text-sm font-medium py-2 px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+            >
+              Upload Video
+            </label>
+            <input id="videoDBFile" name="videoDBFile" type="file" accept="video/*" class="hidden" />
+            <p id="fileDBName" class="text-sm text-gray-600 mt-2 italic">No file selected</p>
+          </div>
+
+  
+          <!-- Radio Buttons -->
+          <fieldset class="w-full mt-2">
+              <legend class="text-sm font-medium text-gray-700">Video Type:</legend>
+              <div class="mt-1 flex-col items-center">
+                  <label class="inline-flex items-center">
+                      <input type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
+                      <span class="ml-2">Face On</span>
+                  </label>
+                  <label class="inline-flex items-center md:pl-2">
+                      <input type="radio" name="videoType" value="down-the-line" class="form-radio h-4 w-4 text-indigo-600">
+                      <span class="ml-2">Down The Line</span>
+                  </label>
+              </div>
+          </fieldset>
+      </div>
+  
+      <!-- Submit Button -->
+      <div class="flex justify-center">
+          <button type="submit" class="w-full py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+              Upload
+          </button>
+      </div>
+      </form>
+
+      {% else %}
+      <!--From Coach POV-->
+      <form action="{% url 'home' %}" method="POST" enctype="multipart/form-data">
+        {% csrf_token %}
+        <!-- Video Name and Video Type -->
+        <div class="flex-row justify-between mb-4">
+
+          <!-- Display student name -->
+          <div class="w-full mr-2 mb-2">
+            <p class="block text-sm font-medium text-gray-700">Data Space:</p>
+            <p id="modalStudentName" class="block text-sm font-medium text-indigo-600"></p>
+          </div>
+
+          <!-- Hidden field for student ID -->
+          <input type="hidden" id="modalStudentId" name="student_id" value="">  
+
+          <!-- Display Selected File -->
+          <div class="w-full mr-2 mb-2">
+            <p class="block text-sm font-medium text-gray-700">Selected File:</p>
+            <p id="fileName" name="fileName" class="block text-sm font-poppins text-gray-700" ></p>
+            <input type="hidden" id="fileValue" name="fileValue" value="">  
+          </div>
+
+          <!-- File Input -->
+          <div class="w-full mr-2 mb-2">
+            <label for="videoFile" class="sr-only">Upload Video</label>
+            <input id="videoFile" name="videoFile" type="file" accept="video/*" class="hidden">
+            
+          </div>
+
+          <!-- Radio Buttons -->
+          <fieldset class="w-full mt-2">
+            <legend class="text-sm font-medium text-gray-700">Video Type:</legend>
+            
+            <div class="mt-1 flex-col items-center">
+              <label class="inline-flex items-center">
+                <input type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
+                <span class="ml-2">Face On</span>
+              </label>
+              <label class="inline-flex items-center md:pl-2">
+                <input type="radio" name="videoType" value="down-the-line" class="form-radio h-4 w-4 text-indigo-600">
+                <span class="ml-2">Down The Line</span>
+              </label>
+            </div>
+          </fieldset>
+        </div>
+
+        <!-- Submit Button -->
+        <div class="flex justify-center">
+          <button type="submit" class="w-full py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+            Upload
+          </button>
+        </div>
+      </form>
+      <!-- Modal Body -->
+      {% endif %}
+      
+    </div>
+  </div>

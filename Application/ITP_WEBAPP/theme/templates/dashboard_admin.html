@@ -1,0 +1,61 @@
+{% extends 'dashboard.html' %} 
+{% load static tailwind_tags %} 
+{% block dashboard_content %}
+<div class="relative items-center flex h-full w-full p-6">
+  <!-- Rounded card that fits whole div -->
+  <div class="relative  flex-row rounded-lg bg-white shadow-lg p-4 h-full w-full">
+    <!-- Header for the card -->
+    <div class="flex items-center justify-between">
+      
+      <h1 class="text-xl font-poppins text-gray-800">Create Coach Account</h1>
+      
+    </div>
+    <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-white/10" />
+
+    <!--Admin Form-->
+    <div class="p-6">
+      <!-- Modal Body -->
+    <form action="{% url 'create_account' %}" method="POST" >
+      {% csrf_token %}
+      <!-- Email Field -->
+      <div class="mb-4">
+        <label for="email" class="block text-sm font-medium text-gray-700">Email</label>
+        <input id="email"
+        name="email"
+        type="email"
+        autocomplete="email"
+        required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Enter Coach's email">
+      </div>
+
+      <!-- Name Field -->
+      <div class="mb-4">
+        <label for="name" class="block text-sm font-medium text-gray-700">Name</label>
+        <input id="name"
+        name="name"
+        type="text"
+        required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Enter Coach's name">
+      </div>
+
+      <!-- Password Field -->
+      <div class="mb-4">
+        <label for="password" class="block text-sm font-medium text-gray-700">Password</label>
+        <input id="password"
+        name="password"
+        type="password"
+        required class="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm" placeholder="Enter Coach's password">
+      </div>
+
+      <!-- Submit Button -->
+      <div class="flex justify-center">
+        <button type="submit" class="w-full py-2 bg-indigo-500 text-white rounded-md font-poppins hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
+          Create
+        </button>
+      </div>
+    </form>
+    </div>
+    
+    
+  </div>
+</div>
+
+{% endblock %}

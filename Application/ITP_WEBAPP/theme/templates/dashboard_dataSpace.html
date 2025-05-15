@@ -1,0 +1,212 @@
+{% extends 'dashboard.html' %}
+{% load static tailwind_tags %}
+
+{% block dashboard_content %}
+<div class="flex h-full w-full p-6">
+  <!-- Rounded card that fits whole div -->
+  <div class="relative flex-row rounded-lg bg-white shadow-lg p-4 h-full w-full overflow-auto">
+
+    {% include 'upload_component.html' %}
+    
+    <div class="flex items-center justify-between">
+      <div class="flex items-center">
+
+        {% if Role != 'student' %}
+        <a
+          href="{% url 'home' %}"
+          class="inline-flex items-center p-2 text-sm font-medium text-gray-600 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
+        >
+        
+          <!-- Icon (optional) -->
+          <svg
+            class="w-5 h-5 text-gray-600"
+            xmlns="http://www.w3.org/2000/svg"
+            fill="none"
+            viewBox="0 0 24 24"
+            stroke="currentColor"
+          >
+            <path
+              stroke-linecap="round"
+              stroke-linejoin="round"
+              stroke-width="2"
+              d="M15 19l-7-7 7-7"
+            />
+          </svg>
+          <p class = "md:visible hidden ml-2">Back</p>
+        </a>
+        {% endif %}
+
+        <h1 class="md:text-xl text-xs font-poppins text-gray-800 mx-6 pl-2">
+          {{ studentName }} Data Space
+        </h1>
+      </div>
+
+      <button
+        class="bg-gray-500 md:text-md text-xs text-white px-4 py-2 rounded hover:bg-gray-400 h-full" id="openModalBtn"
+      >
+        Upload
+      </button>
+    </div>
+    
+    <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-white/10" />
+    
+    <!-- Nav tabs with highlight on select -->
+    <div class="mb-4">
+        <ul class="flex -mb-px text-sm font-medium text-center" id="myTab" role="tablist">
+          <li class="mr-2" role="presentation">
+            <button class="inline-block p-4 rounded-t-lg border-b-2 border-blue-500 text-blue-500" id="tab1-tab" data-tab-target="#tab1" onclick="openTab(event, 'tab1')">All</button>
+          </li>
+          <li class="mr-2" role="presentation">
+            <button class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300" id="tab2-tab" data-tab-target="#tab2" onclick="openTab(event, 'tab2')">Completed</button>
+          </li>
+          <li class="mr-2" role="presentation">
+            <button class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300" id="tab3-tab" data-tab-target="#tab3" onclick="openTab(event, 'tab3')">Processing</button>
+          </li>
+        </ul>
+      </div>
+      
+      <!-- Tab content -->
+      <div id="tab1" class="tab-content">
+        <div class="overflow-x-auto">
+
+            {% if not videos %}
+              <p class="text-center text-gray-500 font-medium">No videos uploaded...</p>
+            {% else %}
+            <table class="min-w-full">
+              <tbody class="bg-white">
+
+                {% for video in videos %}
+
+                <tr class="border-b justify-center">
+
+                  <td class="md:px-6 px-1 py-4 whitespace-nowrap justify-center hidden md:table-cell">
+                    <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
+                  </td>
+
+                  <td class="md:px-6 px-1 py-4 whitespace-nowrap">
+                    <p class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</p>
+                  </td>
+                  <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
+                    <p class="md:text-sm text-xs text-gray-500">{{ video.DateUploaded}}</p>
+                  </td>
+
+                  {% if video.Status == 'Completed' %}
+
+                  <td class="md:px-6 px-1  py-4 whitespace-nowrap">
+                    <span class="md: px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{ video.Status}}</span>
+                  </td>
+
+                  {% else %}
+
+                  <td class="md:px-6 px-1 py-4 whitespace-nowrap">
+                    <span class="md:px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">{{ video.Status}}</span>
+                  </td>
+
+                  {% endif %}
+
+                  {% if video.Status != 'Processing' %}
+
+                  <td class="md:px-6 px-1  py-4 whitespace-nowrap text-right md:text-sm text-xs font-medium">
+                    <a href="{% url 'results' studentID video.id %}" class="text-indigo-600 hover:text-indigo-900">View</a>
+                  </td>
+
+                  {% else %}
+
+                  <td class="md:px-6 px-1  py-4 whitespace-nowrap text-right md:text-sm text-xs font-medium">
+                  </td>
+
+                  {% endif %}
+
+                </tr>
+
+                {% endfor %}
+
+                
+              </tbody>
+            </table>
+            {% endif %}
+
+          </div>
+      </div>
+
+      <div id="tab2" class="tab-content hidden">
+        <div class="overflow-x-auto">
+            {% if not completed_video %}
+            <p class="text-center text-gray-500 font-medium">No videos with status completed...</p>
+            {% else %}
+              <table class="min-w-full">
+                <tbody class="bg-white">
+                  
+                  {% for video in completed_video %}
+
+                    <tr class="border-b">
+                      <td class="md:px-6 px-1  py-4 whitespace-nowrap justify-center hidden md:table-cell">
+                        <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
+                      </td>
+                      <td class="md:px-6 px-1  py-4 whitespace-nowrap">
+                        <div class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</div>
+                      </td>
+                      <td class="md:px-6 px-1  py-4 whitespace-nowrap hidden md:table-cell">
+                        <div class="md:text-sm text-xs text-xs text-gray-500">{{ video.DateUploaded}}</div>
+                      </td>
+                      <td class="md:px-6 px-1  py-4 whitespace-nowrap">
+                        <span class="px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{ video.Status}}</span>
+                      </td>
+
+                      <td class="md:px-6 px-1  py-4 whitespace-nowrap text-right md:text-sm text-xs font-medium">
+                        <a href="{% url 'results' studentID video.id %}" class="text-indigo-600 hover:text-indigo-900">View</a>
+                      </td>
+                    </tr>
+
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </div>
+      </div>
+
+      <div id="tab3" class="tab-content hidden">
+        <div class="overflow-x-auto">
+
+            {% if not processing_video %}
+              <p class="text-center text-gray-500 font-medium">No videos with status processing...</p>
+            {% else %}
+              <table class="min-w-full">
+                <tbody class="bg-white">
+                  
+                  {% for video in processing_video %}
+
+                
+                  <tr class="border-b">
+                    <td class="md:px-6 px-1  py-4 whitespace-nowrap justify-center hidden md:table-cell">
+                      <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
+                    </td>
+                    <td class="md:px-6 px-1  py-4 whitespace-nowrap ">
+                      <div class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</div>
+                    </td>
+                    <td class="md:px-6 px-1  py-4 whitespace-nowrap hidden md:table-cell">
+                      <div class="md:text-sm text-xs text-gray-500">{{ video.DateUploaded }}</div>
+                    </td>
+                    <td class="md:px-6 px-1  py-4 whitespace-nowrap">
+                      <span class="px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">{{ video.Status }}</span>
+                    </td>
+
+                    <td class="md:px-6 px-1  py-4 whitespace-nowrap text-rightmd:text-sm text-xs font-medium">
+                      
+                    </td>
+                  </tr>
+
+                  {% endfor %}
+                </tbody>
+              </table>
+            {% endif %}
+          </div>
+      </div>
+  </div>
+</div>
+
+<script src="{% static 'js/dashboard_datasSpace.js' %}"></script>
+<script src="{% static 'js/dashboard_popupUploadModal.js' %}"></script>
+
+  
+{% endblock dashboard_content %}
