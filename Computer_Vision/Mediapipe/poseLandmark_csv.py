@@ -68,6 +68,7 @@ for class_name in class_list:
             continue
         else:
             img_rgb = cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
+            img_rgb = np.ascontiguousarray(img_rgb, dtype=np.uint8) # New line added to curb bugs arisen from library changes
             result = pose.process(img_rgb)
             if result.pose_landmarks:
                 lm_list = []
