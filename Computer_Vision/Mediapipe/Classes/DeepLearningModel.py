@@ -21,13 +21,14 @@ class DeepLearningModel:
 
     def build_model(self, model_fn=None):
         if not model_fn:
-            print("Using default model")
+            print("[INFO] Using default model")
             self.model = Sequential([
                 layers.Dense(512, activation='relu', input_shape=[self.inputShape]),
                 layers.Dense(256, activation='relu'),
                 layers.Dense(self.classCount, activation='softmax')
             ])
         else:
+            print("[INFO] Using custom model")
             if callable(model_fn):
                 self.model = model_fn(self.inputShape, self.classCount)
             else:
@@ -90,7 +91,7 @@ class DeepLearningModel:
         plt.plot(epochs, loss, 'blue', label='loss')
         plt.plot(epochs, val_loss, 'red', label='val_loss')
         plt.plot(epochs, accuracy, 'blue', label='accuracy')
-        plt.plot(epochs, val_loss, 'green', label='val_accuracy')
+        plt.plot(epochs, val_accuracy, 'green', label='val_accuracy')
         plt.title(str("Model Metrics"))
         plt.legend()
 

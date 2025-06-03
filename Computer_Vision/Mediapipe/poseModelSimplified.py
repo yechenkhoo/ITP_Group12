@@ -1,5 +1,6 @@
 from Classes import PoseDataset, DeepLearningModel
 import argparse
+from keras import layers, Sequential, regularizers
 
 ap = argparse.ArgumentParser()
 ap.add_argument("-i", "--dataset", type=str, required=True,
@@ -25,7 +26,16 @@ model = DeepLearningModel(
 
 # a function can be passed in to change the model architecture, otherwise it will use default model (from seniors)
 # signature: fn(input_shape, class_count)
-model.build_model()
+model.build_model(
+    # lambda inputShape, classCount: Sequential([
+    #     layers.Dense(512, activation='relu', input_shape=[inputShape], 
+    #                 kernel_regularizer=regularizers.l2(0.001)),
+    #     layers.Dropout(0.5),
+    #     layers.Dense(256, activation='relu', kernel_regularizer=regularizers.l2(0.001)),
+    #     layers.Dropout(0.5),
+    #     layers.Dense(classCount, activation="softmax")
+    # ])
+)
 
 #todo: could possibly add customisation type of optimiser, loss, metrics
 model.compile_model()
