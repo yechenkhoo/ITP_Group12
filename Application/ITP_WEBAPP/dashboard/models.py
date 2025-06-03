@@ -145,7 +145,7 @@ class Video:
         """
         try:
             print("uploading")
-            bucket_name = 'itp-se-team13'
+            bucket_name = 'golf-swing-video'
 
             # Initialize GCP storage client
             storage_client = get_google_cloud_storage_client()
@@ -221,12 +221,12 @@ class Video:
         print(file_path)
         try:
             # Define the URL for the GCP function
-            gcp_function_url = "https://itp-se-team13-357970185934.asia-southeast1.run.app/process-video"
+            gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
 
             # Prepare the request payload
             payload = {
                 
-                "classification_model": "models/frontalV2.keras",
+                "classification_model": "models/basemodel.keras",
                 "video_id":video_id,
                 "video_path": file_path,
                 "output_video_path": f"processed/{file_path.split('/')[-1]}",

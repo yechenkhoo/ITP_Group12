@@ -222,7 +222,7 @@ def process_video():
         output_csv_path_gcs = data.get('output_csv_path', None)
         output_angle_csv_path_gcs = data.get('output_angle_csv_path', None)
         # Bucket name where the models and video are stored
-        bucket_name = 'itp-se-team13'
+        bucket_name = 'golf-swing-video'
 
         # Download the required files from GCS to /tmp/
         download_blob(bucket_name, classification_model, '/tmp/' + os.path.basename(classification_model))
