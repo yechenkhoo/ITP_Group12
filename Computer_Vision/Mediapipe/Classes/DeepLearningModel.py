@@ -17,6 +17,8 @@ class DeepLearningModel:
         self.callbacks = []
         self.model = None
         self.history = None
+        self.valResults = []
+        self.testResults = []
 
 
     def build_model(self, model_fn=None):
@@ -115,12 +117,18 @@ class DeepLearningModel:
             y_true = data.y_test.argmax(axis=1)
         else:
             print('[WARNING] Please choose from "val", or "test".')
+            return
 
         cm = confusion_matrix(y_true, y_pred_classes)
         acc = accuracy_score(y_true, y_pred_classes)
         prec = precision_score(y_true, y_pred_classes, average='macro', zero_division=0)
         rec = recall_score(y_true, y_pred_classes, average='macro', zero_division=0)
 
+        if dataset == "val":
+            self.valResults.extend((acc, prec, rec))
+        elif dataset == "test":
+            self.testResults.extend((acc, prec, rec))
+        
         plt.figure(figsize=(10, 7))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=data.allClasses, yticklabels=data.allClasses)
         plt.xlabel('Predicted')
