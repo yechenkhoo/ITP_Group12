@@ -9,6 +9,7 @@ import requests
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 import os
+from datetime import datetime
 
 # Helper Functions
 def isCoach(request):
@@ -53,6 +54,10 @@ def dashboard_dataSpace(request, id):
     if isCoach(request) and not Coach.verify_coach_student_relationship(request.session['Id'], id):
         return redirect('home')
 
+    view = request.GET.get('view', 'list')
+
+    sort = request.GET.get('sort', 'earliest')
+
     # Fetch user and student details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     student = user if not isCoach(request) else User.find_user_by_id(ObjectId(id))
@@ -61,10 +66,25 @@ def dashboard_dataSpace(request, id):
     student_id = student['_id']
     video_list = Video.get_all_videos(student_id)
 
+    def parse_date(s):
+        # matches "HH:MM Mon DD, YYYY"
+        return datetime.strptime(s, "%H:%M %b %d, %Y")
+
+    if sort == 'az':
+        video_list.sort(key=lambda v: v['Title'].lower())
+    elif sort == 'za':
+        video_list.sort(key=lambda v: v['Title'].lower(), reverse=True)
+    elif sort == 'latest':
+        video_list.sort(key=lambda v: parse_date(v['DateUploaded']), reverse=True)
+    else:
+        video_list.sort(key=lambda v: parse_date(v['DateUploaded']))
+
     if request.method == 'POST':
         upload_video(request, student_id)
         
-        return HttpResponseRedirect(reverse('dashboard_dataSpace', args=[id]))
+        base = reverse('dashboard_dataSpace', args=[id])
+        query = f'?view={view}&sort={sort}'
+        return HttpResponseRedirect(base + query)
 
     # Separate videos by status
     video_processing = [video for video in video_list if video.get('Status') == 'Processing']
@@ -79,6 +99,8 @@ def dashboard_dataSpace(request, id):
         'videos': video_list,
         'processing_video': video_processing,
         'completed_video': video_completed,
+        'sort': sort,
+        'view': view,
     })
 
 
@@ -115,6 +137,9 @@ def dashboard_results(request, id, VideoId):
     
     # Fetch and process the CSV
     response = requests.get(csv_url)
+
+    column_status_mapping = {}
+
     if response.status_code == 200:
         csv_data = response.content.decode('utf-8')
         df = pd.read_csv(StringIO(csv_data))
@@ -128,7 +153,7 @@ def dashboard_results(request, id, VideoId):
         # All the csv data
         full_data = df.to_dict('records')
         
-        column_status_mapping = {}
+        #column_status_mapping = {}
         for column in all_columns:
             if "Status" in column:
                 corresponding_column = column.replace(" Status", "")
@@ -165,6 +190,8 @@ def dashboard_Coach(request):
     if not isCoach(request):
         return redirect('home')
 
+    view = request.GET.get('view', 'list')
+
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     students = fetch_all_students(request.session['Id'])
 
@@ -176,6 +203,7 @@ def dashboard_Coach(request):
         'Role': user['Role'],
         'Name': user['Name'],
         'students': students,
+        'view': view,
     })
     
     
@@ -242,7 +270,8 @@ def create_account(request):
     if isCoach(request):
         Coach.create_user(email, password, "student", name, session_id)
         Coach.update_student_array(email, session_id)
-        return redirect('home')
+        view = request.GET.get('view', 'list')
+        return HttpResponseRedirect(f"{reverse('home')}?view={view}")
 
     if isAdmin(request):
         Coach.create_user(email, password, "coach", name, session_id)

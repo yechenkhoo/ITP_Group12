@@ -14,7 +14,7 @@
     </div>
 
     <!-- Modal Body -->
-    <form action="{% url 'create_account' %}" method="POST" >
+    <form action="{% url 'create_account' %}?view={{ view }}" method="POST" >
       {% csrf_token %}
       <!-- Email Field -->
       <div class="mb-4">

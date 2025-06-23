@@ -28,12 +28,15 @@ class Coach:
         if Users_Collection.find_one({'Email': email}):
             return False
 
+        formatted_date = datetime.now().strftime("%H:%M %b %d, %Y")
+
         user_data = {
             'Email': email,
             'Name': name,
             'Password': password,
             'Role': role,
             'CreatedBy': ObjectId(created_by),
+            'DateCreated': formatted_date,
         }
         try:
             Users_Collection.insert_one(user_data)
@@ -66,7 +69,8 @@ class Coach:
 
     @staticmethod
     def fetch_all_students(coach_id):
-        """Fetches all students assigned to a specific coach."""
+        """Fetches all students assigned to a specific coach,
+           and backfills DateCreated from ObjectId if missing."""
         coach = Users_Collection.find_one({'_id': ObjectId(coach_id)})
         if not coach or 'Students' not in coach:
             return []
@@ -74,9 +78,21 @@ class Coach:
         students = []
         for student_id in coach['Students']:
             student = Users_Collection.find_one({'_id': student_id})
-            if student:
-                student['id'] = str(student.pop('_id'))  # Replace _id with id as a string
-                students.append(student)
+            if not student:
+                continue
+
+            # --- backfill DateCreated if the field is missing ---
+            if 'DateCreated' not in student:
+                # ObjectId.generation_time is a datetime in UTC
+                ts = student['_id'].generation_time
+                student['DateCreated'] = ts.strftime("%H:%M %b %d, %Y")
+
+            # Replace _id with string id
+            oid = student.pop('_id')
+            student['id'] = str(oid)
+
+            students.append(student)
+
         return students
 
     @staticmethod
