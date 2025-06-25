@@ -1,3 +1,4 @@
+import matplotlib.pyplot as plt
 import random
 import numpy as np
 import tensorflow as tf
@@ -23,7 +24,7 @@ from keras import layers, Sequential, regularizers
 # path_csv = args["dataset"]
 # path_to_save = args["save"]
 
-path_csv = "output/pose.csv"
+path_csv = "pose_img.csv"
 
 all_models = [
     ("MLP_Basic", ModelFactory.mlp_basic, True),
@@ -46,13 +47,14 @@ for m in all_models:
     data = PoseDataset(path_csv)
     data.load_csv_data()
     # default: test_size=0.2, random_state=0
-    data.split_dataset(test_size=0.3, reshape=(not flatten))
+    data.split_dataset(test_size=0.3, reshape=(not flatten), random_state=42)
 
     # initialise model
     model = DeepLearningModel(
         input_shape = data.x_train.shape[1] if flatten else data.x_train.shape[1:],
         class_count = data.classCount,
-        checkpoint_path = path_to_save_model
+        checkpoint_path = path_to_save_model,
+        name = model_name
     )
 
     # a function can be passed in to change the model architecture, otherwise it will use default model (from seniors)
@@ -68,7 +70,7 @@ for m in all_models:
     model.add_callbacks()
 
     # other params: epoch (default 200), batch_size (default 16)
-    model.train(data)
+    model.train(data, epochs=200)
 
     model.plot_training_metrics(path_to_save_diagrams)
 
@@ -78,4 +80,7 @@ for m in all_models:
     results[model_name] = model.valResults + model.testResults
 
 columns = ["val_acc", "val_prec", "val_rec", "test_acc", "test_prec", "test_rec"]
-pd.DataFrame.from_dict(results, orient='index', columns=columns).to_csv("output/Results.csv")
+df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+df_rounded = df.round(3)
+df_rounded.to_csv("output/Results.csv")
+print("[INFO] Saved in output/Results.csv")
