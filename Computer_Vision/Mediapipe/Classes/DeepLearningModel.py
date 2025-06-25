@@ -2,7 +2,7 @@ import seaborn as sns
 import keras
 import pandas as pd
 from keras import layers, Sequential
-import argparse
+import numpy as np
 from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, precision_score, recall_score
@@ -10,12 +10,13 @@ import os
 
         
 class DeepLearningModel:
-    def __init__(self, input_shape, class_count, checkpoint_path):
+    def __init__(self, input_shape, class_count, checkpoint_path, name):
         self.inputShape = input_shape
         self.classCount = class_count
         self.checkpointPath = checkpoint_path
         self.callbacks = []
         self.model = None
+        self.name = name
         self.history = None
         self.valResults = []
         self.testResults = []
@@ -97,12 +98,10 @@ class DeepLearningModel:
         plt.title(str("Model Metrics"))
         plt.legend()
 
-        plot_png = os.path.exists(path_to_save +'_trainingMetrics.png')
-        if plot_png:
-            os.remove(path_to_save+'_trainingMetrics.png')
-            plt.savefig(path_to_save+'_trainingMetrics.png', bbox_inches='tight')
-        else:
-            plt.savefig(path_to_save+'_trainingMetrics.png', bbox_inches='tight')
+        # Create folder called path_to_save
+        os.makedirs(path_to_save, exist_ok=True)
+        path = f"{path_to_save}/{self.name}_trainingMetrics.png"
+        plt.savefig(path, bbox_inches='tight')
         print('[INFO] Successfully Saved metrics.png')
 
 
@@ -111,10 +110,15 @@ class DeepLearningModel:
             y_pred = self.model.predict(data.x_val)
             y_pred_classes = y_pred.argmax(axis=1)
             y_true = data.y_val.argmax(axis=1)
+            x_data = data.x_val
+            img_paths = data.paths_val
+            getattr(data, 'img_paths_val', None)  # Get image paths if available
         elif dataset == "test":
             y_pred = self.model.predict(data.x_test)
             y_pred_classes = y_pred.argmax(axis=1)
             y_true = data.y_test.argmax(axis=1)
+            x_data = data.x_test
+            img_paths = data.paths_test
         else:
             print('[WARNING] Please choose from "val", or "test".')
             return
@@ -129,6 +133,41 @@ class DeepLearningModel:
         elif dataset == "test":
             self.testResults.extend((acc, prec, rec))
         
+        all_records = []
+        for i in range(len(y_true)):
+            # Get confidence (probability of predicted class)
+            confidence = y_pred[i][y_pred_classes[i]]
+            
+            # Get image path if available
+            img_path = img_paths[i] if img_paths is not None else f"sample_{i}"
+            
+            if hasattr(x_data, 'iloc'):  # pandas DataFrame
+                landmarks_flat = x_data.iloc[i].values.tolist()
+            elif isinstance(x_data, np.ndarray):  # numpy array
+                if x_data.ndim == 3:  # Shape: [samples, keypoints, features] - if reshaped
+                    landmarks_flat = x_data[i].flatten().tolist()
+                else:  # Shape: [samples, features] - if not reshaped (132 features)
+                    landmarks_flat = x_data[i].tolist()
+            else:
+                landmarks_flat = []
+            
+            # Create record
+            record = {
+                "img_path": img_path,
+                "true_label": int(y_true[i]),
+                "pred_label": int(y_pred_classes[i]),
+                "confidence": float(confidence),
+                "landmarks": ' '.join(map(str, landmarks_flat))
+            }
+            all_records.append(record)
+        
+        # Save to CSV
+        df = pd.DataFrame(all_records)
+        path = f"{path_to_save}/{self.name}"
+        csv_path = f"{path}_{dataset}_predictions.csv"
+        df.to_csv(csv_path, index=False)
+        print(f"[INFO] Saved prediction CSV with confidence at {csv_path}")
+
         plt.figure(figsize=(10, 7))
         sns.heatmap(cm, annot=True, fmt='d', cmap='Blues', xticklabels=data.allClasses, yticklabels=data.allClasses)
         plt.xlabel('Predicted')
@@ -136,7 +175,7 @@ class DeepLearningModel:
         plt.title(f"{dataset.capitalize()} Confusion Matrix\n"
                 f"Acc: {acc:.4f} | Prec: {prec:.4f} | Rec: {rec:.4f}")
 
-        filename = f"{path_to_save}_{dataset}_confusion_matrix.png"
+        filename = f"{path}_{dataset}_confusion_matrix.png"
         confusion_matrix_png = os.path.exists(filename)
         if confusion_matrix_png:
             os.remove(filename)

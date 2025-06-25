@@ -139,6 +139,7 @@ class ModelFactory:
         Converts 1D sequence (33, 4) to 2D representation (33, 4, 1) for spatial convolutions.
         """
         inputs = layers.Input(shape=input_shape)  # (33, 4)
+        # x = layers.Reshape((33, 2, 1))(inputs)
         x = layers.Reshape((33, 4, 1))(inputs)
 
         x = layers.Conv2D(32, (3, 2), activation='relu', padding='same')(x)

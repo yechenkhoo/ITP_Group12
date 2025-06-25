@@ -53,6 +53,7 @@ for i in range(n_landmarks):
 
 full_lm_list = []
 target_list = []
+image_path_list = []
 for class_name in class_list:
     path_to_class = os.path.join(path_data_dir, class_name)
     img_list = glob.glob(path_to_class + '/*.jpg') + glob.glob(path_to_class + '/*.jpeg')+ glob.glob(path_to_class + '/*.png')      
@@ -101,6 +102,9 @@ for class_name in class_list:
 
                 full_lm_list.append(pre_lm)
                 target_list.append(class_name)
+                rel_path = os.path.relpath(img, start=path_data_dir)
+                image_path_list.append(rel_path.replace('\\', '/'))  # use forward slashes for consistency
+
 
             print(f'{os.path.split(img)[1]} Landmarks added Successfully')
     print(f'[INFO] {class_name} Successfully Completed')
@@ -108,6 +112,6 @@ for class_name in class_list:
 print('[INFO] Landmarks from Dataset Successfully Completed')
 
 data_x = pd.DataFrame(full_lm_list, columns=col_names)
-data = data_x.assign(Pose_Class=target_list)
+data = data_x.assign(Pose_Class=target_list, Image_Path=image_path_list)
 data.to_csv(path_to_save, encoding='utf-8', index=False)
 print(f'[INFO] Successfully Saved Landmarks data into {path_to_save}')
