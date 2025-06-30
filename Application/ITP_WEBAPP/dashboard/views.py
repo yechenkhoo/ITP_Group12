@@ -37,7 +37,7 @@ def fetch_all_students(coach_id):
 # 🏌️ CAMERA CONFIGURATION
 # =============================================================================
 # Define the Raspberry Pi URLs
-RASPBERRY_PI_URL = 'http://192.168.93.15:5000'  # Old camera system
+RASPBERRY_PI_URL = 'http://172.20.10.5:5000'  # Old camera system
 GOLF_CAMERA_URL = 'http://172.20.10.5:5000'     # New golf camera system
 
 # =============================================================================
