@@ -8,8 +8,13 @@ from bson import ObjectId
 import requests
 from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.http import require_http_methods
 import os
 from datetime import datetime
+import json
+from django.utils import timezone
+import pandas as pd
+from io import StringIO
 
 # Helper Functions
 def isCoach(request):
@@ -28,8 +33,17 @@ def fetch_all_students(coach_id):
     """Fetches all students associated with a coach."""
     return Coach.fetch_all_students(coach_id)
 
+# =============================================================================
+# 🏌️ CAMERA CONFIGURATION
+# =============================================================================
+# Define the Raspberry Pi URLs
+RASPBERRY_PI_URL = 'http://192.168.93.15:5000'  # Old camera system
+GOLF_CAMERA_URL = 'http://172.20.10.5:5000'     # New golf camera system
 
-# Views
+# =============================================================================
+# 📱 MAIN DASHBOARD VIEWS
+# =============================================================================
+
 def home(request):
     """Redirects to the appropriate dashboard based on user role."""
     if not is_logged_in(request):
@@ -44,7 +58,6 @@ def home(request):
         return dashboard_admin(request)
     return redirect('home')
 
-
 def dashboard_dataSpace(request, id):
     """Displays the data space dashboard."""
     if not is_logged_in(request):
@@ -55,7 +68,6 @@ def dashboard_dataSpace(request, id):
         return redirect('home')
 
     view = request.GET.get('view', 'list')
-
     sort = request.GET.get('sort', 'earliest')
 
     # Fetch user and student details
@@ -103,21 +115,18 @@ def dashboard_dataSpace(request, id):
         'view': view,
     })
 
-
 def dashboard_videoFeed(request):
-    """Displays the video feed dashboard."""
+    """Displays the video feed dashboard with both old and new camera systems."""
     if not is_logged_in(request):
         return redirect('login')
     
     # Fetch user details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
 
-    return render(request, 'dashboard_videoFeed.html', {'Role': user['Role'], 'Name': user['Name']})
-
-
-import requests
-import pandas as pd
-from io import StringIO
+    return render(request, 'dashboard_videoFeed.html', {
+        'Role': user['Role'], 
+        'Name': user['Name']
+    })
 
 def dashboard_results(request, id, VideoId):
     """Displays the results dashboard."""
@@ -137,7 +146,6 @@ def dashboard_results(request, id, VideoId):
     
     # Fetch and process the CSV
     response = requests.get(csv_url)
-
     column_status_mapping = {}
 
     if response.status_code == 200:
@@ -153,7 +161,6 @@ def dashboard_results(request, id, VideoId):
         # All the csv data
         full_data = df.to_dict('records')
         
-        #column_status_mapping = {}
         for column in all_columns:
             if "Status" in column:
                 corresponding_column = column.replace(" Status", "")
@@ -176,11 +183,10 @@ def dashboard_results(request, id, VideoId):
         'videoId': VideoId,
         'comments': comments,
         'video_url': video_url,
-        'columns': display_columns,  # Filtered columns for display
-        'full_data': full_data,  # Full data for other purposes
+        'columns': display_columns,
+        'full_data': full_data,
         'column_status_mapping': column_status_mapping,
     })
-
 
 def dashboard_Coach(request):
     """Displays the Coach dashboard with associated students."""
@@ -191,7 +197,6 @@ def dashboard_Coach(request):
         return redirect('home')
 
     view = request.GET.get('view', 'list')
-
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     students = fetch_all_students(request.session['Id'])
 
@@ -205,10 +210,9 @@ def dashboard_Coach(request):
         'students': students,
         'view': view,
     })
-    
-    
+
 def dashboard_admin(request):
-    """Displays the Coach dashboard with associated students."""
+    """Displays the Admin dashboard."""
     if not is_logged_in(request):
         return redirect('login')
 
@@ -225,9 +229,9 @@ def dashboard_admin(request):
         'Role': user['Role'],
         'Name': user['Name'],
     })
-    
+
 def admin_model(request):
-    """Displays the Coach dashboard with associated students."""
+    """Displays the model upload dashboard."""
     if not is_logged_in(request):
         return redirect('login')
 
@@ -243,7 +247,6 @@ def admin_model(request):
         'Role': user['Role'],
         'Name': user['Name'],
     })
-
 
 def create_account(request):
     """Handles account creation."""
@@ -279,8 +282,6 @@ def create_account(request):
 
     return redirect('home')
 
-
-
 def upload_video(request, student_id=None):
     """Handles video upload."""
     user_role = request.session.get('Role')
@@ -309,21 +310,17 @@ def upload_video(request, student_id=None):
             Video.upload_video(request.session['Id'], student_id, video_name, video_type, video_file)
         return redirect('home')
 
-
 def logout(request):
     """Logs out the user and clears session data."""
     request.session.flush()
     return redirect('login')
 
-#=====================================================yitong======================================================
+# =============================================================================
+# 📹 OLD CAMERA SYSTEM (Existing RPi Integration)
+# =============================================================================
 
-    
-# Define the Raspberry Pi URL once here
-#RASPBERRY_PI_URL = 'http://192.168.1.224:5000'
-RASPBERRY_PI_URL = 'http://192.168.93.15:5000'
-
-# Streaming response for live camera feed
 def live_stream(request):
+    """Streaming response for old camera system live feed"""
     try:
         response = requests.get(f'{RASPBERRY_PI_URL}/start_live_cam', stream=True)
         if response.status_code == 200:
@@ -335,16 +332,17 @@ def live_stream(request):
         return HttpResponse(f"Error: {e}", status=500)
 
 @csrf_exempt
-# Start recording on the Raspberry Pi
 def start_recording(request):
+    """Start recording on the old camera system"""
     try:
         response = requests.post(f'{RASPBERRY_PI_URL}/start_recording')
         return JsonResponse(response.json() if response.ok else {"message": "Failed to start recording"}, status=response.status_code)
     except requests.exceptions.RequestException as e:
         return JsonResponse({"message": f"Error: {str(e)}"}, status=500)
-    
+
 @csrf_exempt
 def upload_from_pi(request):
+    """Handle video upload from old camera system"""
     if request.method == 'POST':
         # Directory where videos are saved
         save_directory = os.path.join(settings.BASE_DIR, "dashboard/pi_video")
@@ -370,12 +368,166 @@ def upload_from_pi(request):
         return JsonResponse({"message": f"File uploaded successfully as {filename}"}, status=200)
     else:
         return JsonResponse({"error": "Invalid request method"}, status=405)
-    
+
 @csrf_exempt
-#Temp predict to be edit    
 def predict(request):
+    """Placeholder predict endpoint"""
     if request.method == 'POST':
         # Placeholder: Does nothing meaningful
         return JsonResponse({'message': 'Predict endpoint is a placeholder and does nothing.'}, status=200)
     else:
         return JsonResponse({'error': 'Invalid request method. Only POST is allowed.'}, status=405)
+
+# =============================================================================
+# 🏌️ NEW GOLF CAMERA SYSTEM (Advanced AI Integration)
+# =============================================================================
+
+def golf_video_feed(request):
+    """Proxy the live video feed from golf camera"""
+    try:
+        response = requests.get(f'{GOLF_CAMERA_URL}/video_feed', stream=True)
+        if response.status_code == 200:
+            return StreamingHttpResponse(
+                response.iter_content(chunk_size=1024),
+                content_type='multipart/x-mixed-replace; boundary=frame'
+            )
+        else:
+            return HttpResponse("Golf camera feed unavailable", status=503)
+    except requests.exceptions.RequestException as e:
+        return HttpResponse(f"Golf camera connection error: {e}", status=503)
+
+def golf_status(request):
+    """Get golf camera status"""
+    try:
+        response = requests.get(f'{GOLF_CAMERA_URL}/recording_status', timeout=5)
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({
+                'error': 'Golf camera offline',
+                'is_recording': False,
+                'auto_recording_enabled': False,
+                'pose_detection_enabled': False,
+                'predicted_class': 'Unknown',
+                'pose_stage': 'disconnected',
+                'p1_confidence': 0,
+                'p10_confidence': 0
+            }, status=503)
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({
+            'error': f'Golf camera connection error: {str(e)}',
+            'is_recording': False,
+            'auto_recording_enabled': False,
+            'pose_detection_enabled': False,
+            'predicted_class': 'Unknown',
+            'pose_stage': 'disconnected',
+            'p1_confidence': 0,
+            'p10_confidence': 0
+        }, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def golf_start_recording(request):
+    """Start recording on golf camera"""
+    try:
+        # Parse duration from request body
+        duration = 10  # default
+        if request.content_type == 'application/json' and request.body:
+            data = json.loads(request.body)
+            duration = data.get('duration', 10)
+        elif request.method == 'POST':
+            duration = int(request.POST.get('duration', 10))
+        
+        response = requests.post(
+            f'{GOLF_CAMERA_URL}/start_recording',
+            json={'duration': duration},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to start golf recording'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Golf camera error: {str(e)}'}, status=503)
+    except json.JSONDecodeError:
+        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
+    except ValueError:
+        return JsonResponse({'error': 'Invalid duration value'}, status=400)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def golf_toggle_auto_recording(request):
+    """Toggle auto recording on golf camera"""
+    try:
+        response = requests.post(f'{GOLF_CAMERA_URL}/toggle_auto_recording', timeout=5)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to toggle auto recording'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Golf camera error: {str(e)}'}, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def golf_toggle_pose_detection(request):
+    """Toggle pose detection on golf camera"""
+    try:
+        response = requests.post(f'{GOLF_CAMERA_URL}/toggle_pose_detection', timeout=5)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to toggle pose detection'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Golf camera error: {str(e)}'}, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def golf_reload_models(request):
+    """Reload AI models on golf camera"""
+    try:
+        response = requests.post(f'{GOLF_CAMERA_URL}/reload_models', timeout=30)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to reload models'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Golf camera error: {str(e)}'}, status=503)
+
+def golf_health(request):
+    """Check golf camera health"""
+    try:
+        response = requests.get(f'{GOLF_CAMERA_URL}/recording_status', timeout=3)
+        
+        if response.status_code == 200:
+            return JsonResponse({
+                'status': 'connected',
+                'golf_camera_ip': '172.20.10.5',
+                'golf_camera_url': GOLF_CAMERA_URL,
+                'timestamp': timezone.now().isoformat(),
+                'camera_data': response.json()
+            })
+        else:
+            return JsonResponse({
+                'status': 'error',
+                'golf_camera_ip': '172.20.10.5',
+                'golf_camera_url': GOLF_CAMERA_URL,
+                'error': f'HTTP {response.status_code}',
+                'timestamp': timezone.now().isoformat()
+            })
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({
+            'status': 'disconnected',
+            'golf_camera_ip': '172.20.10.5',
+            'golf_camera_url': GOLF_CAMERA_URL,
+            'error': str(e),
+            'timestamp': timezone.now().isoformat()
+        })
