@@ -28,15 +28,12 @@ class Coach:
         if Users_Collection.find_one({'Email': email}):
             return False
 
-        formatted_date = datetime.now().strftime("%H:%M %b %d, %Y")
-
         user_data = {
             'Email': email,
             'Name': name,
             'Password': password,
             'Role': role,
             'CreatedBy': ObjectId(created_by),
-            'DateCreated': formatted_date,
         }
         try:
             Users_Collection.insert_one(user_data)
@@ -69,8 +66,7 @@ class Coach:
 
     @staticmethod
     def fetch_all_students(coach_id):
-        """Fetches all students assigned to a specific coach,
-           and backfills DateCreated from ObjectId if missing."""
+        """Fetches all students assigned to a specific coach."""
         coach = Users_Collection.find_one({'_id': ObjectId(coach_id)})
         if not coach or 'Students' not in coach:
             return []
@@ -78,21 +74,9 @@ class Coach:
         students = []
         for student_id in coach['Students']:
             student = Users_Collection.find_one({'_id': student_id})
-            if not student:
-                continue
-
-            # --- backfill DateCreated if the field is missing ---
-            if 'DateCreated' not in student:
-                # ObjectId.generation_time is a datetime in UTC
-                ts = student['_id'].generation_time
-                student['DateCreated'] = ts.strftime("%H:%M %b %d, %Y")
-
-            # Replace _id with string id
-            oid = student.pop('_id')
-            student['id'] = str(oid)
-
-            students.append(student)
-
+            if student:
+                student['id'] = str(student.pop('_id'))  # Replace _id with id as a string
+                students.append(student)
         return students
 
     @staticmethod
@@ -161,7 +145,7 @@ class Video:
         """
         try:
             print("uploading")
-            bucket_name = 'golf-swing-video'
+            bucket_name = 'golf-swing-models'
 
             # Initialize GCP storage client
             storage_client = get_google_cloud_storage_client()
@@ -171,7 +155,7 @@ class Video:
 
             # Generate a unique blob name
             unique_id = uuid.uuid4().hex  # Generate a unique ID
-            blob_name = f'videos/{unique_id}_{file_name}'
+            blob_name = f'golf_videos/{file_name}'
 
             # Create a file-like object from the in-memory data
             file_stream = io.BytesIO(file_data)
@@ -189,10 +173,10 @@ class Video:
             response = Video.process_video(blob_name, video_id)
 
             if response.get("status") == "Processing complete":
-                print(f"Deleting original video: {blob_name}")
-                blob.delete()  # Delete the video file
+                print(f"Processing succeeded; keeping raw upload at {blob_name}")
+                # raw golf_videos/… blob is left in place
             else:
-                print(f"Skipping deletion due to processing error: {response.get('error')}")
+                print(f"Processing error, raw upload kept: {response.get('error')}")
 
             return response
 
@@ -242,7 +226,7 @@ class Video:
             # Prepare the request payload
             payload = {
                 
-                "classification_model": "models/basemodel.keras",
+                "classification_model": "basemodel.keras",
                 "video_id":video_id,
                 "video_path": file_path,
                 "output_video_path": f"processed/{file_path.split('/')[-1]}",

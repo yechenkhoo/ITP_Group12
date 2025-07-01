@@ -10,6 +10,7 @@ from django.conf import settings
 from django.views.decorators.csrf import csrf_exempt
 import os
 from datetime import datetime
+from django.core.paginator import Paginator
 
 # Helper Functions
 def isCoach(request):
@@ -55,8 +56,9 @@ def dashboard_dataSpace(request, id):
         return redirect('home')
 
     view = request.GET.get('view', 'list')
-
     sort = request.GET.get('sort', 'earliest')
+    tab  = request.GET.get('tab',  'tab1')
+    page_num = request.GET.get('page', 1)
 
     # Fetch user and student details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
@@ -65,6 +67,11 @@ def dashboard_dataSpace(request, id):
     # Fetch videos
     student_id = student['_id']
     video_list = Video.get_all_videos(student_id)
+
+    if request.method == "POST" and "video_ids" in request.POST:
+        ids = request.POST["video_ids"].split(",")
+        # delete from DB:
+        Video.objects.filter(id__in=ids).delete()
 
     def parse_date(s):
         # matches "HH:MM Mon DD, YYYY"
@@ -83,12 +90,26 @@ def dashboard_dataSpace(request, id):
         upload_video(request, student_id)
         
         base = reverse('dashboard_dataSpace', args=[id])
-        query = f'?view={view}&sort={sort}'
+        query = f'?tab={tab}&view={view}&sort={sort}'
         return HttpResponseRedirect(base + query)
 
     # Separate videos by status
     video_processing = [video for video in video_list if video.get('Status') == 'Processing']
     video_completed = [video for video in video_list if video.get('Status') == 'Completed']
+
+    # Paginate each list
+    per_page = 4 if view == 'list' else 9
+
+    videos_page = Paginator(video_list, per_page).get_page(page_num)
+    completed_page = Paginator(video_completed, per_page).get_page(page_num)
+    processing_page = Paginator(video_processing, per_page).get_page(page_num)
+
+    page_map = {
+        'tab1': videos_page,
+        'tab2': completed_page,
+        'tab3': processing_page,
+    }
+    page_obj = page_map.get(tab, videos_page)
 
     # Render template
     return render(request, 'dashboard_dataSpace.html', {
@@ -96,11 +117,13 @@ def dashboard_dataSpace(request, id):
         'Name': user['Name'],
         'studentID': student_id,
         'studentName': student['Name'],
-        'videos': video_list,
-        'processing_video': video_processing,
-        'completed_video': video_completed,
+        'videos': videos_page,
+        'processing_video': processing_page,
+        'completed_video': completed_page,
         'sort': sort,
         'view': view,
+        'tab': tab,
+        "page_obj": page_obj,
     })
 
 
@@ -131,6 +154,11 @@ def dashboard_results(request, id, VideoId):
     # Fetch user and student details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     student = user if not isCoach(request) else User.find_user_by_id(ObjectId(id))
+
+    # Fetch title of the raw video
+    all_videos = Video.get_all_videos(student['_id'])
+    video_item = next((v for v in all_videos if v['id'] == VideoId), None)
+    video_title = video_item.get('Title', 'Untitled Video') if video_item else 'Untitled Video'
     
     video_url = Video.get_video_url(VideoId)
     csv_url = Video.get_csv_url(VideoId)
@@ -148,7 +176,7 @@ def dashboard_results(request, id, VideoId):
         all_columns = df.columns.tolist()
         
         # Select only the first 3 columns for display
-        display_columns = all_columns[:3]
+        display_columns = all_columns
         
         # All the csv data
         full_data = df.to_dict('records')
@@ -175,6 +203,7 @@ def dashboard_results(request, id, VideoId):
         'studentID': student['_id'],
         'videoId': VideoId,
         'comments': comments,
+        'video_title': video_title,
         'video_url': video_url,
         'columns': display_columns,  # Filtered columns for display
         'full_data': full_data,  # Full data for other purposes
