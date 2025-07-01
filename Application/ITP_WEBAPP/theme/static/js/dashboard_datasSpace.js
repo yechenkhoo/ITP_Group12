@@ -1,5 +1,7 @@
 const compareCheckboxes = document.querySelectorAll('.compare-checkbox');
 const compareBtn = document.getElementById('compareBtn');
+const compareForm       = document.getElementById('compareForm');
+const compareIdsInput   = document.getElementById('compareVideoIds');
 
 const deleteForm = document.getElementById('deleteForm');
 const deleteBtn = document.getElementById('deleteBtn');
@@ -151,6 +153,8 @@ function updateCompareDeleteButtonState() {
         compareBtn.disabled = true;
         compareBtn.classList.replace('bg-[#217346]', 'bg-gray-500');
     }
+
+    compareIdsInput.value      = checkedIdsArray.join(',');
 
     // --- delete form logic ---
     if (checkedCount >= 1) {

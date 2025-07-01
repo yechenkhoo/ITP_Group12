@@ -200,7 +200,7 @@ def dashboard_results(request, id, VideoId):
     return render(request, 'dashboard_results.html', {
         'Role': user['Role'],
         'Name': user['Name'],
-        'studentID': student['_id'],
+        'studentID': id,
         'videoId': VideoId,
         'comments': comments,
         'video_title': video_title,
@@ -210,6 +210,72 @@ def dashboard_results(request, id, VideoId):
         'column_status_mapping': column_status_mapping,
     })
 
+# New view for comparing two swings
+def dashboard_compareSwings(request, id):
+    """Displays a comparison of two selected swing videos."""
+    if not is_logged_in(request):
+        return redirect('login')
+
+    # Verify coach-student relationship if role is coach
+    if request.session.get('Role') == 'coach' and not Coach.verify_coach_student_relationship(request.session['Id'], id):
+        return redirect('home')
+
+    # Grab the two video IDs from the query string
+    video_ids_param = request.GET.get('video_ids')
+    if not video_ids_param:
+        return HttpResponseBadRequest("Missing video_ids parameter. Please select two videos to compare.")
+
+    video_ids = video_ids_param.split(',')
+    if len(video_ids) != 2:
+        return HttpResponseBadRequest("Exactly two video IDs are required for comparison.")
+
+    video1_id, video2_id = video_ids
+
+    # Fetch all of this student's videos once
+    all_videos = Video.get_all_videos(id)
+
+    # Look up metadata dicts by matching the 'id' field
+    video1_item = next((v for v in all_videos if v['id'] == video1_id), None)
+    video2_item = next((v for v in all_videos if v['id'] == video2_id), None)
+
+    if not video1_item or not video2_item:
+        return HttpResponseBadRequest("One or more selected videos not found.")
+
+    # Titles and URLs
+    video1_title = video1_item.get('Title', 'Untitled Video 1')
+    video2_title = video2_item.get('Title', 'Untitled Video 2')
+    video1_url   = Video.get_video_url(video1_id)
+    video2_url   = Video.get_video_url(video2_id)
+
+    # CSV data for each
+    def fetch_csv_data(vid):
+        url = Video.get_csv_url(vid)
+        resp = requests.get(url)
+        if resp.status_code == 200:
+            df = pd.read_csv(StringIO(resp.content.decode('utf-8')))
+            return df.to_dict('records')
+        return []
+
+    video1_data = fetch_csv_data(video1_id)
+    video2_data = fetch_csv_data(video2_id)
+
+    # Current user (for base template)
+    user = User.find_user_by_id(ObjectId(request.session['Id']))
+
+    context = {
+        'Role': user['Role'],
+        'Name': user['Name'],
+        'studentID': id,
+        'video1_id': video1_id,
+        'video1_title': video1_title,
+        'video1_url': video1_url,
+        'video1_full_data': video1_data, # Pass data for JS to combine
+        'video2_id': video2_id,
+        'video2_title': video2_title,
+        'video2_url': video2_url,
+        'video2_full_data': video2_data, # Pass data for JS to combine
+    }
+    return render(request, 'dashboard_compareSwings.html', context)
 
 def dashboard_Coach(request):
     """Displays the Coach dashboard with associated students."""

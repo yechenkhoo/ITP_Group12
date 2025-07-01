@@ -1893,6 +1893,10 @@ select {
   right: 0.5rem;
 }
 
+.top-0 {
+  top: 0px;
+}
+
 .top-2 {
   top: 0.5rem;
 }
@@ -2002,12 +2006,20 @@ select {
   margin-bottom: 1rem;
 }
 
+.mb-6 {
+  margin-bottom: 1.5rem;
+}
+
 .ml-2 {
   margin-left: 0.5rem;
 }
 
 .ml-4 {
   margin-left: 1rem;
+}
+
+.ml-48 {
+  margin-left: 12rem;
 }
 
 .ml-6 {
@@ -2044,26 +2056,6 @@ select {
 
 .mt-6 {
   margin-top: 1.5rem;
-}
-
-.ml-8 {
-  margin-left: 2rem;
-}
-
-.ml-20 {
-  margin-left: 5rem;
-}
-
-.ml-32 {
-  margin-left: 8rem;
-}
-
-.ml-40 {
-  margin-left: 10rem;
-}
-
-.ml-48 {
-  margin-left: 12rem;
 }
 
 .box-border {
@@ -2169,6 +2161,10 @@ select {
   height: 0.125rem;
 }
 
+.h-2\/5 {
+  height: 40%;
+}
+
 .h-24 {
   height: 6rem;
 }
@@ -2204,6 +2200,34 @@ select {
 
 .h-screen {
   height: 100vh;
+}
+
+.h-3\/5 {
+  height: 60%;
+}
+
+.h-auto {
+  height: auto;
+}
+
+.h-3\/6 {
+  height: 50%;
+}
+
+.h-4\/6 {
+  height: 66.666667%;
+}
+
+.h-60 {
+  height: 15rem;
+}
+
+.max-h-\[400px\] {
+  max-height: 400px;
+}
+
+.max-h-full {
+  max-height: 100%;
 }
 
 .min-h-full {
@@ -2898,6 +2922,11 @@ select {
 
 .divide-none > :not([hidden]) ~ :not([hidden]) {
   border-style: none;
+}
+
+.divide-gray-200 > :not([hidden]) ~ :not([hidden]) {
+  --tw-divide-opacity: 1;
+  border-color: rgb(229 231 235 / var(--tw-divide-opacity, 1));
 }
 
 .place-self-auto {
@@ -6268,6 +6297,10 @@ select {
 
   .md\:h-full {
     height: 100%;
+  }
+
+  .md\:w-1\/2 {
+    width: 50%;
   }
 
   .md\:w-10\/12 {

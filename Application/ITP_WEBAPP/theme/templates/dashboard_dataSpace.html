@@ -107,11 +107,18 @@
 
         <div class="ml-auto flex items-center space-x-2">
           <!-- COMPARE SWINGS -->
-          <button id="compareBtn"
-            class="ml-4 px-4 py-2 bg-gray-500 text-white rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"
-            disabled>
-            Compare Swings
-          </button>
+          <form id="compareForm"
+      method="get"
+      action="{% url 'dashboard_compareSwings' studentID %}"
+      class="ml-4">
+  <input type="hidden" name="video_ids" id="compareVideoIds" value="">
+  <button type="submit"
+          id="compareBtn"
+          class="px-4 py-2 bg-gray-500 text-white rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+          disabled>
+    Compare Swings
+  </button>
+</form>
           <form method="get" class="ml-auto flex items-center space-x-2">
             <label for="sortSelect" class="text-sm font-medium text-gray-700">Sort by:</label>
             <!-- preserve view in the GET -->

@@ -1,5 +1,5 @@
 from django.urls import include, path
-from .views import dashboard_results, dashboard_videoFeed, logout, home, dashboard_dataSpace, create_account,live_stream, start_recording, upload_from_pi, admin_model
+from .views import dashboard_results, dashboard_videoFeed, logout, home, dashboard_dataSpace, create_account,live_stream, start_recording, upload_from_pi, admin_model, dashboard_compareSwings
 
 
 urlpatterns = [
@@ -10,6 +10,7 @@ urlpatterns = [
     path("dataSpace/<str:id>/results/<str:VideoId>/", dashboard_results, name="results"),
     path("create_account/", create_account, name="create_account"),
     path("uploadModel/", admin_model, name="admin_model"),
+    path('dataSpace/<str:id>/compare-swings/', dashboard_compareSwings, name='dashboard_compareSwings'),
     
 
     path("", home, name="home"),

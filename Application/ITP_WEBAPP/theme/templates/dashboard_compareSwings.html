@@ -1,0 +1,80 @@
+{% extends 'dashboard.html' %}
+{% load static tailwind_tags %}
+{% load custom_filters %}
+
+{% block dashboard_content %}
+<div id="compare-page" class="flex flex-col h-full w-full md:p-6 p-1 pt-0 font-inter"
+     data-video1='{{ video1_full_data|escapejs }}'
+     data-video2='{{ video2_full_data|escapejs }}'
+     data-video1-title="{{ video1_title|escapejs }}"
+     data-video2-title="{{ video2_title|escapejs }}"
+     data-video1-url="{{ video1_url|escapejs }}"
+     data-video2-url="{{ video2_url|escapejs }}">
+
+    <!-- Back Button and Page Title -->
+    <div class="flex items-center justify-between mb-4">
+        <div class="flex items-center">
+            <a href="javascript:history.back()"
+               class="inline-flex items-center p-2 text-sm font-medium text-gray-600 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <svg class="w-5 h-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none"
+                     viewBox="0 0 24 24" stroke="currentColor">
+                    <path stroke-linecap="round" stroke-linejoin="round"
+                          stroke-width="2" d="M15 19l-7-7 7-7" />
+                </svg>
+                <p class="md:visible hidden ml-2">Back to Videos</p>
+            </a>
+            <h1 class="md:text-xl text-xs font-poppins text-gray-800 ml-6">
+                Swing Comparison
+            </h1>
+        </div>
+    </div>
+
+    <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-black/10" />
+
+    <!-- Video Comparison Section -->
+    <div class="flex flex-col md:flex-row justify-around items-stretch mb-6 gap-4 h-60%">
+        <!-- Video 1 Container -->
+        <div class="flex flex-col items-center w-full md:w-1/2 max-h-full rounded-lg shadow-md bg-white p-2 overflow-hidden">
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">{{ video1_title }}</h2>
+            <video id="video-player-1" class="w-full h-auto max-h-[400px] object-contain rounded-lg mb-2" controls>
+                <source src="{{ video1_url }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </div>
+
+        <!-- Video 2 Container -->
+        <div class="flex flex-col items-center w-full md:w-1/2 max-h-full rounded-lg shadow-md bg-white p-2 overflow-hidden">
+            <h2 class="text-lg font-semibold text-gray-700 mb-2">{{ video2_title }}</h2>
+            <video id="video-player-2" class="w-full h-auto max-h-[400px] object-contain rounded-lg mb-2" controls>
+                <source src="{{ video2_url }}" type="video/mp4">
+                Your browser does not support the video tag.
+            </video>
+        </div>
+    </div>
+
+    <!-- Combined Data Table -->
+    <div class="mb-4 flex-grow overflow-hidden rounded-lg shadow-md bg-white p-4">
+        <h2 class="text-xl font-semibold text-gray-800 mb-4">Combined Table Results</h2>
+        <div class="overflow-x-auto h-full">
+            <table class="min-w-full border-b divide-y divide-gray-200">
+                <thead class="bg-gray-100 sticky top-0 z-10">
+                    <tr>
+                        <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider">Pose Class</th>
+                        <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider">Body Tilt</th>
+                        <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider">Video 1</th>
+                        <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider">Video 2</th>
+                        <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider">Difference</th>
+                        <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider">Status</th>
+                    </tr>
+                </thead>
+                <tbody id="combined-data-body" class="bg-white divide-y divide-gray-200">
+                    <!-- Data rows will be inserted here by JavaScript -->
+                </tbody>
+            </table>
+        </div>
+    </div>
+
+</div>
+<script src="{% static 'js/video-player.js' %}"></script>
+<script src="{% static 'js/dashboard_compareSwings.js' %}"></script>
+{% endblock dashboard_content %}
