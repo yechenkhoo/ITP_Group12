@@ -2161,10 +2161,6 @@ select {
   height: 0.125rem;
 }
 
-.h-2\/5 {
-  height: 40%;
-}
-
 .h-24 {
   height: 6rem;
 }
@@ -2185,8 +2181,16 @@ select {
   height: 1.5rem;
 }
 
+.h-60 {
+  height: 15rem;
+}
+
 .h-64 {
   height: 16rem;
+}
+
+.h-auto {
+  height: auto;
 }
 
 .h-fit {
@@ -2202,24 +2206,12 @@ select {
   height: 100vh;
 }
 
-.h-3\/5 {
-  height: 60%;
+.h-40 {
+  height: 10rem;
 }
 
-.h-auto {
-  height: auto;
-}
-
-.h-3\/6 {
-  height: 50%;
-}
-
-.h-4\/6 {
-  height: 66.666667%;
-}
-
-.h-60 {
-  height: 15rem;
+.h-20 {
+  height: 5rem;
 }
 
 .max-h-\[400px\] {
@@ -2228,6 +2220,18 @@ select {
 
 .max-h-full {
   max-height: 100%;
+}
+
+.max-h-\[300px\] {
+  max-height: 300px;
+}
+
+.max-h-\[350px\] {
+  max-height: 350px;
+}
+
+.max-h-\[330px\] {
+  max-height: 330px;
 }
 
 .min-h-full {

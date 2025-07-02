@@ -1,96 +1,110 @@
 document.addEventListener('DOMContentLoaded', () => {
-  // Pull everything out of the #compare-page dataset
-  const comparePage = document.getElementById('compare-page');
-  const data1       = JSON.parse(comparePage.dataset.video1);
-  const data2       = JSON.parse(comparePage.dataset.video2);
-  const video1Title = comparePage.dataset.video1Title;
-  const video2Title = comparePage.dataset.video2Title;
+  const comparePage      = document.getElementById('compare-page');
+  if (!comparePage) return console.error('No #compare-page');
+
+  // 1) Parse your JSON straight from the data- attributes:
+  const video1Data = JSON.parse(comparePage.dataset.video1 || '[]');
+  const video2Data = JSON.parse(comparePage.dataset.video2 || '[]');
+
+  // 2) Grab the URLs & titles the same way:
   const video1Url   = comparePage.dataset.video1Url;
   const video2Url   = comparePage.dataset.video2Url;
+  const video1Title = comparePage.dataset.video1Title;
+  const video2Title = comparePage.dataset.video2Title;
 
-  // Grab your DOM nodes
-  const videoPlayer1     = document.getElementById('video-player-1');
-  const videoPlayer2     = document.getElementById('video-player-2');
-  const videoTitle1      = document.getElementById('video-title-1');
-  const videoTitle2      = document.getElementById('video-title-2');
-  const combinedDataBody = document.getElementById('combined-data-body');
+  // 3) Wire up your players:
+  const vid1 = document.getElementById('video-player-1');
+  const vid2 = document.getElementById('video-player-2');
+  if (!vid1 || !vid2) return console.error('Missing <video> tags');
 
-  // Wire up the video tags
-  videoPlayer1.src       = video1Url;
-  videoTitle1.textContent = video1Title;
-  videoPlayer2.src       = video2Url;
-  videoTitle2.textContent = video2Title;
-
-  // Sync playback
-  videoPlayer1.addEventListener('play',  () => videoPlayer2.play());
-  videoPlayer1.addEventListener('pause', () => videoPlayer2.pause());
-  videoPlayer2.addEventListener('play',  () => videoPlayer1.play());
-  videoPlayer2.addEventListener('pause', () => videoPlayer1.pause());
-  let isSeeking = false;
-  function syncSeek(a,b){
-    if(!isSeeking){
-      isSeeking = true;
+  vid1.src = video1Url;
+  vid2.src = video2Url;
+  vid1.addEventListener('play',  () => vid2.play());
+  vid1.addEventListener('pause', () => vid2.pause());
+  vid2.addEventListener('play',  () => vid1.play());
+  vid2.addEventListener('pause', () => vid1.pause());
+  let seeking = false;
+  function sync(a, b) {
+    if (!seeking) {
+      seeking = true;
       b.currentTime = a.currentTime;
-      setTimeout(()=> isSeeking=false, 100);
+      setTimeout(() => seeking = false, 100);
     }
   }
-  ['seeking','seeked'].forEach(evt=>{
-    videoPlayer1.addEventListener(evt, ()=> syncSeek(videoPlayer1, videoPlayer2));
-    videoPlayer2.addEventListener(evt, ()=> syncSeek(videoPlayer2, videoPlayer1));
+  ['seeking','seeked'].forEach(evt => {
+    vid1.addEventListener(evt, () => sync(vid1, vid2));
+    vid2.addEventListener(evt, () => sync(vid2, vid1));
   });
 
-  // Build the combined-data table
-  const maxRows = Math.max(data1.length, data2.length);
-  for(let i=0; i<maxRows; i++){
-    const r1 = data1[i]||{};
-    const r2 = data2[i]||{};
-    const tr = document.createElement('tr');
-    tr.classList.add('border-b','hover:bg-gray-50');
-
-    // helper to create a <td>
-    function makeCell(text, ...classes){
-      const td = document.createElement('td');
-      td.textContent = text||'-';
-      td.classList.add(...classes);
-      return td;
-    }
-
-    // Time Frame
-    tr.appendChild(makeCell(r1['Time Frame'] || r2['Time Frame'],
-      'px-6','py-4','whitespace-nowrap','text-sm','font-medium','text-gray-900'));
-
-    // Overall Status (Video 1)
-    const status1 = r1['Overall Status'];
-    const td1 = makeCell('', 'px-6','py-4','whitespace-nowrap');
-    const badge1 = document.createElement('div');
-    badge1.classList.add('inline-flex','items-center','px-3','py-1','md:text-sm','text-xs','font-medium','rounded-full');
-    if      (status1==='Good')     badge1.classList.add('bg-green-100','text-green-800');
-    else if (status1==='Bad')      badge1.classList.add('bg-yellow-100','text-yellow-800');
-    else if (status1==='Very Bad') badge1.classList.add('bg-red-100','text-red-800');
-    else                            badge1.classList.add('bg-gray-200','text-gray-800');
-    badge1.textContent = status1||'-';
-    td1.appendChild(badge1);
-    tr.appendChild(td1);
-
-    // Swing Speed (Video 1)
-    tr.appendChild(makeCell(r1['Swing Speed'], 'px-6','py-4','whitespace-nowrap','text-sm','text-gray-700'));
-
-    // Overall Status (Video 2)
-    const status2 = r2['Overall Status'];
-    const td2 = makeCell('', 'px-6','py-4','whitespace-nowrap');
-    const badge2 = badge1.cloneNode();
-    badge2.textContent = status2||'-';
-    badge2.className = badge1.className; // reset classes
-    if      (status2==='Good')     badge2.classList.add('bg-green-100','text-green-800');
-    else if (status2==='Bad')      badge2.classList.add('bg-yellow-100','text-yellow-800');
-    else if (status2==='Very Bad') badge2.classList.add('bg-red-100','text-red-800');
-    else                            badge2.classList.add('bg-gray-200','text-gray-800');
-    td2.appendChild(badge2);
-    tr.appendChild(td2);
-
-    // Swing Speed (Video 2)
-    tr.appendChild(makeCell(r2['Swing Speed'], 'px-6','py-4','whitespace-nowrap','text-sm','text-gray-700'));
-
-    combinedDataBody.appendChild(tr);
+  // 4) Table helpers:
+  function makeCell(val, cls = []) {
+    const td = document.createElement('td');
+    if (typeof val === 'number') td.textContent = val.toFixed(2);
+    else td.textContent = (val == null || val === '') ? '-' : val;
+    td.classList.add(...cls, 'px-6','py-4','whitespace-nowrap','text-sm','text-gray-700');
+    return td;
   }
+  function makeBadge(status) {
+    const div = document.createElement('div');
+    div.classList.add('inline-flex','items-center','px-3','py-1','text-xs','font-medium','rounded-full');
+    if (status === 'Good')        div.classList.add('bg-green-100','text-green-800');
+    else if (status === 'Neutral') div.classList.add('bg-gray-200','text-gray-800');
+    else if (status === 'Bad')     div.classList.add('bg-red-100','text-red-800');
+    else                           div.classList.add('bg-gray-200','text-gray-800'), status = '-';
+    div.textContent = status;
+    const td = document.createElement('td');
+    td.classList.add('px-6','py-4','whitespace-nowrap');
+    td.appendChild(div);
+    return td;
+  }
+  function getStatus(diff) {
+    if (diff >  0) return 'Good';
+    if (diff <  0) return 'Bad';
+    if (diff === 0) return 'Neutral';
+    return '-';
+  }
+
+  // 5) Build the combined table:
+  const tbody       = document.getElementById('combined-data-body');
+  const poseClasses = ['P1','P2','P3','P4','P5','P6','P7','P8','P9','P10'];
+  const tiltTypes   = ['Shoulder Tilt','Hip Tilt','Time Frame'];
+  const map1        = new Map(video1Data.map(r => [r['Pose Class'], r]));
+  const map2        = new Map(video2Data.map(r => [r['Pose Class'], r]));
+
+  tbody.innerHTML = '';
+  if (!video1Data.length && !video2Data.length) {
+    const tr = document.createElement('tr');
+    const td = makeCell('No data to compare.', ['text-center']);
+    td.colSpan = 6;
+    tr.appendChild(td);
+    tbody.appendChild(tr);
+    return;
+  }
+
+  poseClasses.forEach(pose => {
+    tiltTypes.forEach(metric => {
+      const tr = document.createElement('tr');
+      tr.classList.add('border-b','hover:bg-gray-50');
+
+      tr.appendChild(makeCell(pose,   ['font-medium','text-gray-900']));
+      tr.appendChild(makeCell(metric, ['font-medium','text-gray-900']));
+
+      const v1 = parseFloat(map1.get(pose)?.[metric]);
+      const v2 = parseFloat(map2.get(pose)?.[metric]);
+      tr.appendChild(makeCell(isNaN(v1) ? null : v1));
+      tr.appendChild(makeCell(isNaN(v2) ? null : v2));
+
+      let diff = null;
+      if (!isNaN(v1) && !isNaN(v2)) diff = +(v2 - v1).toFixed(2);
+      tr.appendChild(makeCell(diff));
+
+      const status = (diff == null) ? '-' : getStatus(diff);
+      tr.appendChild(makeBadge(status));
+
+      if (status === 'Good') tr.classList.add('bg-green-100');
+      else if (status === 'Bad') tr.classList.add('bg-red-100');
+
+      tbody.appendChild(tr);
+    });
+  });
 });

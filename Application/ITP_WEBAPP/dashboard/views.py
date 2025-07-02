@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from django.http import HttpResponseRedirect, JsonResponse, StreamingHttpResponse, HttpResponse
+from django.http import HttpResponseRedirect, JsonResponse, StreamingHttpResponse, HttpResponse, HttpResponseBadRequest
 from ITP_WEBAPP.models import User
 from .models import Coach, Video, Comment
 from ITP_WEBAPP.views import is_logged_in
@@ -11,6 +11,7 @@ from django.views.decorators.csrf import csrf_exempt
 import os
 from datetime import datetime
 from django.core.paginator import Paginator
+import json
 
 # Helper Functions
 def isCoach(request):
@@ -223,6 +224,7 @@ def dashboard_compareSwings(request, id):
     # Grab the two video IDs from the query string
     video_ids_param = request.GET.get('video_ids')
     if not video_ids_param:
+        # Use HttpResponseBadRequest for client-side errors
         return HttpResponseBadRequest("Missing video_ids parameter. Please select two videos to compare.")
 
     video_ids = video_ids_param.split(',')
@@ -247,17 +249,17 @@ def dashboard_compareSwings(request, id):
     video1_url   = Video.get_video_url(video1_id)
     video2_url   = Video.get_video_url(video2_id)
 
-    # CSV data for each
-    def fetch_csv_data(vid):
+    # CSV data for each - MODIFIED TO USE JSON.DUMPS()
+    def fetch_csv_data_json(vid): # Renamed for clarity
         url = Video.get_csv_url(vid)
         resp = requests.get(url)
         if resp.status_code == 200:
             df = pd.read_csv(StringIO(resp.content.decode('utf-8')))
-            return df.to_dict('records')
-        return []
+            return json.dumps(df.to_dict('records')) # <-- IMPORTANT: Convert to JSON string here
+        return json.dumps([]) # <-- IMPORTANT: Return empty JSON array string
 
-    video1_data = fetch_csv_data(video1_id)
-    video2_data = fetch_csv_data(video2_id)
+    video1_full_data_json = fetch_csv_data_json(video1_id) # Store as JSON string
+    video2_full_data_json = fetch_csv_data_json(video2_id) # Store as JSON string
 
     # Current user (for base template)
     user = User.find_user_by_id(ObjectId(request.session['Id']))
@@ -269,11 +271,11 @@ def dashboard_compareSwings(request, id):
         'video1_id': video1_id,
         'video1_title': video1_title,
         'video1_url': video1_url,
-        'video1_full_data': video1_data, # Pass data for JS to combine
+        'video1_full_data': video1_full_data_json, # Pass the JSON string
         'video2_id': video2_id,
         'video2_title': video2_title,
         'video2_url': video2_url,
-        'video2_full_data': video2_data, # Pass data for JS to combine
+        'video2_full_data': video2_full_data_json, # Pass the JSON string
     }
     return render(request, 'dashboard_compareSwings.html', context)
 
