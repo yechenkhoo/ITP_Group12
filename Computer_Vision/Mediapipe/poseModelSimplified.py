@@ -24,7 +24,6 @@ from keras import layers, Sequential, regularizers
 # path_csv = args["dataset"]
 # path_to_save = args["save"]
 
-path_csv = "pose_img.csv"
 
 all_models = [
     ("MLP_Basic", ModelFactory.mlp_basic, True),
@@ -33,15 +32,22 @@ all_models = [
     ("MLP_Attention", ModelFactory.mlp_attention, False),
     ("CNN_Basic", ModelFactory.cnn_basic, False),
     ("CNN_Attention", ModelFactory.cnn_attention, False),
-    ("CNN_2D", ModelFactory.cnn_2d, False)
+    ("CNN_2D", ModelFactory.cnn_2d, False),
+    ("CNN_3_block", ModelFactory.cnn_3_block, False) # architecture from paper
 ]
 
 results = {}
+path_csv = "pose_img.csv"
+# path_csv = "test_set.csv"
+test_run_name = "C_agn"
+folder = f"output/{test_run_name}"
+os.makedirs(folder, exist_ok=True)
+
 
 for m in all_models:
     model_name, model_chosen, flatten = m[0], m[1], m[2]
-    path_to_save_model = f"output/C2_{model_name}.h5"
-    path_to_save_diagrams = f"output/C2_{model_name}"
+    path_to_save_model = f"{folder}/{model_name}.h5"
+    path_to_save_diagrams = f"{folder}/{model_name}"
 
     # initialise dataset
     data = PoseDataset(path_csv)
@@ -84,5 +90,5 @@ for m in all_models:
 columns = ["val_acc", "val_prec", "val_rec", "test_acc", "test_prec", "test_rec"]
 df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
 df_rounded = df.round(3)
-df_rounded.to_csv("output/C2_Results.csv")
-print("[INFO] Saved in output/C2_Results.csv")
+df_rounded.to_csv(f"{folder}/Results.csv")
+print(f"[INFO] Saved in {folder}/Results.csv")

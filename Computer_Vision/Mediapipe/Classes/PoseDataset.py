@@ -34,9 +34,15 @@ class PoseDataset():
         - reshape: reshapes the data into 33x4 instead of 132x1
         """
         x = self.df.copy()
+
+        # Sort by Pose_Class from P1 to P10
+        x['Pose_Class'] = pd.Categorical(x['Pose_Class'], categories=[f'P{i}' for i in range(1, 11)], ordered=True)
+        x = x.sort_values('Pose_Class')
+
         image_paths = x.pop('Image_Path').to_list()  # store image paths
         # x = x.drop(columns=[col for col in x.columns if '_Z' in col or '_V' in col]) # to test x and y only
         y, _ = x.pop('Pose_Class').factorize()
+        print(_)
         x = x.astype('float64')
         y = keras.utils.to_categorical(y)
 
@@ -69,6 +75,11 @@ class PoseDataset():
         - reshape: reshapes the data into 33x4 instead of 132x1
         """
         x = self.df.copy()
+
+        # Sort by Pose_Class from P1 to P10
+        x['Pose_Class'] = pd.Categorical(x['Pose_Class'], categories=[f'P{i}' for i in range(1, 11)], ordered=True)
+        x = x.sort_values('Pose_Class')
+
         image_paths = x.pop('Image_Path').to_list()
 
         # Extract labels

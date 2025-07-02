@@ -3,11 +3,11 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-folder = "output/C5_NewDatasetCorrectPoses_agn/"
+folder = "output/C_agn/"
 df = pd.read_csv(f'{folder}Results.csv', index_col=0).round(3)
 
 # Remove columns whose name contains 'val'
-df = df.loc[:, ~df.columns.str.contains('val')]
+# df = df.loc[:, ~df.columns.str.contains('val')]
 
 # Normalise for colour mapping
 vmin, vmax = df.min().min(), df.max().max()
