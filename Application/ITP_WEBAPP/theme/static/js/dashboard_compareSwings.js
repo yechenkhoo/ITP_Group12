@@ -12,31 +12,30 @@ document.addEventListener('DOMContentLoaded', () => {
     const video1Title = comparePage.dataset.video1Title;
     const video2Title = comparePage.dataset.video2Title;
 
-    // 3) Sync players
+    // 3) Get video player elements
     const vid1 = document.getElementById('video-player-1');
     const vid2 = document.getElementById('video-player-2');
     if (!vid1 || !vid2) return console.error('Missing <video> tags');
 
     vid1.src = video1Url;
     vid2.src = video2Url;
-    vid1.addEventListener('play', () => vid2.play());
-    vid1.addEventListener('pause', () => vid2.pause());
-    vid2.addEventListener('play', () => vid1.play());
-    vid2.addEventListener('pause', () => vid1.pause());
+
     let seeking = false;
-    function sync(a, b) {
+    function syncTime(sourceVideo, targetVideo) {
         if (!seeking) {
             seeking = true;
-            b.currentTime = a.currentTime;
+            targetVideo.currentTime = sourceVideo.currentTime;
+            // No change to play/pause state here. They remain independent.
             setTimeout(() => seeking = false, 100);
         }
     }
+
     ['seeking', 'seeked'].forEach(evt => {
-        vid1.addEventListener(evt, () => sync(vid1, vid2));
-        vid2.addEventListener(evt, () => sync(vid2, vid1));
+        vid1.addEventListener(evt, () => syncTime(vid1, vid2));
+        vid2.addEventListener(evt, () => syncTime(vid2, vid1));
     });
 
-    // 4) Table helpers
+    // 4) Table helpers (No changes needed here)
     function makeCell(val, cls = []) {
         const td = document.createElement('td');
         td.textContent = (typeof val === 'number') ? val.toFixed(2)
@@ -82,7 +81,18 @@ document.addEventListener('DOMContentLoaded', () => {
         poseClasses.forEach(pose => {
             tiltTypes.forEach(metric => {
                 const tr = document.createElement('tr');
-                tr.classList.add('border-b', 'hover:bg-gray-50');
+                tr.classList.add('border-b', 'hover:bg-indigo-200', 'cursor-pointer');
+
+                const timestamp1 = map1.has(pose) ? map1.get(pose)['Time Frame'] : null;
+                const timestamp2 = map2.has(pose) ? map2.get(pose)['Time Frame'] : null;
+
+                // Add data attributes for timestamps
+                if (timestamp1 !== null) {
+                    tr.dataset.timestampV1 = timestamp1;
+                }
+                if (timestamp2 !== null) {
+                    tr.dataset.timestampV2 = timestamp2;
+                }
 
                 tr.appendChild(makeCell(pose, ['font-medium', 'text-gray-900']));
                 tr.appendChild(makeCell(metric, ['font-medium', 'text-gray-900']));
@@ -102,12 +112,27 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (status === 'Good') tr.classList.add('bg-green-100');
                 else if (status === 'Bad') tr.classList.add('bg-red-100');
 
+                // Add click event listener to the row
+                tr.addEventListener('click', () => {
+                    const ts1 = parseFloat(tr.dataset.timestampV1);
+                    const ts2 = parseFloat(tr.dataset.timestampV2);
+
+                    if (!isNaN(ts1) && vid1) {
+                        vid1.currentTime = ts1;
+                        vid1.pause(); // Ensure it remains paused after seeking
+                    }
+                    if (!isNaN(ts2) && vid2) {
+                        vid2.currentTime = ts2;
+                        vid2.pause(); // Ensure it remains paused after seeking
+                    }
+                });
+
                 tbody.appendChild(tr);
             });
         });
     }
 
-    // 6) Tab switching
+    // 6) Tab switching (No changes needed here)
     document.getElementById('table-tab').addEventListener('click', () => {
         document.getElementById('table-view').classList.remove('hidden');
         document.getElementById('chart-view').classList.add('hidden');
@@ -125,7 +150,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('table-tab').classList.replace('border-blue-600', 'border-transparent');
     });
 
-    // 7) Build Line Chart for Shoulder and Hip Tilt
+    // 7) Build Line Chart for Shoulder and Hip Tilt (No changes needed here)
     const video1HipTilt = poseClasses.map(pose => parseFloat(map1.get(pose)?.['Hip Tilt']));
     const video2HipTilt = poseClasses.map(pose => parseFloat(map2.get(pose)?.['Hip Tilt']));
     const video1ShoulderTilt = poseClasses.map(pose => parseFloat(map1.get(pose)?.['Shoulder Tilt']));
