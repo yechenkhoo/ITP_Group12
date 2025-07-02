@@ -1,9 +1,9 @@
 import pandas as pd
 from collections import defaultdict
 
-folder = "C_gnn"
-model = "gnn"
-value = "test_predictions500"
+folder = "output/C5_NewDatasetCorrectPoses/CNN_Basic"
+model = "CNN_Basic"
+value = "test_predictions"
 
 if model == "gnn":
     df = pd.read_csv(f'output/{folder}/{value}.csv')
@@ -107,5 +107,5 @@ sm.set_array([])
 cbar = fig.colorbar(sm, ax=ax, shrink=0.8)
 cbar.set_label('Confusion Count (Edge Weight)')
 
-plt.savefig(f'output/{folder}/{model}_{value}_confusion_network_colored.png', dpi=300)
+plt.savefig(f'{folder}/{model}_{value}_confusion_network_colored.png', dpi=300)
 plt.show()

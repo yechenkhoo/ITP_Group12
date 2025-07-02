@@ -96,7 +96,7 @@ def plot_predictions_in_batches_from_csv(
 
             # Set title with colored background box
             correct_flag = "✔" if correct else "✘"
-            title_text = f"P{gt+1} → P{pred+1}\n{correct_flag} | {conf:.2f}"
+            title_text = f"GT:{gt+1} → Pred:{pred+1}\n{correct_flag} | {conf:.2f} | {img_path}"
             title_bg_color = 'lightgreen' if correct else 'lightcoral'
             
             ax.set_title(title_text, fontsize=9, fontweight='bold', pad=8,
@@ -118,12 +118,12 @@ def plot_predictions_in_batches_from_csv(
 # csv_path="output/gnn/test_predictions.csv"
 # output_dir="output/gnn/vis_batches"
 
-csv_path="output/MLP_Deep/MLP_Deep_test_predictions.csv"
-output_dir="output/MLP_Deep/vis_batches"
+csv_path="output/C5_NewDatasetCorrectPoses/CNN_Basic/CNN_Basic_test_predictions.csv"
+output_dir="output/C5_NewDatasetCorrectPoses/CNN_Basic/test_vis"
 
 plot_predictions_in_batches_from_csv(
     csv_path=csv_path,
-    dataset_dir="./Dataset/",
+    dataset_dir="./Dataset2/",
     output_dir=output_dir,
     grid_cols=10,
     batch_size=100,

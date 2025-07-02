@@ -3,7 +3,8 @@ import matplotlib.pyplot as plt
 import numpy as np
 from mpl_toolkits.axes_grid1.inset_locator import inset_axes
 
-df = pd.read_csv('output/C2_Results.csv', index_col=0).round(3)
+folder = "output/C5_NewDatasetCorrectPoses_agn/"
+df = pd.read_csv(f'{folder}Results.csv', index_col=0).round(3)
 
 # Remove columns whose name contains 'val'
 df = df.loc[:, ~df.columns.str.contains('val')]
@@ -47,5 +48,5 @@ cb1.set_label('Value Range (Low → High)', fontsize=8)
 cb1.ax.tick_params(labelsize=7)
 
 # Save compact image
-plt.savefig("output/C2_Results_Table.png", bbox_inches='tight', dpi=300)
+plt.savefig(f"{folder}Results_Table.png", bbox_inches='tight', dpi=300)
 plt.close()
