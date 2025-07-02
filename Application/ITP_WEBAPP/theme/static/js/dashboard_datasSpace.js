@@ -146,7 +146,7 @@ function updateCompareDeleteButtonState() {
     const checkedIdsArray = Array.from(allSelectedIds); // Convert Set to Array for deleteInput value
 
     // --- compare button logic ---
-    if (checkedCount >= 2) {
+    if (checkedCount == 2) {
         compareBtn.disabled = false;
         compareBtn.classList.replace('bg-gray-500', 'bg-[#217346]');
     } else {
