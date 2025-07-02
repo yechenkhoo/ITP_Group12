@@ -21,15 +21,17 @@ document.addEventListener('DOMContentLoaded', () => {
     vid2.src = video2Url;
 
     let seeking = false;
+    let chartSeeking = false; // New flag to prevent sync for chart clicks
+
     function syncTime(sourceVideo, targetVideo) {
-        if (!seeking) {
+        if (!seeking && !chartSeeking) { // Add chartSeeking to the condition
             seeking = true;
             targetVideo.currentTime = sourceVideo.currentTime;
-            // No change to play/pause state here. They remain independent.
             setTimeout(() => seeking = false, 100);
         }
     }
 
+    // Keep the seeking synchronization for manual scrubbing
     ['seeking', 'seeked'].forEach(evt => {
         vid1.addEventListener(evt, () => syncTime(vid1, vid2));
         vid2.addEventListener(evt, () => syncTime(vid2, vid1));
@@ -117,13 +119,14 @@ document.addEventListener('DOMContentLoaded', () => {
                     const ts1 = parseFloat(tr.dataset.timestampV1);
                     const ts2 = parseFloat(tr.dataset.timestampV2);
 
+                    // For table rows, we still want to seek both videos if data exists
                     if (!isNaN(ts1) && vid1) {
                         vid1.currentTime = ts1;
-                        vid1.pause(); // Ensure it remains paused after seeking
+                        vid1.pause();
                     }
                     if (!isNaN(ts2) && vid2) {
                         vid2.currentTime = ts2;
-                        vid2.pause(); // Ensure it remains paused after seeking
+                        vid2.pause();
                     }
                 });
 
@@ -150,7 +153,7 @@ document.addEventListener('DOMContentLoaded', () => {
         document.getElementById('table-tab').classList.replace('border-blue-600', 'border-transparent');
     });
 
-    // 7) Build Line Chart for Shoulder and Hip Tilt (No changes needed here)
+    // 7) Build Line Chart for Shoulder and Hip Tilt
     const video1HipTilt = poseClasses.map(pose => parseFloat(map1.get(pose)?.['Hip Tilt']));
     const video2HipTilt = poseClasses.map(pose => parseFloat(map2.get(pose)?.['Hip Tilt']));
     const video1ShoulderTilt = poseClasses.map(pose => parseFloat(map1.get(pose)?.['Shoulder Tilt']));
@@ -211,6 +214,37 @@ document.addEventListener('DOMContentLoaded', () => {
                         display: true,
                         text: 'Pose Class'
                     }
+                }
+            },
+            onClick: (event, elements) => {
+                if (elements.length > 0) {
+                    chartSeeking = true; // Set flag to disable general sync
+                    const firstElement = elements[0];
+                    const datasetIndex = firstElement.datasetIndex;
+                    const index = firstElement.index;
+                    const poseClass = poseClasses[index];
+
+                    if (datasetIndex === 0 || datasetIndex === 2) { // Video 1 datasets
+                        const ts1 = map1.has(poseClass) ? parseFloat(map1.get(poseClass)['Time Frame']) : null;
+                        if (!isNaN(ts1) && vid1) {
+                            vid1.currentTime = ts1;
+                            vid1.pause();
+                        }
+                    } else if (datasetIndex === 1 || datasetIndex === 3) { // Video 2 datasets
+                        const ts2 = map2.has(poseClass) ? parseFloat(map2.get(poseClass)['Time Frame']) : null;
+                        if (!isNaN(ts2) && vid2) {
+                            vid2.currentTime = ts2;
+                            vid2.pause();
+                        }
+                    }
+                    // Reset the flag after a short delay to allow sync to re-engage for manual scrubbing
+                    setTimeout(() => chartSeeking = false, 200); // Give it a bit more time than 'seeking'
+                }
+            },
+            plugins: {
+                tooltip: {
+                    mode: 'index',
+                    intersect: false
                 }
             }
         }
