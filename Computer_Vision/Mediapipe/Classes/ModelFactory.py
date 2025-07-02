@@ -153,3 +153,41 @@ class ModelFactory:
         outputs = layers.Dense(class_count, activation='softmax')(x)
 
         return tf.keras.Model(inputs, outputs)
+
+    @staticmethod
+    def cnn_3_block(input_shape, class_count):
+        """
+        1D Convolutional Neural Network matching the architecture from the paper.
+        Each conv block has 3 Conv1D layers with increasing filter sizes.
+        Pooling reduces temporal dimension by half after each block.
+        """
+        model = models.Sequential([
+            layers.Input(shape=input_shape),  # e.g., (time_steps, features)
+            
+            # Block 1: 3 Conv1D layers with 28 filters
+            layers.Conv1D(28, 3, activation='relu', padding='same'),
+            layers.Conv1D(28, 3, activation='relu', padding='same'),
+            layers.Conv1D(28, 3, activation='relu', padding='same'),
+            layers.MaxPooling1D(pool_size=2),
+            
+            # Block 2: 3 Conv1D layers with 56 filters
+            layers.Conv1D(56, 3, activation='relu', padding='same'),
+            layers.Conv1D(56, 3, activation='relu', padding='same'),
+            layers.Conv1D(56, 3, activation='relu', padding='same'),
+            layers.MaxPooling1D(pool_size=2),
+            
+            # Block 3: 3 Conv1D layers with 112 filters
+            layers.Conv1D(112, 3, activation='relu', padding='same'),
+            layers.Conv1D(112, 3, activation='relu', padding='same'),
+            layers.Conv1D(112, 3, activation='relu', padding='same'),
+            layers.MaxPooling1D(pool_size=2),
+            
+            layers.Flatten(),
+            layers.Dense(512, activation='relu'),
+            layers.Dropout(0.5),
+            layers.Dense(256, activation='relu'),
+            layers.Dropout(0.5),
+            layers.Dense(class_count, activation='softmax')
+        ])
+        
+        return model
