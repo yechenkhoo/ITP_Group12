@@ -1,13 +1,14 @@
 import pandas as pd
 from collections import defaultdict
 
-model = "CNN_Basic"
-value = "test_predictions"
+folder = "C_gnn"
+model = "gnn"
+value = "test_predictions500"
 
 if model == "gnn":
-    df = pd.read_csv(f'output/{model}/{value}.csv')
+    df = pd.read_csv(f'output/{folder}/{value}.csv')
 else:
-    df = pd.read_csv(f'output/{model}/{model}_{value}.csv')
+    df = pd.read_csv(f'output/{folder}/{model}_{value}.csv')
 
 # Map label numbers to actual names
 label_names = {0: 'P1', 1: 'P2', 2: 'P3', 3: 'P4', 4: 'P5', 5: 'P6', 6: 'P7', 7: 'P8', 8: 'P9', 9: 'P10'}
@@ -106,5 +107,5 @@ sm.set_array([])
 cbar = fig.colorbar(sm, ax=ax, shrink=0.8)
 cbar.set_label('Confusion Count (Edge Weight)')
 
-plt.savefig(f'output/{model}/{model}_{value}_confusion_network_colored.png', dpi=300)
+plt.savefig(f'output/{folder}/{model}_{value}_confusion_network_colored.png', dpi=300)
 plt.show()

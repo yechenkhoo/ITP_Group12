@@ -40,14 +40,16 @@ results = {}
 
 for m in all_models:
     model_name, model_chosen, flatten = m[0], m[1], m[2]
-    path_to_save_model = f"output/{model_name}.h5"
-    path_to_save_diagrams = f"output/{model_name}"
+    path_to_save_model = f"output/C2_{model_name}.h5"
+    path_to_save_diagrams = f"output/C2_{model_name}"
 
     # initialise dataset
     data = PoseDataset(path_csv)
     data.load_csv_data()
     # default: test_size=0.2, random_state=0
-    data.split_dataset(test_size=0.3, reshape=(not flatten), random_state=42)
+    # data.split_dataset(test_size=0.3, reshape=(not flatten), random_state=42)
+    data.split_dataset_manual(reshape=(not flatten))
+    
 
     # initialise model
     model = DeepLearningModel(
@@ -70,7 +72,7 @@ for m in all_models:
     model.add_callbacks()
 
     # other params: epoch (default 200), batch_size (default 16)
-    model.train(data, epochs=200)
+    model.train(data, epochs=500)
 
     model.plot_training_metrics(path_to_save_diagrams)
 
@@ -82,5 +84,5 @@ for m in all_models:
 columns = ["val_acc", "val_prec", "val_rec", "test_acc", "test_prec", "test_rec"]
 df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
 df_rounded = df.round(3)
-df_rounded.to_csv("output/Results.csv")
-print("[INFO] Saved in output/Results.csv")
+df_rounded.to_csv("output/C2_Results.csv")
+print("[INFO] Saved in output/C2_Results.csv")

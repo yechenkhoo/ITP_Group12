@@ -22,7 +22,8 @@ tf.random.set_seed(0)
 torch.manual_seed(0)
 os.environ['PYTHONHASHSEED'] = str(0)
 
-epochs_count = 1000
+epochs_count = 500
+folder_path = "output/C_gnn/"
 
 def main():
     pose_vector = pd.read_csv("pose_img.csv")
@@ -43,7 +44,7 @@ def main():
     
     # Prepare Dataset
     # x = pose_vector, y is label array (0 to 9), edge_index is from body connections
-    train_dataset, val_dataset, test_dataset = split_gnn_dataset(pose_vector, y, edge_index, image_paths=image_paths, test_size=0.3)
+    train_dataset, val_dataset, test_dataset = split_gnn_dataset_manual(pose_vector, y, edge_index, image_paths=image_paths)
     train_loader = DataLoader(train_dataset, batch_size=32, shuffle=False)
     val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
     test_loader = DataLoader(test_dataset, batch_size=32, shuffle=False)
@@ -93,7 +94,7 @@ def main():
         model=model,
         data_loader=val_loader,
         device=device,
-        path_to_save="output/gnn/",
+        path_to_save=folder_path,
         all_classes=['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'],
         dataset_name="val"
     )
@@ -103,7 +104,7 @@ def main():
         model=model,
         data_loader=test_loader,
         device=device,
-        path_to_save="output/gnn/",
+        path_to_save=folder_path,
         all_classes=['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10'],
         dataset_name="test"
     )
@@ -164,6 +165,45 @@ def split_gnn_dataset(pose_vector, labels, edge_index, image_paths=None, test_si
         to_dataset(points_test, y_test, paths_test)
     )
 
+def split_gnn_dataset_manual(pose_vector, labels, edge_index, image_paths=None, val_size=0.2, random_state=0):
+    """
+    Splits the dataset manually:
+    - Test set: entries where 'image_paths' contains 'Charlie'
+    - Train/Val: all others
+    - Validation set is a fraction (val_size) of train set
+    """
+    image_paths = np.array(image_paths)
+    pose_vector = np.array(pose_vector)
+    labels = np.array(labels)
+
+    # Identify indices for Charlie and non-Charlie samples
+    test_indices = [i for i, p in enumerate(image_paths) if "Charlie" in p]
+    trainval_indices = [i for i in range(len(image_paths)) if i not in test_indices]
+
+    # Split into Charlie test set and train/val
+    points_test = pose_vector[test_indices]
+    y_test = labels[test_indices]
+    paths_test = image_paths[test_indices]
+
+    points_trainval = pose_vector[trainval_indices]
+    y_trainval = labels[trainval_indices]
+    paths_trainval = image_paths[trainval_indices]
+
+    # Split train/val using sklearn
+    points_train, points_val, y_train, y_val, paths_train, paths_val = train_test_split(
+        points_trainval, y_trainval, paths_trainval, test_size=val_size,
+        random_state=random_state, stratify=y_trainval
+    )
+
+    def to_dataset(points, y, paths):
+        return PoseDataset(points, y, edge_index, paths)
+
+    return (
+        to_dataset(points_train, y_train, paths_train),
+        to_dataset(points_val, y_val, paths_val),
+        to_dataset(points_test, y_test, paths_test)
+    )
+
 def evaluate(model, dataloader, device, loss_fn):
     model.eval()
     correct = 0
@@ -202,10 +242,10 @@ def plot_loss_and_accuracy(epochs, train_losses, val_losses, val_accuracies):
     plt.legend()
 
     plt.tight_layout()
-    os.makedirs("output/gnn/", exist_ok=True)
-    plt.savefig(f"output/gnn/loss_accuracy_over_epochs_{epochs_count}.png", bbox_inches='tight')
+    os.makedirs(folder_path, exist_ok=True)
+    plt.savefig(f"{folder_path}loss_accuracy_over_epochs_{epochs_count}.png", bbox_inches='tight')
     plt.close()
-    print(f"[INFO] Saved loss and accuracy plot at output/gnn/loss_accuracy_over_epochs_{epochs_count}.png")
+    print(f"[INFO] Saved loss and accuracy plot at {folder_path}loss_accuracy_over_epochs_{epochs_count}.png")
 
 
 def plot_confusion_matrix_gnn(
