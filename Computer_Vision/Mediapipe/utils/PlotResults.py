@@ -8,10 +8,32 @@ from matplotlib.patches import Rectangle
 
 HAND_LANDMARKS = [15, 16, 17, 18, 19, 20, 21, 22]  # left_wrist to right_thumb_2
 
+def main():
+    model = "CNN_3_block"
+    folder = f"output/D3_tomtest/{model}"
+    value = "test_predictions"
+
+    csv_path=f"{folder}/{model}_{value}.csv"
+    output_dir=f"{folder}/test_vis"
+    dataset_dir = "./Dataset3/"
+
+    plot_predictions_in_batches_from_csv(
+        csv_path=csv_path,
+        dataset_dir=dataset_dir,
+        output_dir=output_dir,
+        grid_cols=10,
+        batch_size=100,
+        hand_landmarks=HAND_LANDMARKS,
+        connections=list(mp.pose.POSE_CONNECTIONS),
+        filter_correct=None,        # or True / False
+        class_filter=None           # or 0 for P1, 1 for P2, etc.
+    )
+
+
 def plot_predictions_in_batches_from_csv(
     csv_path,
-    dataset_dir="./Dataset/",
-    output_dir="output/gnn/prediction_grid_batches",
+    dataset_dir,
+    output_dir,
     grid_cols=10,
     batch_size=100,
     hand_landmarks=HAND_LANDMARKS,
@@ -114,21 +136,4 @@ def plot_predictions_in_batches_from_csv(
         plt.close()
         print(f"[SAVED] {filename}")
 
-
-# csv_path="output/gnn/test_predictions.csv"
-# output_dir="output/gnn/vis_batches"
-
-csv_path="output/C5_NewDatasetCorrectPoses/CNN_Basic/CNN_Basic_test_predictions.csv"
-output_dir="output/C5_NewDatasetCorrectPoses/CNN_Basic/test_vis"
-
-plot_predictions_in_batches_from_csv(
-    csv_path=csv_path,
-    dataset_dir="./Dataset2/",
-    output_dir=output_dir,
-    grid_cols=10,
-    batch_size=100,
-    hand_landmarks=HAND_LANDMARKS,
-    connections=list(mp.pose.POSE_CONNECTIONS),
-    filter_correct=None,        # or True / False
-    class_filter=None           # or 0 for P1, 1 for P2, etc.
-)
+main()

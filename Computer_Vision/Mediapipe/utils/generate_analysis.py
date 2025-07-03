@@ -1,14 +1,14 @@
 import pandas as pd
 from collections import defaultdict
 
-folder = "output/C5_NewDatasetCorrectPoses/CNN_Basic"
-model = "CNN_Basic"
+model = "CNN_3_block"
+folder = f"output/D3_tomtest/{model}"
 value = "test_predictions"
 
 if model == "gnn":
-    df = pd.read_csv(f'output/{folder}/{value}.csv')
+    df = pd.read_csv(f'{folder}/{value}.csv')
 else:
-    df = pd.read_csv(f'output/{folder}/{model}_{value}.csv')
+    df = pd.read_csv(f'{folder}/{model}_{value}.csv')
 
 # Map label numbers to actual names
 label_names = {0: 'P1', 1: 'P2', 2: 'P3', 3: 'P4', 4: 'P5', 5: 'P6', 6: 'P7', 7: 'P8', 8: 'P9', 9: 'P10'}
@@ -36,7 +36,7 @@ for true_label, preds in confusion.items():
 
     # Find top misclassifications > 5%
     misclassifications = {k: v for k, v in preds.items() if k != true_label}
-    filtered_mis = [(pred_label, count) for pred_label, count in misclassifications.items() if count / total > 0.05]
+    filtered_mis = [(pred_label, count) for pred_label, count in misclassifications.items() if count / total > 0]
     if filtered_mis:
         sorted_mis = sorted(filtered_mis, key=lambda x: x[1], reverse=True)
         for pred_label, count in sorted_mis:
@@ -51,10 +51,8 @@ summary_data.sort(reverse=True, key=lambda x: x[0])
 # Print summary
 for _, text in summary_data:
     print(text)
-
-
-
-# DRAW GRAPH TO SHOW ASSOCIATIONS
+    
+# DRAW GRAPH TO SHOW ASSOCIATIONS WITH CLEARER DIRECTION
 import matplotlib.pyplot as plt
 import networkx as nx
 import matplotlib.cm as cm
@@ -70,40 +68,69 @@ for label in label_names.values():
 for true_label, preds in confusion.items():
     total = sum(preds.values())
     for pred_label, count in preds.items():
-        if pred_label != true_label and count / total > 0.05:
+        if pred_label != true_label and count > 0:
             G.add_edge(true_label, pred_label, weight=count)
 
 pos = nx.circular_layout(G)
-weights = [G[u][v]['weight'] for u,v in G.edges()]
+weights = [G[u][v]['weight'] for u, v in G.edges()]
 
-# Normalize weights for color mapping
-norm = mcolors.Normalize(vmin=min(weights), vmax=max(weights))
-cmap = cm.Reds
+# Use a perceptually uniform colormap and clip the lower end to avoid very light colors
+cmap = cm.get_cmap('Reds')
+vmin = min(weights)
+vmax = max(weights)
+norm = mcolors.Normalize(vmin=vmin, vmax=vmax)
 
-# Map weights to colors
-edge_colors = [cmap(norm(w)) for w in weights]
+# To avoid very light colors, remap the normalized values to [0.3, 1.0] of the colormap
+def shifted_color(val):
+    normed = norm(val)
+    normed = 0.3 + 0.7 * normed  # shift range up
+    return cmap(normed)
 
-fig, ax = plt.subplots(figsize=(10,10))  # create fig and ax explicitly
+edge_colors = [shifted_color(w) for w in weights]
+
+fig, ax = plt.subplots(figsize=(10, 10))
 
 nx.draw_networkx_nodes(G, pos, node_color='lightblue', node_size=2000, ax=ax)
 nx.draw_networkx_labels(G, pos, font_size=12, font_weight='bold', ax=ax)
+
+# Draw edges with arrows and increased arrow size for clearer direction
 nx.draw_networkx_edges(
     G, pos,
-    width=[w/5 for w in weights],
+    width=[w / 5 for w in weights],
     edge_color=edge_colors,
-    arrowstyle='->',
-    arrowsize=15,
-    ax=ax
+    arrowstyle='-|>',
+    arrowsize=22, 
+    ax=ax,
+    connectionstyle='arc3,rad=0.25',
+    min_source_margin=25,
+    min_target_margin=25
 )
 
-ax.set_title('Confusion Network Graph (Edges show common misrecognitions)')
+# for (u, v), color in zip(G.edges(), edge_colors):
+#     nx.draw_networkx_edges(
+#         G, pos,
+#         edgelist=[(u, v)],
+#         width=[G[u][v]['weight'] / 5],
+#         edge_color=edge_colors,
+#         arrowstyle='-|>',
+#         arrowsize=22,
+#         ax=ax,
+#         alpha=0.3,
+#         connectionstyle='arc3,rad=0.25',
+#         min_source_margin=25,
+#         min_target_margin=25
+#     )
+
+edge_labels = {(u, v): f"{G[u][v]['weight']}" for u, v in G.edges()}
+nx.draw_networkx_edge_labels(G, pos, edge_labels=edge_labels, font_color='red', font_size=10, label_pos=0.6, ax=ax)
+
+ax.set_title('Confusion Network Graph (Directed: True → Predicted)')
 ax.axis('off')
 
-# Create ScalarMappable for the colorbar
-sm = plt.cm.ScalarMappable(cmap=cmap, norm=norm)
+# Create ScalarMappable for the colorbar (shifted as above)
+from matplotlib.cm import ScalarMappable
+sm = ScalarMappable(cmap=cmap, norm=norm)
 sm.set_array([])
-
-# Pass the axis to colorbar to place it correctly
 cbar = fig.colorbar(sm, ax=ax, shrink=0.8)
 cbar.set_label('Confusion Count (Edge Weight)')
 
