@@ -105,7 +105,19 @@ class DeepLearningModel:
         print('[INFO] Successfully Saved metrics.png')
 
 
+    def load_best_model(self):
+        # Load the best model saved during training
+        if os.path.exists(self.checkpointPath):
+            self.model = keras.models.load_model(self.checkpointPath)
+            print(f'[INFO] Loaded best model from {self.checkpointPath}')
+        else:
+            print(f'[WARNING] No saved model found at {self.checkpointPath}')
+
+
     def plot_confusion_matrix(self, data, path_to_save, dataset="val"):
+        # Load the best model if requested (recommended for final evaluation)
+        self.load_best_model()
+        
         if dataset == "val":
             y_pred = self.model.predict(data.x_val)
             y_pred_classes = y_pred.argmax(axis=1)
@@ -127,12 +139,14 @@ class DeepLearningModel:
         acc = accuracy_score(y_true, y_pred_classes)
         prec = precision_score(y_true, y_pred_classes, average='macro', zero_division=0)
         rec = recall_score(y_true, y_pred_classes, average='macro', zero_division=0)
+        fscore = 2 * (prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
 
+        # Store results properly
         if dataset == "val":
-            self.valResults.extend((acc, prec, rec))
+            self.valResults = [acc, prec, rec, fscore]
         elif dataset == "test":
-            self.testResults.extend((acc, prec, rec))
-        
+            self.testResults = [acc, prec, rec, fscore]
+
         all_records = []
         for i in range(len(y_true)):
             # Get confidence (probability of predicted class)

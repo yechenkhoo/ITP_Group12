@@ -37,9 +37,9 @@ all_models = [
 ]
 
 results = {}
-path_csv = "pose_img.csv"
+path_csv = "dataset3.csv"
 # path_csv = "test_set.csv"
-test_run_name = "C_agn"
+test_run_name = "D3_"
 folder = f"output/{test_run_name}"
 os.makedirs(folder, exist_ok=True)
 
@@ -87,8 +87,9 @@ for m in all_models:
 
     results[model_name] = model.valResults + model.testResults
 
-columns = ["val_acc", "val_prec", "val_rec", "test_acc", "test_prec", "test_rec"]
-df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
-df_rounded = df.round(3)
-df_rounded.to_csv(f"{folder}/Results.csv")
-print(f"[INFO] Saved in {folder}/Results.csv")
+    columns = ["val_acc", "val_prec", "val_rec", "val_f1", "test_acc", "test_prec", "test_rec", "test_f1"]
+    print(results)
+    df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+    df_rounded = df.round(3)
+    df_rounded.to_csv(f"{folder}/Results.csv")
+    print(f"[INFO] Saved in {folder}/Results.csv")

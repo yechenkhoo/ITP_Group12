@@ -42,6 +42,7 @@ class PoseDataset():
         image_paths = x.pop('Image_Path').to_list()  # store image paths
         # x = x.drop(columns=[col for col in x.columns if '_Z' in col or '_V' in col]) # to test x and y only
         y, _ = x.pop('Pose_Class').factorize()
+        print(y)
         print(_)
         x = x.astype('float64')
         y = keras.utils.to_categorical(y)
@@ -93,7 +94,7 @@ class PoseDataset():
         paths_np = np.array(image_paths)
 
         # Get indices for Charlie images
-        test_indices = [i for i, p in enumerate(paths_np) if "Charlie" in p]
+        test_indices = [i for i, p in enumerate(paths_np) if "tom" in p]
         trainval_indices = [i for i in range(len(paths_np)) if i not in test_indices]
 
         # Subset arrays
