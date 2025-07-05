@@ -9,8 +9,9 @@ from pymongo import MongoClient
 # MongoDB setup
 MONGO_URI = "mongodb+srv://ITP_AUTH:SXgJ9MGaEVBKZmN@itpteam13.wtajb.mongodb.net/"
 mongo_client = MongoClient(MONGO_URI)
-db = mongo_client["ITP_GROUP_13"]
-collection = db["videos"]  # or the correct collection you're using
+db = mongo_client["ITP"]
+collection = db["Videos"]
+users_collection = db["Users"]
 
 @functions_framework.cloud_event
 def process_uploaded_video(cloud_event):
@@ -60,21 +61,47 @@ def process_uploaded_video(cloud_event):
             print(f"Successfully processed video {video_filename}")
             response_data = response.json()
 
-            # You need a way to identify the user. For now assume it's embedded in video_id like user123_video_2025...
-            user_id = video_id.split("_")[0]  # adjust as needed
+            angle_link = response_data.get("output_angle_csv")
+            frame_csv_link = response_data.get("output_csv")
+            processed_video = response_data.get("output_video")
 
-            # Store into MongoDB
-            document = {
-                "user_id": user_id,
-                "video_id": video_id,
-                "uploaded_filename": video_filename,
-                "processed_video_url": response_data.get("output_video"),
-                "processed_csv_url": response_data.get("output_csv"),
-                "processed_angle_csv_url": response_data.get("output_angle_csv"),
-                "timestamp": datetime.now()
-            }
-            collection.insert_one(document)
-            print("Saved processed metadata to MongoDB")
+            # Extract user ID from filename (e.g., nick_video1.mp4 → "nick")
+            user_name = video_id.split("_")[0]
+            user = users_collection.find_one({"Name": user_name})
+
+            uploaded_by = user["_id"] if user else None
+            assignee = user["CreatedBy"] if user and "CreatedBy" in user else None
+
+            # Check if video already exists
+            existing = collection.find_one({"Title": video_filename})
+
+            if existing:
+                collection.update_one(
+                    {"_id": existing["_id"]},
+                    {
+                        "$set": {
+                            "angleCsvLink": angle_link,
+                            "frameByFrameCsvLink": frame_csv_link,
+                            "processedVideoLink": processed_video,
+                            "Status": "Completed"
+                        }
+                    }
+                )
+                print(f"Updated existing record for {video_filename}")
+            else:
+                new_doc = {
+                    "Title": video_filename,
+                    "Type": "face-on",
+                    "DateUploaded": datetime.now().strftime("%H:%M %b %d, %Y"),
+                    "Status": "Completed",
+                    "UploadedBy": uploaded_by,
+                    "Assignee": assignee,
+                    "angleCsvLink": angle_link,
+                    "frameByFrameCsvLink": frame_csv_link,
+                    "processedVideoLink": processed_video
+                }
+                collection.insert_one(new_doc)
+                print(f"Inserted new record for {video_filename}")
 
         else:
             print(f"API request failed with status {response.status_code}: {response.text}")
