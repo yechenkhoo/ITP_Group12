@@ -1,0 +1,11 @@
+gcloud functions deploy process-uploaded-video \
+  --gen2 \
+  --runtime=python311 \
+  --region=asia-southeast1 \
+  --source=. \
+  --entry-point=process_uploaded_video \
+  --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
+  --trigger-event-filters="bucket=golf-swing-models" \
+  --service-account=golf-analytics-service@golf-swing-analytics-461203.iam.gserviceaccount.com \
+  --timeout=540s \
+  --memory=512MB
