@@ -1,0 +1,118 @@
+================================================================================
+CROSS-VALIDATION ANALYSIS REPORT
+================================================================================
+Generated: 2025-07-07 22:20:58
+Folder: output/D3a_10
+Models Analyzed: 8
+
+DETAILED MODEL RESULTS
+==================================================
+
+CNN_2D
+   Mean Accuracy: 0.892 ± 0.020
+   Mean F1 Score: 0.880 ± 0.021
+   F1 Range: 0.852 - 0.908 (span: 0.056)
+   Mean Recall: 0.878 ± 0.021
+   Recall Range: 0.851 - 0.908 (span: 0.057)
+   Accuracy Range: 0.869 - 0.926 (span: 0.057)
+   Individual Folds: ['0.875', '0.897', '0.926', '0.891', '0.869']
+   Notes: 2nd lowest std, 2nd smallest range
+
+CNN_3_block
+   Mean Accuracy: 0.908 ± 0.028
+   Mean F1 Score: 0.896 ± 0.032
+   F1 Range: 0.833 - 0.916 (span: 0.083)
+   Mean Recall: 0.899 ± 0.029
+   Recall Range: 0.842 - 0.918 (span: 0.076)
+   Accuracy Range: 0.851 - 0.926 (span: 0.075)
+   Individual Folds: ['0.926', '0.920', '0.926', '0.914', '0.851']
+   Notes: 2nd highest mean
+
+CNN_Attention
+   Mean Accuracy: 0.858 ± 0.035
+   Mean F1 Score: 0.850 ± 0.031
+   F1 Range: 0.798 - 0.881 (span: 0.082)
+   Mean Recall: 0.851 ± 0.033
+   Recall Range: 0.801 - 0.886 (span: 0.084)
+   Accuracy Range: 0.800 - 0.891 (span: 0.091)
+   Individual Folds: ['0.841', '0.891', '0.891', '0.869', '0.800']
+   Notes: 
+
+CNN_Basic
+   Mean Accuracy: 0.902 ± 0.031
+   Mean F1 Score: 0.895 ± 0.036
+   F1 Range: 0.844 - 0.932 (span: 0.089)
+   Mean Recall: 0.896 ± 0.037
+   Recall Range: 0.845 - 0.932 (span: 0.087)
+   Accuracy Range: 0.851 - 0.931 (span: 0.080)
+   Individual Folds: ['0.920', '0.926', '0.880', '0.931', '0.851']
+   Notes: 
+
+MLP_Attention
+   Mean Accuracy: 0.813 ± 0.059
+   Mean F1 Score: 0.798 ± 0.072
+   F1 Range: 0.704 - 0.904 (span: 0.201)
+   Mean Recall: 0.791 ± 0.078
+   Recall Range: 0.692 - 0.903 (span: 0.211)
+   Accuracy Range: 0.737 - 0.909 (span: 0.171)
+   Individual Folds: ['0.835', '0.909', '0.766', '0.737', '0.817']
+   Notes: 2nd lowest mean, highest std, biggest range
+
+MLP_Basic
+   Mean Accuracy: 0.913 ± 0.024
+   Mean F1 Score: 0.907 ± 0.025
+   F1 Range: 0.863 - 0.927 (span: 0.064)
+   Mean Recall: 0.908 ± 0.023
+   Recall Range: 0.868 - 0.927 (span: 0.059)
+   Accuracy Range: 0.869 - 0.931 (span: 0.063)
+   Individual Folds: ['0.909', '0.931', '0.931', '0.926', '0.869']
+   Notes: highest mean
+
+MLP_Deep
+   Mean Accuracy: 0.810 ± 0.059
+   Mean F1 Score: 0.785 ± 0.066
+   F1 Range: 0.666 - 0.852 (span: 0.186)
+   Mean Recall: 0.785 ± 0.058
+   Recall Range: 0.684 - 0.844 (span: 0.160)
+   Accuracy Range: 0.697 - 0.864 (span: 0.166)
+   Individual Folds: ['0.864', '0.840', '0.840', '0.811', '0.697']
+   Notes: lowest mean, 2nd highest std, 2nd biggest range
+
+MLP_Dropout
+   Mean Accuracy: 0.900 ± 0.015
+   Mean F1 Score: 0.892 ± 0.016
+   F1 Range: 0.871 - 0.921 (span: 0.049)
+   Mean Recall: 0.894 ± 0.016
+   Recall Range: 0.866 - 0.917 (span: 0.051)
+   Accuracy Range: 0.874 - 0.920 (span: 0.046)
+   Individual Folds: ['0.903', '0.897', '0.903', '0.920', '0.874']
+   Notes: lowest std, smallest range
+
+
+SUMMARY TABLE
+==================================================
+Model           Accuracy±Std    Accuracy Range F1±Std       F1 Range   Recall±Std   Recall Range Notes
+----------------------------------------------------------------------------------------------------------------------------------------------
+MLP_Basic       0.913±0.024     0.869-0.931   0.907±0.025  0.863-0.927 0.908±0.023  0.868-0.927  highest mean
+CNN_3_block     0.908±0.028     0.851-0.926   0.896±0.032  0.833-0.916 0.899±0.029  0.842-0.918  2nd highest mean
+CNN_Basic       0.902±0.031     0.851-0.931   0.895±0.036  0.844-0.932 0.896±0.037  0.845-0.932  
+MLP_Dropout     0.900±0.015     0.874-0.920   0.892±0.016  0.871-0.921 0.894±0.016  0.866-0.917  lowest std, smallest range
+CNN_2D          0.892±0.020     0.869-0.926   0.880±0.021  0.852-0.908 0.878±0.021  0.851-0.908  2nd lowest std, 2nd smallest range
+CNN_Attention   0.858±0.035     0.800-0.891   0.850±0.031  0.798-0.881 0.851±0.033  0.801-0.886  
+MLP_Attention   0.813±0.059     0.737-0.909   0.798±0.072  0.704-0.904 0.791±0.078  0.692-0.903  2nd lowest mean, highest std, biggest range
+MLP_Deep        0.810±0.059     0.697-0.864   0.785±0.066  0.666-0.852 0.785±0.058  0.684-0.844  lowest mean, 2nd highest std, 2nd biggest range
+
+==================================================
+KEY INSIGHTS
+==================================================
+Best Performance: MLP_Basic (0.913)
+Best F1 Score: MLP_Basic (0.907)
+Most Stable (F1): MLP_Dropout (std: 0.016)
+Best Recall: MLP_Basic (0.908)
+Most Stable (Recall): MLP_Dropout (std: 0.016)
+Most Stable (Accuracy): MLP_Dropout (std: 0.015)
+Least Stable: MLP_Attention (std: 0.059)
+
+RECOMMENDATIONS
+--------------------
+✓ Most Reliable Models: MLP_Basic, CNN_3_block, MLP_Dropout, CNN_2D

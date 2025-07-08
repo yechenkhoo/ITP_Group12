@@ -21,15 +21,13 @@ class PoseDataset():
         self.df = pd.read_csv(self.path)
         self.allClasses = sorted(self.df['Pose_Class'].unique())
         self.classCount = len(self.allClasses)
-    
+
     def split_dataset(self, test_size=0.2, reshape=False, random_state=0):
         """
         Splits the loaded dataset into training, validation, and test set.
 
         Parameters:
         - test_size: determines the split ratio of dataset between training and test.
-        The validation set will be test_size% of the non-test set.
-        e.g. if test_size is 0.2, training set is 0.64 and validation set is 0.16.
 
         - reshape: reshapes the data into 33x4 instead of 132x1
         """
@@ -40,10 +38,7 @@ class PoseDataset():
         x = x.sort_values('Pose_Class')
 
         image_paths = x.pop('Image_Path').to_list()  # store image paths
-        # x = x.drop(columns=[col for col in x.columns if '_Z' in col or '_V' in col]) # to test x and y only
         y, _ = x.pop('Pose_Class').factorize()
-        print(y)
-        print(_)
         x = x.astype('float64')
         y = keras.utils.to_categorical(y)
 
@@ -54,15 +49,36 @@ class PoseDataset():
             x = self.reshape_keypoints(x_np)
         print(f"After reshape: {x.shape}")
 
-        # Split full dataset into train+validation set and test set
-        x_trainval, self.x_test, y_trainval, self.y_test, paths_trainval, self.paths_test = train_test_split(
-            x, y, image_paths, test_size=test_size, random_state=random_state)
+        # FOR CROSS-VALIDATION STABILITY CHECK (across whole dataset)
+        if test_size == 0.0:
+            # All data is train, nothing in val/test
+            self.x_train = x
+            self.y_train = y
+            self.paths_train = image_paths
+            self.x_val = np.array([])
+            self.y_val = np.array([])
+            self.paths_val = []
+            self.x_test = np.array([])
+            self.y_test = np.array([])
+            self.paths_test = []
+            print(f"Train: {len(self.x_train)}, Val: 0, Test: 0")
+            return
+        else:
+            # equal test and val size
+            val_size = test_size
+            trainval_size = 1.0 - test_size
 
-        # Split train+validation into train set and val set
-        self.x_train, self.x_val, self.y_train, self.y_val, self.paths_train, self.paths_val = train_test_split(
-            x_trainval, y_trainval, paths_trainval, test_size=test_size, random_state=random_state)
-        
-        print(f"Train: {len(self.x_train)}, Val: {len(self.x_val)}, Test: {len(self.x_test)}")
+            # First split: train+val and test
+            x_trainval, self.x_test, y_trainval, self.y_test, paths_trainval, self.paths_test = train_test_split(
+                x, y, image_paths, test_size=test_size, random_state=random_state)
+
+            # Second split: train and val (val is val_size of the original dataset, so relative to trainval it's val_size/trainval_size)
+            rel_val_size = val_size / trainval_size
+
+            self.x_train, self.x_val, self.y_train, self.y_val, self.paths_train, self.paths_val = train_test_split(
+                x_trainval, y_trainval, paths_trainval, test_size=rel_val_size, random_state=random_state)
+
+            print(f"Train: {len(self.x_train)}, Val: {len(self.x_val)}, Test: {len(self.x_test)}")
 
     def split_dataset_manual(self, val_size=0.2, reshape=False):
         """

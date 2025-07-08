@@ -14,6 +14,8 @@ tf.random.set_seed(42)
 from Classes import PoseDataset, DeepLearningModel, ModelFactory
 import argparse
 from keras import layers, Sequential, regularizers
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from keras.callbacks import EarlyStopping
 
 # ap = argparse.ArgumentParser()
 # ap.add_argument("-i", "--dataset", type=str, required=True,
@@ -39,7 +41,7 @@ all_models = [
 results = {}
 path_csv = "dataset3.csv"
 # path_csv = "test_set.csv"
-test_run_name = "D3_"
+test_run_name = "D3a_10"
 folder = f"output/{test_run_name}"
 os.makedirs(folder, exist_ok=True)
 
@@ -53,8 +55,8 @@ for m in all_models:
     data = PoseDataset(path_csv)
     data.load_csv_data()
     # default: test_size=0.2, random_state=0
-    # data.split_dataset(test_size=0.3, reshape=(not flatten), random_state=42)
-    data.split_dataset_manual(reshape=(not flatten))
+    data.split_dataset(test_size=0.0, reshape=(not flatten), random_state=42)
+    # data.split_dataset_manual(reshape=(not flatten))
     
 
     # initialise model
@@ -75,21 +77,47 @@ for m in all_models:
     model.compile_model()
 
     #todo: could possibly add customisation to automatically add type of callbacks
-    model.add_callbacks()
 
-    # other params: epoch (default 200), batch_size (default 16)
-    model.train(data, epochs=500)
+    early_stopping = EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True,
+        verbose=1
+    )
+    model.add_callbacks([
+        early_stopping
+    ])
 
-    model.plot_training_metrics(path_to_save_diagrams)
+    # Perform cross-validation to understand training data quality
+    print(f"\n[INFO] Running cross-validation for {model_name}...")
+    cv_results = model.cross_validate(data, k_folds=5, epochs=200, batch_size=16, log_dir=f"{path_to_save_diagrams}/cv_logs")
+    
+    # Save CV results
+    cv_df = pd.DataFrame({
+        'fold': range(1, len(cv_results['fold_accuracies']) + 1),
+        'accuracy': cv_results['fold_accuracies'],
+        'loss': cv_results['fold_losses'],
+        'f1_score': cv_results['fold_f1_scores'],
+        'precision': cv_results['fold_precisions'],
+        'recall': cv_results['fold_recalls']
+    })
+    cv_df.to_csv(f"{path_to_save_diagrams}_cv_results.csv", index=False)
+    print(f"[INFO] Cross-validation results saved to {path_to_save_diagrams}_cv_results.csv")
 
-    model.plot_confusion_matrix(data, path_to_save_diagrams, "val")
-    model.plot_confusion_matrix(data, path_to_save_diagrams, "test")
 
-    results[model_name] = model.valResults + model.testResults
+    # # other params: epoch (default 200), batch_size (default 16)
+    # model.train(data, epochs=200)
 
-    columns = ["val_acc", "val_prec", "val_rec", "val_f1", "test_acc", "test_prec", "test_rec", "test_f1"]
-    print(results)
-    df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
-    df_rounded = df.round(3)
-    df_rounded.to_csv(f"{folder}/Results.csv")
-    print(f"[INFO] Saved in {folder}/Results.csv")
+    # model.plot_training_metrics(path_to_save_diagrams)
+
+    # model.plot_confusion_matrix(data, path_to_save_diagrams, "val")
+    # model.plot_confusion_matrix(data, path_to_save_diagrams, "test")
+
+    # results[model_name] = model.valResults + model.testResults
+
+    # columns = ["val_acc", "val_prec", "val_rec", "val_f1", "test_acc", "test_prec", "test_rec", "test_f1"]
+    # print(results)
+    # df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+    # df_rounded = df.round(3)
+    # df_rounded.to_csv(f"{folder}/Results.csv")
+    # print(f"[INFO] Saved in {folder}/Results.csv")

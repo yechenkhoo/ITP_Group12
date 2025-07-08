@@ -162,7 +162,7 @@ class ModelFactory:
         Pooling reduces temporal dimension by half after each block.
         """
         model = models.Sequential([
-            layers.Input(shape=input_shape),  # e.g., (time_steps, features)
+            layers.Input(shape=input_shape),  # (33, 4)
             
             # Block 1: 3 Conv1D layers with 28 filters
             layers.Conv1D(28, 3, activation='relu', padding='same'),
