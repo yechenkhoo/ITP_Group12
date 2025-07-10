@@ -283,52 +283,200 @@ class Video:
 
     @staticmethod
     def get_all_video_comments(video_id):
-        """Fetches all comments for a specific video, sorted by the latest DateCommented."""
-        video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
-        if not video or 'Comments' not in video:
-            return []
+        """
+        Fetches all comments and their replies for a specific video,
+        sorted by DateCommented, and structured hierarchically.
+        """
+        video_obj_id = ObjectId(video_id)
+        
+        # Get all comment _ids from the video document (these are explicitly top-level comments)
+        video = Videos_Collection.find_one({'_id': video_obj_id}, {'Comments': 1})
+        top_level_comment_ids = video.get('Comments', []) if video else []
 
-        comment_ids = video['Comments']
-        # Fetch all comments in one query, sorted by DateCommented in descending order
-        comments = list(Comments_Collection.find(
-            {'_id': {'$in': [ObjectId(comment_id) for comment_id in comment_ids]}},
-            sort=[("DateCommented", -1)]  # Sort by DateCommented descending
-        ))
+        # Find all comments related to this video. This includes top-level comments
+        # and all replies, which should have a 'video_id' field.
+        all_related_comments_cursor = Comments_Collection.find(
+            {'$or': [
+                {'_id': {'$in': top_level_comment_ids}},
+                {'video_id': video_obj_id} # This covers replies that link to the video directly
+            ]},
+            sort=[("DateCommented", 1)] # Sort ascending to build hierarchy easily
+        )
+        all_related_comments = list(all_related_comments_cursor)
 
-        # Enrich comments with user details
-        for comment in comments:
+        # Dictionary to store comments by their string ID for easy lookup
+        comments_map = {}
+        for comment in all_related_comments:
+            # Enrich comment with user details
             user = Users_Collection.find_one({'_id': ObjectId(comment['CommentedBy'])})
             comment['CommentedBy'] = user['Name'] if user else 'Unknown User'
-
-            # Format DateCommented for returning
             comment['FormattedDate'] = comment['DateCommented'].strftime("%H:%M %b %d, %Y")
+            comment['id'] = str(comment['_id']) # Convert _id to 'id' string for frontend
 
-        return comments
+            comments_map[comment['id']] = comment
+            comment['replies'] = [] # Initialize replies list for all comments
+
+        # List to hold final structured top-level comments
+        structured_comments = []
+
+        # Populate replies and identify top-level comments
+        for comment_id_str, comment in comments_map.items():
+            if 'parent_comment_id' in comment and comment['parent_comment_id'] is not None:
+                parent_id_str = str(comment['parent_comment_id'])
+                if parent_id_str in comments_map:
+                    comments_map[parent_id_str]['replies'].append(comment)
+                else:
+                    # Handle orphaned replies (e.g., if parent was deleted but reply still exists)
+                    print(f"Warning: Orphaned reply {comment['id']} for non-existent parent {parent_id_str}")
+            else:
+                # This is a top-level comment (no parent_comment_id)
+                # Ensure it's truly a top-level comment by checking if its original _id was in the video's list
+                if ObjectId(comment['id']) in top_level_comment_ids:
+                    structured_comments.append(comment)
+                # If a comment has no parent_comment_id but its _id is NOT in the video's 'Comments' array,
+                # it's an anomaly or a standalone comment not properly linked. We'll ignore it for this video.
+
+
+        # Sort replies within each comment by DateCommented
+        for comment in structured_comments:
+            comment['replies'].sort(key=lambda r: r['DateCommented'])
+
+        # Sort top-level comments by DateCommented (descending for latest first)
+        structured_comments.sort(key=lambda c: c['DateCommented'], reverse=True)
+
+        return structured_comments
 
 
 class Comment:
     """Handles operations related to comments."""
 
     @staticmethod
-    def add_comment(current_user_id, video_id, comment_text):
+    def add_comment(current_user_id, video_id, comment_text, x_pos=None, y_pos=None):
         """
-        Adds a comment to a video and associates it with the commenting user.
+        Adds a top-level comment to a video.
+        Includes optional position data for free-moving comments.
+        Returns the inserted comment's _id.
         """
-
         try:
             # Create comment document
-            
             comment_document = {
                 'Comment': comment_text,
                 'CommentedBy': ObjectId(current_user_id),
                 'DateCommented': datetime.now(),
+                'x_pos': x_pos, # Store x-coordinate
+                'y_pos': y_pos, # Store y-coordinate
+                'video_id': ObjectId(video_id), # Link top-level comment to video as well for easier lookup
+                'parent_comment_id': None, # Explicitly mark as top-level
             }
-            Comments_Collection.insert_one(comment_document)
+            inserted_comment = Comments_Collection.insert_one(comment_document)
 
-            # Link the comment to the video
+            # Link the top-level comment to the video's 'Comments' array
             Videos_Collection.update_one(
                 {'_id': ObjectId(video_id)},
-                {'$push': {'Comments': comment_document['_id']}}
+                {'$push': {'Comments': inserted_comment.inserted_id}}
             )
+            return inserted_comment.inserted_id
         except Exception as e:
             print(f"Error adding comment: {e}")
+            return None # Indicate failure by returning None
+
+    @staticmethod
+    def add_reply(current_user_id, video_id, parent_comment_id, reply_text):
+        """
+        Adds a reply to an existing comment.
+        Replies do not have x_pos/y_pos and are linked via parent_comment_id.
+        They are NOT added to the video's 'Comments' array.
+        """
+        try:
+            # Ensure parent_comment_id is a valid ObjectId
+            parent_obj_id = ObjectId(parent_comment_id)
+
+            # Check if parent comment exists
+            if not Comments_Collection.find_one({'_id': parent_obj_id}):
+                print(f"Parent comment with ID {parent_comment_id} not found.")
+                return None
+
+            reply_document = {
+                'Comment': reply_text,
+                'CommentedBy': ObjectId(current_user_id),
+                'DateCommented': datetime.now(),
+                'video_id': ObjectId(video_id), # Store video_id for replies for context/easier lookup
+                'parent_comment_id': parent_obj_id, # Link to the parent comment
+                'x_pos': None, # Replies do not have explicit positions
+                'y_pos': None, # Replies do not have explicit positions
+            }
+            inserted_reply = Comments_Collection.insert_one(reply_document)
+            return inserted_reply.inserted_id
+        except Exception as e:
+            print(f"Error adding reply: {e}")
+            return None
+
+    @staticmethod
+    def get_comment_by_id(comment_id):
+        """
+        Fetches a single comment by its ID and processes it for frontend display.
+        This will fetch either a top-level comment or a reply.
+        """
+        comment = Comments_Collection.find_one({'_id': ObjectId(comment_id)})
+        if not comment:
+            return None
+
+        # Enrich comment with user details
+        user = Users_Collection.find_one({'_id': ObjectId(comment['CommentedBy'])})
+        comment['CommentedBy'] = user['Name'] if user else 'Unknown User'
+
+        # Format DateCommented for returning
+        comment['FormattedDate'] = comment['DateCommented'].strftime("%H:%M %b %d, %Y")
+
+        # Convert _id to 'id' string for frontend consumption
+        comment['id'] = str(comment.pop('_id'))
+        
+        # Add 'replies' key for consistency if it's a top-level comment and you plan to expand it
+        if 'parent_comment_id' not in comment or comment['parent_comment_id'] is None:
+            comment['replies'] = [] # This ensures a consistent structure
+            # You might want to fetch and populate direct replies here if this method is used in isolation
+            # For now, get_all_video_comments handles full tree, so this is just for single lookup.
+
+        return comment
+
+    @staticmethod
+    def update_comment_position(comment_id, x_pos, y_pos):
+        """Updates the position of an existing comment. Only applies to top-level comments."""
+        try:
+            Comments_Collection.update_one(
+                {'_id': ObjectId(comment_id), 'parent_comment_id': None}, # Only update if it's a top-level comment
+                {'$set': {'x_pos': x_pos, 'y_pos': y_pos}}
+            )
+            return True
+        except Exception as e:
+            print(f"Error updating comment position: {e}")
+            return False
+
+    @staticmethod
+    def delete_comment(comment_id):
+        """
+        Deletes a comment and all its direct replies.
+        Also removes the top-level comment's reference from the video.
+        """
+        try:
+            obj_comment_id = ObjectId(comment_id)
+
+            # First, delete all replies whose parent_comment_id is the comment being deleted
+            Comments_Collection.delete_many({'parent_comment_id': obj_comment_id})
+
+            # Then, delete the top-level comment itself
+            delete_result = Comments_Collection.delete_one({'_id': obj_comment_id})
+
+            if delete_result.deleted_count == 0:
+                print(f"Comment with ID {comment_id} not found for deletion.")
+                return False
+
+            # Finally, remove the top-level comment's ObjectId from any video that references it
+            Videos_Collection.update_many(
+                {'Comments': obj_comment_id},
+                {'$pull': {'Comments': obj_comment_id}}
+            )
+            return True
+        except Exception as e:
+            print(f"Error deleting comment {comment_id}: {e}")
+            return False

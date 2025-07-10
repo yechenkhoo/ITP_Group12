@@ -1,17 +1,23 @@
+# dashboard/views.py
+
 from django.shortcuts import render, redirect
 from django.urls import reverse
 from django.http import HttpResponseRedirect, JsonResponse, StreamingHttpResponse, HttpResponse, HttpResponseBadRequest
 from ITP_WEBAPP.models import User
-from .models import Coach, Video, Comment
+from django.views.decorators.http import require_POST
+from .models import Coach, Video, Comment, Users_Collection
 from ITP_WEBAPP.views import is_logged_in
 from bson import ObjectId
 import requests
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt
+from django.views.decorators.csrf import csrf_exempt, csrf_protect
 import os
 from datetime import datetime
 from django.core.paginator import Paginator
 import json
+import pandas as pd
+from io import StringIO
+import traceback
 
 # Helper Functions
 def isCoach(request):
@@ -29,6 +35,21 @@ def isAdmin(request):
 def fetch_all_students(coach_id):
     """Fetches all students associated with a coach."""
     return Coach.fetch_all_students(coach_id)
+
+# NEW HELPER FUNCTION to recursively convert ObjectIds to strings
+def convert_objectids_to_str(data):
+    if isinstance(data, list):
+        return [convert_objectids_to_str(item) for item in data]
+    elif isinstance(data, dict):
+        return {k: convert_objectids_to_str(v) for k, v in data.items()}
+    elif isinstance(data, ObjectId):
+        return str(data)
+    # You might also need to handle datetime objects if your comments_data
+    # contains them and they are not already formatted to strings by your model.
+    # For example:
+    # elif isinstance(data, datetime):
+    #     return data.strftime("%Y-%m-%d %H:%M:%S") # Or any desired format
+    return data
 
 
 # Views
@@ -69,13 +90,20 @@ def dashboard_dataSpace(request, id):
     student_id = student['_id']
     video_list = Video.get_all_videos(student_id)
 
+    # Convert ObjectIds in video_list if necessary (though your current error is in comments_data)
+    # It's good practice to ensure all data passed to templates is JSON serializable.
+    video_list = convert_objectids_to_str(video_list)
+
     if request.method == "POST" and "video_ids" in request.POST:
         ids = request.POST["video_ids"].split(",")
-        # delete from DB:
-        Video.objects.filter(id__in=ids).delete()
+        # NOTE: Your current `Video.objects.filter(id__in=ids).delete()` line
+        # appears to be Django ORM syntax, but your models.py uses direct PyMongo.
+        # This line might cause an error or not function as expected for MongoDB.
+        # If video deletion is needed, you'll need a corresponding method in your Video class.
+        pass # Placeholder - revisit video deletion if it's not working with current setup
 
     def parse_date(s):
-        # matches "HH:MM Mon DD, YYYY"
+        # matches "HH:MM Mon DD,YYYY"
         return datetime.strptime(s, "%H:%M %b %d, %Y")
 
     if sort == 'az':
@@ -139,10 +167,6 @@ def dashboard_videoFeed(request):
     return render(request, 'dashboard_videoFeed.html', {'Role': user['Role'], 'Name': user['Name']})
 
 
-import requests
-import pandas as pd
-from io import StringIO
-
 def dashboard_results(request, id, VideoId):
     """Displays the results dashboard."""
     if not is_logged_in(request):
@@ -176,13 +200,12 @@ def dashboard_results(request, id, VideoId):
         # Get all column names
         all_columns = df.columns.tolist()
         
-        # Select only the first 3 columns for display
+        # Display all columns from CSV
         display_columns = all_columns
         
-        # All the csv data
+        # All the csv data (converted to list of dicts for JSON serialization)
         full_data = df.to_dict('records')
         
-        #column_status_mapping = {}
         for column in all_columns:
             if "Status" in column:
                 corresponding_column = column.replace(" Status", "")
@@ -191,25 +214,182 @@ def dashboard_results(request, id, VideoId):
         display_columns = []
         full_data = []
 
-    if request.method == 'POST':
-        feedback = request.POST['feedback']
-        Comment.add_comment(request.session['Id'], VideoId, feedback)
-        return HttpResponseRedirect(reverse('results', args=[id, VideoId]))
+    # Fetch video comments with hierarchical structure using the updated Video.get_all_video_comments
+    # This method now returns a list of top-level comments, each with a 'replies' list,
+    # and all necessary formatting (id conversion, date formatting, user name, and x_pos/y_pos for top-level)
+    comments_data = Video.get_all_video_comments(VideoId)
+    
+    # --- IMPORTANT FIX: Convert all ObjectIds in comments_data to strings ---
+    processed_comments_data = convert_objectids_to_str(comments_data)
 
-    # Fetch video comments
-    comments = Video.get_all_video_comments(VideoId)
+    print(f"DEBUG: comments_data (from model, structured): {comments_data}")
+    print(f"DEBUG: Type of comments_data: {type(comments_data)}")
+    print(f"DEBUG: processed_comments_data (after conversion): {processed_comments_data}")
+
+
     return render(request, 'dashboard_results.html', {
         'Role': user['Role'],
         'Name': user['Name'],
         'studentID': id,
         'videoId': VideoId,
-        'comments': comments,
+        'comments': processed_comments_data, # Pass the processed data to the template
         'video_title': video_title,
         'video_url': video_url,
         'columns': display_columns,  # Filtered columns for display
         'full_data': full_data,  # Full data for other purposes
         'column_status_mapping': column_status_mapping,
     })
+
+# Add these new AJAX views to handle comments
+@csrf_exempt # Use csrf_exempt for simplicity in development, consider proper CSRF token handling in production
+def add_video_comment_ajax(request, id, VideoId):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            comment_text = data.get('comment')
+            x_pos = data.get('x_pos') # This might be None/null if from table
+            y_pos = data.get('y_pos') # This might be None/null if from table
+
+            if not comment_text:
+                return JsonResponse({'status': 'error', 'message': 'Comment text is required.'}, status=400)
+
+            current_user_id = request.session.get('Id')
+            if not current_user_id:
+                return JsonResponse({'status': 'error', 'message': 'User not logged in.'}, status=401)
+
+            # Call add_comment which now returns the ObjectId of the new comment
+            # Ensure Comment.add_comment can handle x_pos and y_pos as None
+            new_comment_obj_id = Comment.add_comment(current_user_id, VideoId, comment_text, x_pos, y_pos)
+
+            if new_comment_obj_id:
+                # Fetch the full, processed comment data using the new helper method
+                new_comment_data = Comment.get_comment_by_id(str(new_comment_obj_id))
+
+                if new_comment_data:
+                    # --- IMPORTANT FIX: Convert all ObjectIds in new_comment_data to strings ---
+                    processed_new_comment_data = convert_objectids_to_str(new_comment_data)
+
+                    return JsonResponse({
+                        'status': 'success',
+                        'message': 'Comment added successfully.',
+                        'comment': processed_new_comment_data # Return the full processed comment object
+                    })
+                else:
+                    return JsonResponse({'status': 'error', 'message': 'Comment added but failed to retrieve details.'}, status=500)
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Failed to add comment to database.'}, status=500)
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON.'}, status=400)
+        except Exception as e:
+            traceback.print_exc() # Print full traceback to console for debugging
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+
+# NEW AJAX VIEW for adding replies
+@csrf_exempt
+@require_POST
+def add_video_reply_ajax(request, id, VideoId): # `id` is studentID, `VideoId` is video ID
+    try:
+        data = json.loads(request.body)
+        parent_comment_id = data.get('parent_comment_id')
+        reply_text = data.get('reply_text')
+
+        if not parent_comment_id or not reply_text:
+            return JsonResponse({'success': False, 'message': 'Missing parent comment ID or reply text'}, status=400)
+
+        current_user_id = request.session.get('Id') # This should be the ObjectId of the current user as a string
+        if not current_user_id:
+            return JsonResponse({'success': False, 'message': 'User not authenticated or user_id missing'}, status=401)
+
+        # Call the Comment class's add_reply method
+        new_reply_obj_id = Comment.add_reply(
+            current_user_id=current_user_id,
+            video_id=VideoId, # Pass video_id to the reply for context in DB
+            parent_comment_id=parent_comment_id,
+            reply_text=reply_text
+        )
+
+        if new_reply_obj_id:
+            # Fetch the newly created reply's full details (structured as expected by frontend)
+            new_reply_data = Comment.get_comment_by_id(str(new_reply_obj_id))
+
+            if new_reply_data:
+                # --- IMPORTANT FIX: Convert all ObjectIds in new_reply_data to strings ---
+                processed_new_reply_data = convert_objectids_to_str(new_reply_data)
+
+                return JsonResponse({
+                    'success': True,
+                    'message': 'Reply added successfully',
+                    'reply': processed_new_reply_data # Pass the processed data
+                }, status=201)
+            else:
+                return JsonResponse({'success': False, 'message': 'Reply added but failed to retrieve full details.'}, status=500)
+        else:
+            return JsonResponse({'success': False, 'message': 'Failed to add reply to database.'}, status=500)
+
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON in request body'}, status=400)
+    except Exception as e:
+        traceback.print_exc() # For debugging
+        return JsonResponse({'success': False, 'message': f'An error occurred: {str(e)}'}, status=500)
+
+@csrf_exempt
+def update_comment_position_ajax(request, id, VideoId):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            comment_id = data.get('comment_id')
+            x_pos = data.get('x_pos')
+            y_pos = data.get('y_pos')
+
+            if not all([comment_id, x_pos is not None, y_pos is not None]):
+                return JsonResponse({'status': 'error', 'message': 'Missing comment ID or position data.'}, status=400)
+
+            # Ensure x_pos and y_pos are numbers before passing to model
+            try:
+                x_pos = float(x_pos)
+                y_pos = float(y_pos)
+            except (ValueError, TypeError):
+                return JsonResponse({'status': 'error', 'message': 'Invalid x_pos or y_pos format.'}, status=400)
+
+
+            success = Comment.update_comment_position(comment_id, x_pos, y_pos)
+
+            if success:
+                return JsonResponse({'status': 'success', 'message': 'Comment position updated successfully.'})
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Failed to update comment position.'}, status=500)
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON.'}, status=400)
+        except Exception as e:
+            traceback.print_exc()
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+@csrf_exempt
+def delete_video_comment_ajax(request, id, VideoId):
+    if request.method == 'POST':
+        try:
+            data = json.loads(request.body)
+            comment_id = data.get('comment_id')
+
+            if not comment_id:
+                return JsonResponse({'status': 'error', 'message': 'Comment ID is required.'}, status=400)
+
+            success = Comment.delete_comment(comment_id)
+
+            if success:
+                return JsonResponse({'status': 'success', 'message': 'Comment deleted successfully.'})
+            else:
+                return JsonResponse({'status': 'error', 'message': 'Failed to delete comment.'}, status=500)
+        except json.JSONDecodeError:
+            return JsonResponse({'status': 'error', 'message': 'Invalid JSON.'}, status=400)
+        except Exception as e:
+            traceback.print_exc()
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
 
 # New view for comparing two swings
 def dashboard_compareSwings(request, id):
@@ -264,9 +444,12 @@ def dashboard_compareSwings(request, id):
     # Current user (for base template)
     user = User.find_user_by_id(ObjectId(request.session['Id']))
 
+    # Convert ObjectId in user object if it's directly passed
+    processed_user = convert_objectids_to_str(user)
+
     context = {
-        'Role': user['Role'],
-        'Name': user['Name'],
+        'Role': processed_user['Role'], # Use processed user
+        'Name': processed_user['Name'], # Use processed user
         'studentID': id,
         'video1_id': video1_id,
         'video1_title': video1_title,
@@ -292,14 +475,19 @@ def dashboard_Coach(request):
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     students = fetch_all_students(request.session['Id'])
 
+    # Convert ObjectIds in user and students data
+    processed_user = convert_objectids_to_str(user)
+    processed_students = convert_objectids_to_str(students)
+
+
     if request.method == 'POST':
         upload_video(request)
         return HttpResponseRedirect(reverse('home'))
 
     return render(request, 'dashboard_coach.html', {
-        'Role': user['Role'],
-        'Name': user['Name'],
-        'students': students,
+        'Role': processed_user['Role'],
+        'Name': processed_user['Name'],
+        'students': processed_students,
         'view': view,
     })
     
@@ -313,14 +501,15 @@ def dashboard_admin(request):
         return redirect('home')
 
     user = User.find_user_by_id(ObjectId(request.session['Id']))
+    processed_user = convert_objectids_to_str(user)
 
     if request.method == 'POST':
         create_account(request)
         return HttpResponseRedirect(reverse('home'))
 
     return render(request, 'dashboard_admin.html', {
-        'Role': user['Role'],
-        'Name': user['Name'],
+        'Role': processed_user['Role'],
+        'Name': processed_user['Name'],
     })
     
 def admin_model(request):
@@ -332,13 +521,14 @@ def admin_model(request):
         return redirect('home')
 
     user = User.find_user_by_id(ObjectId(request.session['Id']))
+    processed_user = convert_objectids_to_str(user)
 
     if request.method == 'POST':
         return HttpResponseRedirect(reverse('home'))
 
     return render(request, 'dashboard_model.html', {
-        'Role': user['Role'],
-        'Name': user['Name'],
+        'Role': processed_user['Role'],
+        'Name': processed_user['Name'],
     })
 
 
@@ -469,7 +659,7 @@ def upload_from_pi(request):
         return JsonResponse({"error": "Invalid request method"}, status=405)
     
 @csrf_exempt
-#Temp predict to be edit    
+#Temp predict to be edit     
 def predict(request):
     if request.method == 'POST':
         # Placeholder: Does nothing meaningful
