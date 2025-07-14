@@ -68,6 +68,11 @@
   </div>
 </div>
 
+
+<script>
+  // This makes the user_id from Django available to all frontend scripts on this page.
+  window.currentUserId = "{{ user_id }}";
+</script>
 <script>
 // Tab switching functionality
 document.addEventListener('DOMContentLoaded', function() {

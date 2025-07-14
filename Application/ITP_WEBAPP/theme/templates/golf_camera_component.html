@@ -200,11 +200,13 @@ class GolfCameraController {
     }
 
   toggleLiveFeed() {
-    const videoFeed = document.getElementById('golfVideoFeed');
-    const placeholder = document.getElementById('videoPlaceholder');
-    const btn = document.getElementById('startFeedBtn');
+  const videoFeed = document.getElementById('golfVideoFeed');
+  const placeholder = document.getElementById('videoPlaceholder');
+  const btn = document.getElementById('startFeedBtn');
 
-    if (!this.streamActive) {
+  if (!this.streamActive) {
+    // 🚀 NEW: Set user context on RPi before starting stream
+    this.setUserContextOnRPi().then(() => {
       // Start stream
       videoFeed.src = '/home/golf/video-feed/';
       videoFeed.classList.remove('hidden');
@@ -220,40 +222,91 @@ class GolfCameraController {
       if (this.poseDetectionEnabled) {
         document.getElementById('poseStatus').classList.remove('hidden');
       }
-    } else {
-      // Stop stream
-      videoFeed.src = '';
-      videoFeed.classList.add('hidden');
-      placeholder.classList.remove('hidden');
-      
-      btn.innerHTML = '<i class="fas fa-play"></i> Start Live Feed';
-      btn.classList.remove('bg-gray-600', 'hover:bg-gray-700');
-      btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
-      
-      this.streamActive = false;
-      document.getElementById('poseStatus').classList.add('hidden');
-    }
+    }).catch(error => {
+      console.error('Failed to set user context:', error);
+      alert('Failed to initialize camera with user context. Auto recording may not work properly.');
+    });
+  } else {
+    // Stop stream
+    videoFeed.src = '';
+    videoFeed.classList.add('hidden');
+    placeholder.classList.remove('hidden');
+    
+    btn.innerHTML = '<i class="fas fa-play"></i> Start Live Feed';
+    btn.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+    btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+    
+    this.streamActive = false;
+    document.getElementById('poseStatus').classList.add('hidden');
   }
+}
+
+async setUserContextOnRPi() {
+  try {
+    const userId = window.currentUserId;
+    
+    if (!userId) {
+      throw new Error("User ID is missing from page context");
+    }
+    
+    console.log('Setting user context on RPi for user:', userId);
+    
+    const response = await fetch('/home/golf/set-user-context/', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ user_id: userId })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json();
+      throw new Error(errorData.error || 'Failed to set user context');
+    }
+
+    const data = await response.json();
+    console.log('User context set successfully:', data);
+    return data;
+    
+  } catch (error) {
+    console.error('Error setting user context:', error);
+    throw error;
+  }
+}
 
   async startRecording() {
     if (this.isRecording) return;
 
     const duration = document.getElementById('recordingDuration').value;
     
+    // Get the user ID from the global variable we set on the main page
+    const userId = window.currentUserId; 
+
+    // Safety check to make sure the user ID exists
+    if (!userId) {
+      alert("CRITICAL ERROR: User ID is missing. Please refresh the page.");
+      return;
+    }
+    
     try {
       const response = await fetch('/home/golf/start-recording/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ duration: parseInt(duration) })
+        // Add the user_id to the request body
+        body: JSON.stringify({ 
+          duration: parseInt(duration),
+          user_id: userId // <-- THE IMPORTANT ADDITION
+        })
       });
 
       if (response.ok) {
-        console.log('Recording started');
+        console.log('Recording started for user:', userId);
       } else {
-        console.error('Recording failed');
+        const errorData = await response.json();
+        console.error('Recording failed:', errorData.error);
+        alert('Failed to start recording: ' + errorData.error);
       }
     } catch (error) {
       console.error('Recording error:', error);
+      alert('An error occurred while trying to start the recording.');
     }
   }
 

@@ -78,6 +78,8 @@ def dashboard_dataSpace(request, id):
     student_id = student['_id']
     video_list = Video.get_all_videos(student_id)
 
+    user_id_str = str(user['_id'])
+
     def parse_date(s):
         # matches "HH:MM Mon DD, YYYY"
         return datetime.strptime(s, "%H:%M %b %d, %Y")
@@ -106,6 +108,7 @@ def dashboard_dataSpace(request, id):
     return render(request, 'dashboard_dataSpace.html', {
         'Role': user['Role'],
         'Name': user['Name'],
+        'user_id': user_id_str,
         'studentID': student_id,
         'studentName': student['Name'],
         'videos': video_list,
@@ -123,9 +126,12 @@ def dashboard_videoFeed(request):
     # Fetch user details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
 
+    user_id_str = str(user['_id'])
+
     return render(request, 'dashboard_videoFeed.html', {
         'Role': user['Role'], 
-        'Name': user['Name']
+        'Name': user['Name'],
+        'user_id': user_id_str
     })
 
 def dashboard_results(request, id, VideoId):
@@ -428,33 +434,31 @@ def golf_status(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def golf_start_recording(request):
-    """Start recording on golf camera"""
+    """
+    Receives the request from the browser (with user_id) and forwards it
+    to the Raspberry Pi.
+    """
     try:
-        # Parse duration from request body
-        duration = 10  # default
-        if request.content_type == 'application/json' and request.body:
-            data = json.loads(request.body)
-            duration = data.get('duration', 10)
-        elif request.method == 'POST':
-            duration = int(request.POST.get('duration', 10))
+        data_from_browser = json.loads(request.body)
         
+        # Forward the entire payload to the Raspberry Pi
         response = requests.post(
             f'{GOLF_CAMERA_URL}/start_recording',
-            json={'duration': duration},
+            json=data_from_browser,  
             timeout=5
         )
         
-        if response.status_code == 200:
+        if response.ok:
             return JsonResponse(response.json())
         else:
-            return JsonResponse({'error': 'Failed to start golf recording'}, status=503)
+            return JsonResponse({'error': 'Failed to start golf recording on RPi'}, status=response.status_code)
             
     except requests.exceptions.RequestException as e:
-        return JsonResponse({'error': f'Golf camera error: {str(e)}'}, status=503)
+        return JsonResponse({'error': f'Golf camera connection error: {str(e)}'}, status=503)
     except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON data'}, status=400)
-    except ValueError:
-        return JsonResponse({'error': 'Invalid duration value'}, status=400)
+        return JsonResponse({'error': 'Invalid JSON data from browser'}, status=400)
+    except Exception as e:
+        return JsonResponse({'error': f'An unexpected error occurred: {str(e)}'}, status=500)
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -500,6 +504,32 @@ def golf_reload_models(request):
             
     except requests.exceptions.RequestException as e:
         return JsonResponse({'error': f'Golf camera error: {str(e)}'}, status=503)
+    
+@csrf_exempt
+@require_http_methods(["POST"])
+def golf_set_user_context(request):
+    """Set current user context on RPi for auto recording"""
+    try:
+        # Get user from session
+        user = User.find_user_by_id(ObjectId(request.session['Id']))
+        user_id_str = str(user['_id'])
+        
+        # Send user context to RPi
+        response = requests.post(
+            f'{GOLF_CAMERA_URL}/set_user_context',
+            json={'user_id': user_id_str},
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            return JsonResponse({'status': 'success', 'user_id': user_id_str})
+        else:
+            return JsonResponse({'error': 'Failed to set user context on RPi'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'RPi connection error: {str(e)}'}, status=503)
+    except Exception as e:
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
 
 def golf_health(request):
     """Check golf camera health"""

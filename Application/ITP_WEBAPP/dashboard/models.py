@@ -169,24 +169,36 @@ class Video:
             # Get the bucket
             bucket = storage_client.bucket(bucket_name)
 
-            # Generate a unique blob name
+            # Generate a unique blob name with user context
             unique_id = uuid.uuid4().hex  # Generate a unique ID
-            blob_name = f'videos/{unique_id}_{file_name}'
+            video_id = str(result.inserted_id)  # Get the video document ID
+            
+            # Create organized path structure: videos/{uploader_id}/{assignee_id}/{video_id}_{filename}
+            blob_name = f'videos/{current_user_id}/{assignee_id}/{video_id}_{unique_id}_{file_name}'
 
             # Create a file-like object from the in-memory data
             file_stream = io.BytesIO(file_data)
 
-            # Upload file to GCP Storage
+            # Upload file to GCP Storage with metadata
             blob = bucket.blob(blob_name)
+            
+            # Add metadata to the blob for additional context
+            blob.metadata = {
+                'uploaded_by': current_user_id,
+                'assignee': assignee_id,
+                'video_id': video_id,
+                'video_type': video_type,
+                'title': title,
+                'upload_timestamp': datetime.now().isoformat()
+            }
+            
             blob.upload_from_file(file_stream, content_type=content_type)
 
             if not blob.exists():
                 print("Error: File does not exist in GCS.")
                 time.sleep(2)
-            
-            video_id = str(result.inserted_id)  # Get the ID as a string
 
-            response = Video.process_video(blob_name, video_id)
+            response = Video.process_video(blob_name, video_id, current_user_id, assignee_id)
 
             if response.get("status") == "Processing complete":
                 print(f"Deleting original video: {blob_name}")
@@ -217,6 +229,71 @@ class Video:
         video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
         return video['processedVideoLink'] 
         
+    @staticmethod
+    def get_csv_url(video_id):
+        """Fetches the URL of a video from Google Cloud Storage."""
+        video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
+        return video['angleCsvLink']
+        
+    @staticmethod
+    def process_video(file_path, video_id, uploader_id, assignee_id):
+        """Process video with user context included in paths"""
+        print(f"Processing video: {file_path}")
+        try:
+            # Define the URL for the GCP function
+            gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
+
+            # Extract filename from path for output naming
+            filename = file_path.split('/')[-1]
+            
+            # Create organized output paths that maintain user context
+            base_output_path = f"processed/{uploader_id}/{assignee_id}"
+            
+            # Prepare the request payload with user context
+            payload = {
+                "classification_model": "models/basemodel.keras",
+                "video_id": video_id,
+                "uploader_id": uploader_id,
+                "assignee_id": assignee_id,
+                "video_path": file_path,
+                "output_video_path": f"{base_output_path}/{filename}",
+                "output_csv_path": f"{base_output_path}/{filename}.csv",
+                "output_angle_csv_path": f"{base_output_path}/{filename}_angles.csv"
+            }
+
+            # Send the POST request to the GCP function
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(gcp_function_url, json=payload, headers=headers)
+
+            if response.status_code == 200:
+                # Parse the JSON response from the GCP function
+                response_data = response.json()
+                output_video_url = response_data.get('output_video')
+                output_csv_url = response_data.get('output_csv')
+                output_angle_csv_url = response_data.get('output_angle_csv')
+
+                # Update the MongoDB document with the returned URLs and status
+                Videos_Collection.update_one(
+                    {'_id': ObjectId(video_id)},  # Find the document by ID
+                    {
+                        '$set': {
+                            'Status': 'Completed',
+                            'frameByFrameCsvLink': output_csv_url,
+                            'angleCsvLink': output_angle_csv_url,
+                            'processedVideoLink': output_video_url,
+                            'originalVideoPath': file_path,  # Store original path for reference
+                            'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
+                        }
+                    }
+                )
+                return response_data
+            else:
+                print(f"Error in video processing: {response.text}")
+                return {"error": "An error occurred during video processing."}
+
+        except Exception as e:
+            print(f"Error during video processing: {e}")
+            return {"error": "An error occurred during video processing."}
 
     @staticmethod
     def get_all_videos(assignee_id):
