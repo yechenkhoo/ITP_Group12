@@ -19,7 +19,24 @@ class PoseDataset():
         Load CSV and extract attributes required.
         """
         self.df = pd.read_csv(self.path)
-        self.allClasses = sorted(self.df['Pose_Class'].unique())
+        # Sort Pose_Class numerically by the number after 'P'
+        self.allClasses = sorted(
+            self.df['Pose_Class'].unique(),
+            key=lambda x: int(x[1:]) if x[1:].isdigit() else x
+        )
+
+        # Set as ordered categorical
+        self.df['Pose_Class'] = pd.Categorical(
+            self.df['Pose_Class'],
+            categories=self.allClasses,
+            ordered=True
+        )
+
+        # Sort the DataFrame based on the ordered category
+        self.df = self.df.sort_values('Pose_Class')
+
+        # Refresh class info
+        self.allClasses = self.df['Pose_Class'].unique()
         self.classCount = len(self.allClasses)
 
     def split_dataset(self, test_size=0.2, reshape=False, random_state=0):

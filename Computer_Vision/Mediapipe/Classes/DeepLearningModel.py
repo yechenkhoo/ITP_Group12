@@ -7,9 +7,11 @@ from sklearn.model_selection import train_test_split
 from matplotlib import pyplot as plt
 from sklearn.metrics import confusion_matrix, classification_report, accuracy_score, precision_score, recall_score, f1_score
 import os
+import tensorflow as tf
+from .ModelFactory import ModelFactory
+from keras_tuner import RandomSearch
 from sklearn.model_selection import StratifiedKFold
-from keras.callbacks import EarlyStopping
-
+from sklearn.model_selection import KFold
 
 class DeepLearningModel:
     def __init__(self, input_shape, class_count, checkpoint_path, name):
@@ -52,6 +54,31 @@ class DeepLearningModel:
         print('[INFO] Model compiled.')
 
 
+    def build_model_with_hp(self, hp):
+        model = Sequential()
+        model.add(layers.Dense(
+            hp.Int("units1", 128, 512, step=64),
+            activation='relu',
+            input_shape=[self.inputShape]
+        ))
+        model.add(layers.Dropout(hp.Float("dropout1", 0.1, 0.7, step=0.1)))
+        model.add(layers.Dense(
+            hp.Int("units2", 64, 256, step=64),
+            activation='relu'
+        ))
+        model.add(layers.Dropout(hp.Float("dropout2", 0.1, 0.7, step=0.1)))
+        model.add(layers.Dense(self.classCount, activation='softmax'))
+
+        # Compile inside this function
+        model.compile(
+            optimizer=keras.optimizers.Adam(
+                learning_rate=hp.Float("lr", 1e-4, 1e-2, sampling='log')
+            ),
+            loss='sparse_categorical_crossentropy',
+            metrics=['accuracy']
+        )
+
+        return model
 
     def add_callbacks(self, additional_callbacks=[]):
         # Default allback to save best model
@@ -83,54 +110,31 @@ class DeepLearningModel:
             print('[WARNING] No training history to plot.')
             return
 
-        loss = self.history.history['loss']
-        val_loss = self.history.history['val_loss']
-        accuracy = self.history.history['accuracy']
-        val_accuracy = self.history.history['val_accuracy']
-        epochs = range(1, len(loss) + 1)
+        loss, val_loss, accuracy, val_accuracy = (
+            self.history.history['loss'],
+            self.history.history['val_loss'],
+            self.history.history['accuracy'],
+            self.history.history['val_accuracy'],
+        )
+        epochs = range(len(loss))
 
         # Plot Graph
         plt.figure(figsize=(12, 5))
         plt.plot(epochs, loss, 'blue', label='loss')
         plt.plot(epochs, val_loss, 'red', label='val_loss')
-        plt.plot(epochs, accuracy, 'blue', linestyle='dashed', label='accuracy')
-        plt.plot(epochs, val_accuracy, 'green', linestyle='dashed', label='val_accuracy')
-        plt.title("Model Metrics")
-        plt.xlabel("Epoch")
+        plt.plot(epochs, accuracy, 'blue', label='accuracy')
+        plt.plot(epochs, val_accuracy, 'green', label='val_accuracy')
+        plt.title(str("Model Metrics"))
         plt.legend()
 
         # Create folder called path_to_save
         os.makedirs(path_to_save, exist_ok=True)
-        img_path = f"{path_to_save}/{self.name}_trainingMetrics.png"
-        plt.savefig(img_path, bbox_inches='tight')
-        print(f'[INFO] Successfully Saved metrics plot as {img_path}')
-
-        # Save metrics to CSV
-        metrics_df = pd.DataFrame({
-            'epoch': epochs,
-            'loss': loss,
-            'val_loss': val_loss,
-            'accuracy': accuracy,
-            'val_accuracy': val_accuracy
-        })
-        csv_path = f"{path_to_save}/{self.name}_trainingMetrics.csv"
-        metrics_df.to_csv(csv_path, index=False)
-        print(f'[INFO] Successfully Saved metrics CSV as {csv_path}')
-
-
-    def load_best_model(self):
-        # Load the best model saved during training
-        if os.path.exists(self.checkpointPath):
-            self.model = keras.models.load_model(self.checkpointPath)
-            print(f'[INFO] Loaded best model from {self.checkpointPath}')
-        else:
-            print(f'[WARNING] No saved model found at {self.checkpointPath}')
+        path = f"{path_to_save}/{self.name}_trainingMetrics.png"
+        plt.savefig(path, bbox_inches='tight')
+        print('[INFO] Successfully Saved metrics.png')
 
 
     def plot_confusion_matrix(self, data, path_to_save, dataset="val"):
-        # Load the best model for final evaluation
-        self.load_best_model()
-        
         if dataset == "val":
             y_pred = self.model.predict(data.x_val)
             y_pred_classes = y_pred.argmax(axis=1)
@@ -152,14 +156,12 @@ class DeepLearningModel:
         acc = accuracy_score(y_true, y_pred_classes)
         prec = precision_score(y_true, y_pred_classes, average='macro', zero_division=0)
         rec = recall_score(y_true, y_pred_classes, average='macro', zero_division=0)
-        fscore = 2 * (prec * rec) / (prec + rec) if (prec + rec) > 0 else 0.0
 
-        # Store results properly
         if dataset == "val":
-            self.valResults = [acc, prec, rec, fscore]
+            self.valResults.extend((acc, prec, rec))
         elif dataset == "test":
-            self.testResults = [acc, prec, rec, fscore]
-
+            self.testResults.extend((acc, prec, rec))
+        
         all_records = []
         for i in range(len(y_true)):
             # Get confidence (probability of predicted class)
@@ -211,183 +213,412 @@ class DeepLearningModel:
             plt.savefig(filename, bbox_inches='tight')
         print(f'[INFO] Successfully Saved Confusion Matrix for {dataset} set as {filename}')
 
-    def cross_validate(self, data, log_dir, k_folds=5, epochs=100, batch_size=16):
+
+    def tune_hyperparameters(self, data, architecture_name, k_folds=5, max_trials=20, epochs=30):
         """
-        Perform k-fold cross validation to understand training data quality.
-        Logs results for each fold to CSV files.
-        Returns: dict with fold results and statistics
+        Hyperparameter tuning with cross-validation for a fixed architecture.
+        Uses cross-validation on train+val data, keeping test set unseen.
+        
+        Args:
+            data: PoseDataset object with x_train, y_train, x_val, y_val, x_test, y_test
+            architecture_name: Architecture from ModelFactory 
+                Standard: 'mlp_basic', 'mlp_deep', 'mlp_with_dropout', 'cnn_3_block'
+                Tunable: 'mlp_basic_tunable', 'cnn_3_block_tunable'
+            k_folds: Number of CV folds (default: 5)
+            max_trials: Number of hyperparameter combinations to try
+            epochs: Epochs per trial
+            
+        Hyperparameters tuned:
+            - learning_rate: 1e-4 to 1e-2 (most important!)
+            - dropout_rate: 0.1 to 0.7 (tunable architectures only)
+            
+        Fixed settings:
+            - optimizer: Adam (industry standard)
+            - loss: sparse_categorical_crossentropy
+            - early_stopping: patience=5 (CV), patience=10 (final)
+            
+        Returns:
+            dict: Results with best hyperparameters and CV scores
         """
+        from sklearn.model_selection import KFold
+        
+        print(f"[INFO] Hyperparameter tuning for {architecture_name} with {k_folds}-fold CV")
+        print(f"Max trials: {max_trials}, Epochs per trial: {epochs}")
+        
+        # Combine train+val for CV (keep test set unseen!)
+        X_cv = np.concatenate([data.x_train, data.x_val], axis=0)
+        y_cv = np.concatenate([data.y_train, data.y_val], axis=0)
+        
+        # Convert one-hot to sparse if needed
+        if len(y_cv.shape) > 1 and y_cv.shape[1] > 1:
+            y_cv_sparse = np.argmax(y_cv, axis=1)
+        else:
+            y_cv_sparse = y_cv
+        
+        print(f"Using {X_cv.shape[0]} samples for CV tuning (test set kept separate)")
+        
+        # Simple CV tuner
+        kfold = KFold(n_splits=k_folds, shuffle=True, random_state=42)
+        best_score = -1
+        best_hps = None
+        all_trials = []
+        
+        for trial in range(max_trials):
+            print(f"\nTrial {trial + 1}/{max_trials}")
+            
+            # Sample hyperparameters
+            hp_values = {
+                'learning_rate': np.random.uniform(1e-4, 1e-2)
+            }
+            
+            # Add dropout rate for tunable architectures
+            if 'tunable' in architecture_name:
+                hp_values['dropout_rate'] = np.random.uniform(0.1, 0.7)
+            
+            # Cross-validation for this hyperparameter set
+            fold_scores = []
+            for fold, (train_idx, val_idx) in enumerate(kfold.split(X_cv)):
+                X_train_fold = X_cv[train_idx]
+                X_val_fold = X_cv[val_idx]
+                y_train_fold = y_cv_sparse[train_idx]
+                y_val_fold = y_cv_sparse[val_idx]
+                
+                # Create model with these hyperparameters
+                factory = ModelFactory()
+                if 'tunable' in architecture_name:
+                    # For architectures with tunable dropout
+                    model = getattr(factory, architecture_name)(
+                        self.inputShape, 
+                        self.classCount, 
+                        dropout_rate=hp_values.get('dropout_rate', 0.5)
+                    )
+                else:
+                    # For standard architectures
+                    model = getattr(factory, architecture_name)(self.inputShape, self.classCount)
+                
+                # Configure optimizer (fixed Adam - industry standard)
+                optimizer = tf.keras.optimizers.Adam(learning_rate=hp_values['learning_rate'])
+                
+                model.compile(
+                    optimizer=optimizer,
+                    loss='sparse_categorical_crossentropy',
+                    metrics=['accuracy']
+                )
+                
+                # Train and evaluate
+                model.fit(
+                    X_train_fold, y_train_fold,
+                    validation_data=(X_val_fold, y_val_fold),
+                    epochs=epochs,
+                    callbacks=[tf.keras.callbacks.EarlyStopping(patience=5, restore_best_weights=True)],
+                    verbose=0
+                )
+                
+                _, val_acc = model.evaluate(X_val_fold, y_val_fold, verbose=0)
+                fold_scores.append(val_acc)
+            
+            # Calculate mean CV score
+            mean_score = np.mean(fold_scores)
+            std_score = np.std(fold_scores)
+            
+            trial_result = {
+                'trial': trial + 1,
+                'hyperparameters': hp_values,
+                'cv_mean': mean_score,
+                'cv_std': std_score,
+                'fold_scores': fold_scores
+            }
+            all_trials.append(trial_result)
+            
+            print(f"  {hp_values}")
+            print(f"  CV Score: {mean_score:.4f} ± {std_score:.4f}")
+            
+            if mean_score > best_score:
+                best_score = mean_score
+                best_hps = hp_values.copy()
+                print(f"  *** New best! ***")
+        
+        # Build final model with best hyperparameters
+        print(f"\n[INFO] Best hyperparameters: {best_hps}")
+        print(f"Best CV score: {best_score:.4f}")
+        
+        factory = ModelFactory()
+        if 'tunable' in architecture_name:
+            # For architectures with tunable dropout
+            final_model = getattr(factory, architecture_name)(
+                self.inputShape, 
+                self.classCount, 
+                dropout_rate=best_hps.get('dropout_rate', 0.5)
+            )
+        else:
+            # For standard architectures
+            final_model = getattr(factory, architecture_name)(self.inputShape, self.classCount)
+        
+        # Apply best hyperparameters (fixed Adam optimizer)
+        optimizer = tf.keras.optimizers.Adam(learning_rate=best_hps['learning_rate'])
+        
+        final_model.compile(
+            optimizer=optimizer,
+            loss='sparse_categorical_crossentropy',
+            metrics=['accuracy']
+        )
+        
+        # CRITICAL: Train the final model on full CV dataset
+        print(f"[INFO] Training final model on full CV dataset ({X_cv.shape[0]} samples)...")
+        final_model.fit(
+            X_cv, y_cv_sparse,
+            epochs=epochs,
+            callbacks=[tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)],
+            verbose=1
+        )
+        print("[INFO] Final model training complete!")
+        
+        self.model = final_model
+        
+        return {
+            'best_hyperparameters': best_hps,
+            'best_cv_score': best_score,
+            'all_trials': all_trials
+        }
+    
+    
+    def tune_hyperparameters_kerastuner(self, data, architecture_name, max_trials=20, epochs=200):
+        """
+        Hyperparameter tuning using KerasTuner RandomSearch (no cross-validation).
+        Uses train/val split only.
+        Args:
+            data: PoseDataset object
+            architecture_name: ModelFactory architecture name
+            max_trials: Number of hyperparameter sets to try
+            epochs: Training epochs per trial
+        Returns:
+            dict: Results with best hyperparameters and scores
+        """
+        print(f"[INFO] Hyperparameter tuning (KerasTuner) for {architecture_name} (no CV)")
+        print(f"Max trials: {max_trials}, Epochs per trial: {epochs}")
 
-        # Prepare log directory
-        os.makedirs(log_dir, exist_ok=True)
+        # Convert one-hot to sparse if needed
+        if len(data.y_train.shape) > 1 and data.y_train.shape[1] > 1:
+            y_train_sparse = np.argmax(data.y_train, axis=1)
+        else:
+            y_train_sparse = data.y_train
+        if len(data.y_val.shape) > 1 and data.y_val.shape[1] > 1:
+            y_val_sparse = np.argmax(data.y_val, axis=1)
+        else:
+            y_val_sparse = data.y_val
 
-        # Get original labels (non-one-hot)
-        y_labels = data.y_train.argmax(axis=1)
-
-        skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
-        cv_results = {
-            'fold_accuracies': [],
-            'fold_losses': [],
-            'fold_f1_scores': [],
-            'fold_precisions': [],
-            'fold_recalls': [],
-            'mean_accuracy': 0,
-            'std_accuracy': 0,
-            'mean_f1': 0,
-            'std_f1': 0,
-            'mean_precision': 0,
-            'std_precision': 0,
-            'mean_recall': 0,
-            'std_recall': 0,
-            'all_fold_histories': [],
-            'epochs_per_fold': []
+        def build_wrapper(hp):
+            return self.build_model_with_hp(hp)
+        tuner = RandomSearch(
+            build_wrapper,
+            objective="val_accuracy",
+            max_trials=max_trials,
+            executions_per_trial=1,
+            directory="tuner_results",
+            project_name=architecture_name
+        )
+        tuner.search(
+            data.x_train, y_train_sparse,
+            validation_data=(data.x_val, y_val_sparse),
+            epochs=epochs,
+            callbacks=[tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)],
+            verbose=1
+        )
+        best_trial = tuner.oracle.get_best_trials(1)[0]
+        hp = best_trial.hyperparameters
+        final_model = self.build_model_with_hp(hp)
+        # Train final model on full train+val set (sparse labels)
+        x_full = np.concatenate([data.x_train, data.x_val])
+        y_full = np.concatenate([y_train_sparse, y_val_sparse])
+        final_model.fit(
+            x_full,
+            y_full,
+            epochs=epochs,
+            callbacks=[tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)],
+            verbose=1
+        )
+        self.model = final_model
+        return {
+            "best_hyperparameters": best_trial.hyperparameters.values,
+            "best_score": best_trial.score,
+            "all_trials": [
+                {
+                    **trial.hyperparameters.values,
+                    "score": trial.score
+                }
+                for trial in tuner.oracle.get_best_trials(num_trials=max_trials)
+            ]
         }
 
-        print(f"[INFO] Starting {k_folds}-fold cross validation...")
 
-        # Prepare summary DataFrame outside the loop to avoid overlap
-        summary_path = os.path.join(log_dir, "cv_summary.csv")
-        df_summary = pd.DataFrame(columns=['fold', 'val_accuracy', 'val_loss', 'val_f1_score', 'val_precision', 'val_recall', 'epochs_completed'])
+    def tune_hyperparameters_archi(self, data, architecture_name, k_folds=5, max_trials=20, epochs=200):
+        """
+        CV-based hyperparameter search for flexible architectures.
+        For each trial, sample a hyperparameter set, run k-fold CV, and select the best set overall.
+        Args:
+            data: PoseDataset object
+            architecture_name: ModelFactory architecture name
+            k_folds: Number of CV folds
+            max_trials: Number of hyperparameter sets to try
+            epochs: Training epochs per trial
+        Returns:
+            dict: Results with best hyperparameters and CV scores
+        """
+        print(f"[INFO] Hyperparameter tuning (archi) for {architecture_name} with {k_folds}-fold CV")
+        print(f"Max trials: {max_trials}, Epochs per trial: {epochs}")
+        factory = ModelFactory()
+        # Combine train+val for CV (keep test set unseen)
+        X_cv = np.concatenate([data.x_train, data.x_val], axis=0)
+        y_cv = np.concatenate([data.y_train, data.y_val], axis=0)
+        # Convert one-hot to sparse if needed
+        if len(y_cv.shape) > 1 and y_cv.shape[1] > 1:
+            y_cv_sparse = np.argmax(y_cv, axis=1)
+        else:
+            y_cv_sparse = y_cv
+        print(f"Using {X_cv.shape[0]} samples for CV tuning (test set kept separate)")
 
-        # Ensure x_train and y_train are numpy arrays for indexing
-        x_train_np = data.x_train.values if hasattr(data.x_train, 'values') else np.array(data.x_train)
-        y_train_np = data.y_train.values if hasattr(data.y_train, 'values') else np.array(data.y_train)
+        # Use StratifiedKFold for robust class-balanced CV
+        skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
+        best_score = -1
+        best_hps = None
+        all_trials = []
+        print(self.inputShape)
+        for trial in range(max_trials):
+            print(f"\nTrial {trial + 1}/{max_trials}")
 
-        # Split using K-Fold
-        splits = list(skf.split(x_train_np, y_labels))
-        for fold, (train_idx, val_idx) in enumerate(splits):
-            print(f"\n[INFO] Training Fold {fold + 1}/{k_folds}")
+            if architecture_name=="mlp":
+                hp_values = {
+                    'learning_rate': np.random.uniform(1e-4, 1e-2),
+                    'dropout1': np.random.uniform(0.1, 0.7),
+                    'dropout2': np.random.uniform(0.1, 0.7),
+                    'units1': np.random.choice([128, 192, 256, 320, 384, 448, 512]),
+                    'units2': np.random.choice([64, 128, 192, 256])
+                }
+            else:
+                hp_values = {
+                    'learning_rate': np.random.uniform(1e-4, 1e-2),
+                    'filters1': np.random.choice([16, 32, 64]),
+                    'filters2': np.random.choice([32, 64, 128]),
+                    'filters3': np.random.choice([32, 64, 128]),
+                    'kernel_size': np.random.choice([3, 5]),
+                    'pool_size': np.random.choice([2, 3]),
+                    'dropout': np.random.uniform(0.1, 0.7),
+                    'dense_units': np.random.choice([64, 128, 256, 512])
+                }
 
-            # Split data for this fold
-            x_fold_train, x_fold_val = x_train_np[train_idx], x_train_np[val_idx]
-            y_fold_train, y_fold_val = y_train_np[train_idx], y_train_np[val_idx]
+            fold_scores = []
+            for fold, (train_idx, val_idx) in enumerate(skf.split(X_cv, y_cv_sparse)):
+                X_train_fold = X_cv[train_idx]
+                X_val_fold = X_cv[val_idx]
+                y_train_fold = y_cv_sparse[train_idx]
+                y_val_fold = y_cv_sparse[val_idx]
 
-            # Create fresh model for this fold
-            temp_model = keras.models.clone_model(self.model)
-            temp_model.compile(
-                optimizer='adam',
-                loss='categorical_crossentropy',
-                metrics=['accuracy']
+                # Build model with sampled hyperparameters
+                if architecture_name=="mlp":
+                    model = factory.mlp_tunable_archi(
+                        self.inputShape,
+                        self.classCount,
+                        units1=hp_values['units1'],
+                        units2=hp_values['units2'],
+                        dropout1=hp_values['dropout1'],
+                        dropout2=hp_values['dropout2']
+                    )
+                else:
+                    model = factory.cnn_tunable_archi(
+                        self.inputShape,
+                        self.classCount,
+                        filters1=hp_values['filters1'],
+                        filters2=hp_values['filters2'],
+                        filters3=hp_values['filters3'],
+                        kernel_size=(hp_values['kernel_size'],),
+                        pool_size=(hp_values['pool_size'],),
+                        dropout=hp_values['dropout'],
+                        dense_units=hp_values['dense_units']
+                    )
+
+                optimizer = tf.keras.optimizers.Adam(learning_rate=hp_values['learning_rate'])
+                model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+                model.fit(
+                    X_train_fold, y_train_fold,
+                    validation_data=(X_val_fold, y_val_fold),
+                    epochs=epochs,
+                    callbacks=[tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)],
+                    verbose=0
+                )
+                _, val_acc = model.evaluate(X_val_fold, y_val_fold, verbose=0)
+                fold_scores.append(val_acc)
+            mean_score = np.mean(fold_scores)
+            std_score = np.std(fold_scores)
+            trial_result = {
+                'trial': trial + 1,
+                'hyperparameters': hp_values,
+                'cv_mean': mean_score,
+                'cv_std': std_score,
+                'fold_scores': fold_scores
+            }
+            all_trials.append(trial_result)
+            print(f"  {hp_values}")
+            print(f"  CV Score: {mean_score:.4f} ± {std_score:.4f}")
+            if mean_score > best_score:
+                best_score = mean_score
+                best_hps = hp_values.copy()
+                print(f"  *** New best! ***")
+
+
+        # Build final model with best hyperparameters
+        print(f"\n[INFO] Best hyperparameters: {best_hps}")
+        print(f"Best CV score: {best_score:.4f}")
+
+        # Build model with sampled hyperparameters
+        if architecture_name=="mlp":
+            final_model = factory.mlp_tunable_archi(
+                self.inputShape,
+                self.classCount,
+                units1=best_hps['units1'],
+                units2=best_hps['units2'],
+                dropout1=best_hps['dropout1'],
+                dropout2=best_hps['dropout2']
             )
-
-            early_stop = EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True)
-            
-            # Train on this fold
-            history = temp_model.fit(
-                x_fold_train, y_fold_train,
-                epochs=epochs,
-                batch_size=batch_size,
-                validation_data=(x_fold_val, y_fold_val),
-                verbose=0,
-                callbacks=[early_stop]
+        else:
+            final_model = factory.cnn_tunable_archi(
+                self.inputShape,
+                self.classCount,
+                filters1=best_hps['filters1'],
+                filters2=best_hps['filters2'],
+                filters3=best_hps['filters3'],
+                kernel_size=(best_hps['kernel_size'],),
+                pool_size=(best_hps['pool_size'],),
+                dropout=best_hps['dropout'],
+                dense_units=best_hps['dense_units']
             )
+        
+        optimizer = tf.keras.optimizers.Adam(learning_rate=best_hps['learning_rate'])
+        final_model.compile(optimizer=optimizer, loss='sparse_categorical_crossentropy', metrics=['accuracy'])
+        print(f"[INFO] Training final model on full CV dataset ({X_cv.shape[0]} samples)...")
+        final_model.fit(
+            X_cv, y_cv_sparse,
+            epochs=epochs,
+            callbacks=[tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)],
+            verbose=1
+        )
+        print("[INFO] Final model training complete!")
+        self.model = final_model
+        best_hps_py = convert_numpy(best_hps)
+        all_trials_py = convert_numpy(all_trials)
+        return {
+            'best_hyperparameters': best_hps_py,
+            'best_score': best_score,
+            'all_trials': all_trials_py
+        }
 
-            # Number of epochs completed for this fold
-            epochs_completed = len(history.history['loss'])
-            cv_results['epochs_per_fold'].append(epochs_completed)
-
-            # Evaluate this fold
-            val_loss, val_acc = temp_model.evaluate(x_fold_val, y_fold_val, verbose=0)
-            
-            # Calculate F1 score for this fold
-            y_pred = temp_model.predict(x_fold_val, verbose=0)
-            y_pred_classes = y_pred.argmax(axis=1)
-            y_true_classes = y_fold_val.argmax(axis=1)
-            val_f1 = f1_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
-            
-            # Calculate Precision and Recall for this fold
-            val_precision = precision_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
-            val_recall = recall_score(y_true_classes, y_pred_classes, average='macro', zero_division=0)
-            
-            cv_results['fold_accuracies'].append(val_acc)
-            cv_results['fold_losses'].append(val_loss)
-            cv_results['fold_f1_scores'].append(val_f1)
-            cv_results['fold_precisions'].append(val_precision)
-            cv_results['fold_recalls'].append(val_recall)
-            cv_results['all_fold_histories'].append(history.history)
-
-            print(f"Fold {fold + 1} - Val Accuracy: {val_acc:.4f}, Val Loss: {val_loss:.4f}, Val F1: {val_f1:.4f}, Val Precision: {val_precision:.4f}, Val Recall: {val_recall:.4f}, Epochs: {epochs_completed}/{epochs}")
-
-            # Write per-fold log to CSV
-            log_path = os.path.join(log_dir, f"fold_{fold+1}_log.csv")
-            df_log = pd.DataFrame({
-                'epoch': np.arange(1, len(history.history['loss']) + 1),
-                'loss': history.history['loss'],
-                'accuracy': history.history['accuracy'],
-                'val_loss': history.history['val_loss'],
-                'val_accuracy': history.history['val_accuracy']
-            })
-            df_log.to_csv(log_path, index=False)
-
-            # Append summary for this fold to the DataFrame
-            df_summary = pd.concat([
-                df_summary,
-                pd.DataFrame([{
-                    'fold': fold + 1,
-                    'val_accuracy': val_acc,
-                    'val_loss': val_loss,
-                    'val_f1_score': val_f1,
-                    'val_precision': val_precision,
-                    'val_recall': val_recall,
-                    'epochs_completed': epochs_completed
-                }])
-            ], ignore_index=True)
-
-            df_summary.to_csv(summary_path, index=False)
-
-        # Calculate statistics
-        cv_results['mean_accuracy'] = np.mean(cv_results['fold_accuracies'])
-        cv_results['std_accuracy'] = np.std(cv_results['fold_accuracies'])
-        cv_results['mean_f1'] = np.mean(cv_results['fold_f1_scores'])
-        cv_results['std_f1'] = np.std(cv_results['fold_f1_scores'])
-        cv_results['mean_precision'] = np.mean(cv_results['fold_precisions'])
-        cv_results['std_precision'] = np.std(cv_results['fold_precisions'])
-        cv_results['mean_recall'] = np.mean(cv_results['fold_recalls'])
-        cv_results['std_recall'] = np.std(cv_results['fold_recalls'])
-
-        print(f"\n[INFO] Cross Validation Results:")
-        print(f"Mean Accuracy: {cv_results['mean_accuracy']:.4f} ± {cv_results['std_accuracy']:.4f}")
-        print(f"Mean F1 Score: {cv_results['mean_f1']:.4f} ± {cv_results['std_f1']:.4f}")
-        print(f"Mean Precision: {cv_results['mean_precision']:.4f} ± {cv_results['std_precision']:.4f}")
-        print(f"Mean Recall: {cv_results['mean_recall']:.4f} ± {cv_results['std_recall']:.4f}")
-        print(f"Individual Fold Accuracies: {[f'{acc:.4f}' for acc in cv_results['fold_accuracies']]}")
-        print(f"Individual Fold F1 Scores: {[f'{f1:.4f}' for f1 in cv_results['fold_f1_scores']]}")
-        print(f"Individual Fold Precisions: {[f'{prec:.4f}' for prec in cv_results['fold_precisions']]}")
-        print(f"Individual Fold Recalls: {[f'{rec:.4f}' for rec in cv_results['fold_recalls']]}")
-        print(f"Epochs per fold: {cv_results['epochs_per_fold']} (out of {epochs})")
-
-        # Log statistics to a file
-        stats_path = os.path.join(log_dir, "cv_stats.txt")
-        lowest_acc = min(cv_results['fold_accuracies'])
-        highest_acc = max(cv_results['fold_accuracies'])
-        lowest_f1 = min(cv_results['fold_f1_scores'])
-        highest_f1 = max(cv_results['fold_f1_scores'])
-        lowest_precision = min(cv_results['fold_precisions'])
-        highest_precision = max(cv_results['fold_precisions'])
-        lowest_recall = min(cv_results['fold_recalls'])
-        highest_recall = max(cv_results['fold_recalls'])
-
-        with open(stats_path, "w") as f:
-            f.write(f"Mean Accuracy: {cv_results['mean_accuracy']:.4f}\n")
-            f.write(f"Std Accuracy: {cv_results['std_accuracy']:.4f}\n")
-            f.write(f"Mean F1 Score: {cv_results['mean_f1']:.4f}\n")
-            f.write(f"Std F1 Score: {cv_results['std_f1']:.4f}\n")
-            f.write(f"Mean Precision: {cv_results['mean_precision']:.4f}\n")
-            f.write(f"Std Precision: {cv_results['std_precision']:.4f}\n")
-            f.write(f"Mean Recall: {cv_results['mean_recall']:.4f}\n")
-            f.write(f"Std Recall: {cv_results['std_recall']:.4f}\n")
-            f.write(f"Fold Accuracies: {cv_results['fold_accuracies']}\n")
-            f.write(f"Fold F1 Scores: {cv_results['fold_f1_scores']}\n")
-            f.write(f"Fold Precisions: {cv_results['fold_precisions']}\n")
-            f.write(f"Fold Recalls: {cv_results['fold_recalls']}\n")
-            f.write(f"Epochs per fold: {cv_results['epochs_per_fold']} (out of {epochs})\n")
-            f.write(f"Lowest Fold Accuracy: {lowest_acc:.4f}\n")
-            f.write(f"Highest Fold Accuracy: {highest_acc:.4f}\n")
-            f.write(f"Lowest Fold F1 Score: {lowest_f1:.4f}\n")
-            f.write(f"Highest Fold F1 Score: {highest_f1:.4f}\n")
-            f.write(f"Lowest Fold Precision: {lowest_precision:.4f}\n")
-            f.write(f"Highest Fold Precision: {highest_precision:.4f}\n")
-            f.write(f"Lowest Fold Recall: {lowest_recall:.4f}\n")
-            f.write(f"Highest Fold Recall: {highest_recall:.4f}\n")
-
-        return cv_results
+def convert_numpy(obj):
+    if isinstance(obj, dict):
+        return {k: convert_numpy(v) for k, v in obj.items()}
+    elif isinstance(obj, list):
+        return [convert_numpy(v) for v in obj]
+    elif isinstance(obj, (np.integer, np.int32, np.int64)):
+        return int(obj)
+    elif isinstance(obj, (np.floating, np.float32, np.float64)):
+        return float(obj)
+    else:
+        return obj

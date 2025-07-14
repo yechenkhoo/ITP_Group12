@@ -191,3 +191,81 @@ class ModelFactory:
         ])
         
         return model
+    
+    @staticmethod
+    def mlp_basic_tunable(input_shape, class_count, dropout_rate=0.3):
+        """
+        Tunable version of MLP Basic with configurable dropout rate.
+        Based on mlp_basic but adds dropout for regularization.
+        """
+        return models.Sequential([
+            layers.Dense(512, activation='relu', input_shape=[input_shape]),
+            layers.Dropout(dropout_rate),
+            layers.Dense(256, activation='relu'),
+            layers.Dropout(dropout_rate),
+            layers.Dense(class_count, activation='softmax')
+        ])
+
+    @staticmethod
+    def cnn_3_block_tunable(input_shape, class_count, dropout_rate=0.5):
+        """
+        Tunable version of CNN 3 Block with configurable dropout rate.
+        Based on cnn_3_block but allows tuning of dropout in dense layers.
+        """
+        model = models.Sequential([
+            layers.Input(shape=input_shape),  # (33, 4) for reshaped data
+            
+            # Block 1: 3 Conv1D layers with 28 filters
+            layers.Conv1D(28, 3, activation='relu', padding='same'),
+            layers.Conv1D(28, 3, activation='relu', padding='same'),
+            layers.Conv1D(28, 3, activation='relu', padding='same'),
+            layers.MaxPooling1D(pool_size=2),
+            
+            # Block 2: 3 Conv1D layers with 56 filters
+            layers.Conv1D(56, 3, activation='relu', padding='same'),
+            layers.Conv1D(56, 3, activation='relu', padding='same'),
+            layers.Conv1D(56, 3, activation='relu', padding='same'),
+            layers.MaxPooling1D(pool_size=2),
+            
+            # Block 3: 3 Conv1D layers with 112 filters
+            layers.Conv1D(112, 3, activation='relu', padding='same'),
+            layers.Conv1D(112, 3, activation='relu', padding='same'),
+            layers.Conv1D(112, 3, activation='relu', padding='same'),
+            layers.MaxPooling1D(pool_size=2),
+            
+            layers.Flatten(),
+            layers.Dense(512, activation='relu'),
+            layers.Dropout(dropout_rate),  # Tunable dropout
+            layers.Dense(256, activation='relu'),
+            layers.Dropout(dropout_rate),  # Tunable dropout
+            layers.Dense(class_count, activation='softmax')
+        ])
+        
+        return model
+
+
+    @staticmethod
+    def mlp_tunable_archi(input_shape, class_count, units1, units2, dropout1, dropout2):
+        model = models.Sequential()
+        model.add(layers.Input(shape=input_shape))
+        model.add(layers.Dense(units1, activation='relu'))
+        model.add(layers.Dropout(dropout1))
+        model.add(layers.Dense(units2, activation='relu'))
+        model.add(layers.Dropout(dropout2))
+        model.add(layers.Dense(class_count, activation='softmax'))
+        return model
+    
+    @staticmethod
+    def cnn_tunable_archi(input_shape, class_count, filters1, filters2, filters3, kernel_size, pool_size, dropout, dense_units):
+        model = models.Sequential()
+        model.add(layers.Input(shape=input_shape))
+        model.add(layers.Conv1D(filters1, kernel_size, activation='relu', padding='same'))
+        model.add(layers.MaxPooling1D(pool_size))
+        model.add(layers.Conv1D(filters2, kernel_size, activation='relu', padding='same'))
+        model.add(layers.MaxPooling1D(pool_size))
+        model.add(layers.Conv1D(filters3, kernel_size, activation='relu', padding='same'))
+        model.add(layers.GlobalMaxPooling1D())
+        model.add(layers.Dense(dense_units, activation='relu'))
+        model.add(layers.Dropout(dropout))
+        model.add(layers.Dense(class_count, activation='softmax'))
+        return model
