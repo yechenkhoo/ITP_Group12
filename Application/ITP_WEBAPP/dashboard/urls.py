@@ -4,7 +4,10 @@ from .views import (
     create_account, live_stream, start_recording, upload_from_pi, admin_model,
     dashboard_compareSwings, add_video_comment_ajax, update_comment_position_ajax,
     delete_video_comment_ajax,
-    add_video_reply_ajax
+    edit_video_comment_ajax,
+    add_video_reply_ajax,
+    edit_video_reply_ajax,
+    delete_video_reply_ajax
 )
 
 urlpatterns = [
@@ -21,7 +24,10 @@ urlpatterns = [
     path('dataSpace/<str:id>/results/<str:VideoId>/add_comment_ajax/', add_video_comment_ajax, name='add_video_comment_ajax'),
     path('dataSpace/<str:id>/results/<str:VideoId>/update_comment_position_ajax/', update_comment_position_ajax, name='update_comment_position_ajax'),
     path('dataSpace/<str:id>/results/<str:VideoId>/delete_comment_ajax/', delete_video_comment_ajax, name='delete_video_comment_ajax'),
+    path('dataSpace/<str:id>/results/<str:VideoId>/edit_video_comment_ajax/', edit_video_comment_ajax, name='edit_video_comment_ajax'),
     path('dataSpace/<str:id>/results/<str:VideoId>/add_reply_ajax/', add_video_reply_ajax, name='add_video_reply_ajax'),
+    path('dataSpace/<str:id>/results/<str:VideoId>/edit_reply_ajax/', edit_video_reply_ajax, name='edit_video_reply_ajax'),
+    path('dataSpace/<str:id>/results/<str:VideoId>/delete_reply_ajax/', delete_video_reply_ajax, name='delete_video_reply_ajax'),
 
     path("", home, name="home"),
 

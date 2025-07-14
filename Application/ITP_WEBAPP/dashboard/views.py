@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import HttpResponseRedirect, JsonResponse, StreamingHttpResponse, HttpResponse, HttpResponseBadRequest
 from ITP_WEBAPP.models import User
 from django.views.decorators.http import require_POST
-from .models import Coach, Video, Comment, Users_Collection
+from .models import Coach, Video, Comment, Users_Collection # Make sure Comment is imported
 from ITP_WEBAPP.views import is_logged_in
 from bson import ObjectId
 import requests
@@ -180,6 +180,10 @@ def dashboard_results(request, id, VideoId):
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     student = user if not isCoach(request) else User.find_user_by_id(ObjectId(id))
 
+    # Determine current_user_name to pass to the template
+    # Prioritize username from session, fallback to user's 'Name' field
+    current_user_name = request.session.get('Username', user.get('Name', ''))
+
     # Fetch title of the raw video
     all_videos = Video.get_all_videos(student['_id'])
     video_item = next((v for v in all_videos if v['id'] == VideoId), None)
@@ -238,6 +242,7 @@ def dashboard_results(request, id, VideoId):
         'columns': display_columns,  # Filtered columns for display
         'full_data': full_data,  # Full data for other purposes
         'column_status_mapping': column_status_mapping,
+        'current_user_name': current_user_name, # ADDED THIS LINE
     })
 
 # Add these new AJAX views to handle comments
@@ -377,18 +382,122 @@ def delete_video_comment_ajax(request, id, VideoId):
             if not comment_id:
                 return JsonResponse({'status': 'error', 'message': 'Comment ID is required.'}, status=400)
 
-            success = Comment.delete_comment(comment_id)
+            # Authorization check: Ensure the current user is allowed to delete this comment.
+            current_user_id = request.session.get('Id')
+            if not current_user_id:
+                return JsonResponse({'status': 'error', 'message': 'User not authenticated.'}, status=401)
+
+            # Assuming your Comment.delete_comment method handles authorization internally
+            # or needs the user ID to verify ownership/permissions.
+            success = Comment.delete_comment(comment_id, current_user_id)
 
             if success:
                 return JsonResponse({'status': 'success', 'message': 'Comment deleted successfully.'})
             else:
-                return JsonResponse({'status': 'error', 'message': 'Failed to delete comment.'}, status=500)
+                return JsonResponse({'status': 'error', 'message': 'Failed to delete comment or unauthorized.'}, status=500)
         except json.JSONDecodeError:
             return JsonResponse({'status': 'error', 'message': 'Invalid JSON.'}, status=400)
         except Exception as e:
             traceback.print_exc()
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
     return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+
+# New AJAX View for editing a comment
+@csrf_exempt
+@require_POST
+def edit_video_comment_ajax(request, id, VideoId):
+    if not is_logged_in(request):
+        return JsonResponse({'status': 'error', 'message': 'User not logged in.'}, status=401)
+    
+    try:
+        data = json.loads(request.body)
+        comment_id = data.get('comment_id')
+        new_text = data.get('comment_text') # Changed parameter name to 'comment'
+
+        if not comment_id or not new_text:
+            return JsonResponse({'status': 'error', 'message': 'Missing comment ID or new text.'}, status=400)
+
+        # Get the current user's ID from the session
+        current_user_id = request.session.get('Id')
+
+        # Call the Comment model method to update the comment
+        # You'll need to implement this method in your Comment model
+        success = Comment.edit_comment(comment_id, new_text, current_user_id)
+
+        if success:
+            return JsonResponse({'status': 'success', 'message': 'Comment updated successfully.'})
+        else:
+            # You might want more specific error messages here (e.g., "Comment not found", "Unauthorized")
+            return JsonResponse({'status': 'error', 'message': 'Failed to update comment or unauthorized.'}, status=500)
+
+    except json.JSONDecodeError:
+        return JsonResponse({'status': 'error', 'message': 'Invalid JSON.'}, status=400)
+    except Exception as e:
+        traceback.print_exc()
+        return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+
+# NEW AJAX View for editing a reply
+@csrf_exempt
+@require_POST
+def edit_video_reply_ajax(request, id, VideoId):
+    if not is_logged_in(request):
+        return JsonResponse({'success': False, 'message': 'User not logged in.'}, status=401)
+
+    try:
+        data = json.loads(request.body)
+        reply_id = data.get('reply_id')
+        new_reply_text = data.get('reply_text')
+
+        if not reply_id or not new_reply_text:
+            return JsonResponse({'success': False, 'message': 'Missing reply ID or new text.'}, status=400)
+
+        current_user_id = request.session.get('Id')
+
+        # Call your Comment model's method to edit the reply
+        # You need to implement `Comment.edit_reply(reply_id, new_reply_text, current_user_id)`
+        success = Comment.edit_reply(reply_id, new_reply_text, current_user_id)
+
+        if success:
+            return JsonResponse({'success': True, 'message': 'Reply updated successfully.'})
+        else:
+            return JsonResponse({'success': False, 'message': 'Failed to update reply or unauthorized.'}, status=500)
+
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON.'}, status=400)
+    except Exception as e:
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+# NEW AJAX View for deleting a reply
+@csrf_exempt
+@require_POST
+def delete_video_reply_ajax(request, id, VideoId):
+    if not is_logged_in(request):
+        return JsonResponse({'success': False, 'message': 'User not logged in.'}, status=401)
+
+    try:
+        data = json.loads(request.body)
+        reply_id = data.get('reply_id')
+
+        if not reply_id:
+            return JsonResponse({'success': False, 'message': 'Reply ID is required.'}, status=400)
+
+        current_user_id = request.session.get('Id')
+
+        # Call your Comment model's method to delete the reply
+        # You need to implement `Comment.delete_reply(reply_id, current_user_id)`
+        success = Comment.delete_reply(reply_id, current_user_id)
+
+        if success:
+            return JsonResponse({'success': True, 'message': 'Reply deleted successfully.'})
+        else:
+            return JsonResponse({'success': False, 'message': 'Failed to delete reply or unauthorized.'}, status=500)
+
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON.'}, status=400)
+    except Exception as e:
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
 
 # New view for comparing two swings
@@ -659,7 +768,7 @@ def upload_from_pi(request):
         return JsonResponse({"error": "Invalid request method"}, status=405)
     
 @csrf_exempt
-#Temp predict to be edit     
+#Temp predict to be edit    
 def predict(request):
     if request.method == 'POST':
         # Placeholder: Does nothing meaningful

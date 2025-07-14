@@ -12,6 +12,7 @@ from dashboard.google_cloud import get_google_cloud_storage_client
 import time
 from concurrent.futures import ThreadPoolExecutor
 import io
+import traceback # Import traceback for detailed error logging
 
 # MongoDB collections
 Users_Collection = MONGO_CLIENT['Users']
@@ -378,6 +379,7 @@ class Comment:
             return inserted_comment.inserted_id
         except Exception as e:
             print(f"Error adding comment: {e}")
+            traceback.print_exc() # Added traceback for debugging
             return None # Indicate failure by returning None
 
     @staticmethod
@@ -409,6 +411,7 @@ class Comment:
             return inserted_reply.inserted_id
         except Exception as e:
             print(f"Error adding reply: {e}")
+            traceback.print_exc() # Added traceback for debugging
             return None
 
     @staticmethod
@@ -417,66 +420,202 @@ class Comment:
         Fetches a single comment by its ID and processes it for frontend display.
         This will fetch either a top-level comment or a reply.
         """
-        comment = Comments_Collection.find_one({'_id': ObjectId(comment_id)})
-        if not comment:
+        try:
+            comment = Comments_Collection.find_one({'_id': ObjectId(comment_id)})
+            if not comment:
+                return None
+
+            # Enrich comment with user details
+            user = Users_Collection.find_one({'_id': ObjectId(comment['CommentedBy'])})
+            comment['CommentedBy'] = user['Name'] if user else 'Unknown User'
+
+            # Format DateCommented for returning
+            comment['FormattedDate'] = comment['DateCommented'].strftime("%H:%M %b %d, %Y")
+            
+            # If DateEdited exists, format it too
+            if 'DateEdited' in comment:
+                comment['FormattedDateEdited'] = comment['DateEdited'].strftime("%H:%M %b %d, %Y")
+
+            # Convert _id to 'id' string for frontend consumption
+            comment['id'] = str(comment.pop('_id'))
+            
+            # Add 'replies' key for consistency if it's a top-level comment and you plan to expand it
+            if 'parent_comment_id' not in comment or comment['parent_comment_id'] is None:
+                comment['replies'] = [] # This ensures a consistent structure
+                # You might want to fetch and populate direct replies here if this method is used in isolation
+                # For now, get_all_video_comments handles full tree, so this is just for single lookup.
+
+            return comment
+        except Exception as e:
+            print(f"Error in get_comment_by_id: {e}")
+            traceback.print_exc() # Added traceback for debugging
             return None
-
-        # Enrich comment with user details
-        user = Users_Collection.find_one({'_id': ObjectId(comment['CommentedBy'])})
-        comment['CommentedBy'] = user['Name'] if user else 'Unknown User'
-
-        # Format DateCommented for returning
-        comment['FormattedDate'] = comment['DateCommented'].strftime("%H:%M %b %d, %Y")
-
-        # Convert _id to 'id' string for frontend consumption
-        comment['id'] = str(comment.pop('_id'))
-        
-        # Add 'replies' key for consistency if it's a top-level comment and you plan to expand it
-        if 'parent_comment_id' not in comment or comment['parent_comment_id'] is None:
-            comment['replies'] = [] # This ensures a consistent structure
-            # You might want to fetch and populate direct replies here if this method is used in isolation
-            # For now, get_all_video_comments handles full tree, so this is just for single lookup.
-
-        return comment
 
     @staticmethod
     def update_comment_position(comment_id, x_pos, y_pos):
         """Updates the position of an existing comment. Only applies to top-level comments."""
         try:
-            Comments_Collection.update_one(
+            result = Comments_Collection.update_one(
                 {'_id': ObjectId(comment_id), 'parent_comment_id': None}, # Only update if it's a top-level comment
                 {'$set': {'x_pos': x_pos, 'y_pos': y_pos}}
             )
-            return True
+            return result.matched_count > 0
         except Exception as e:
             print(f"Error updating comment position: {e}")
+            traceback.print_exc() # Added traceback for debugging
             return False
 
     @staticmethod
-    def delete_comment(comment_id):
+    def delete_comment(comment_id, current_user_id): # Added current_user_id parameter
         """
-        Deletes a comment and all its direct replies.
+        Deletes a top-level comment and all its direct replies,
+        after verifying the current user is the author of the comment.
         Also removes the top-level comment's reference from the video.
         """
         try:
             obj_comment_id = ObjectId(comment_id)
+            obj_user_id = ObjectId(current_user_id) # Convert current_user_id to ObjectId
 
-            # First, delete all replies whose parent_comment_id is the comment being deleted
-            Comments_Collection.delete_many({'parent_comment_id': obj_comment_id})
+            # Find the comment to delete
+            comment_to_delete = Comments_Collection.find_one({"_id": obj_comment_id})
 
-            # Then, delete the top-level comment itself
-            delete_result = Comments_Collection.delete_one({'_id': obj_comment_id})
-
-            if delete_result.deleted_count == 0:
+            if not comment_to_delete:
                 print(f"Comment with ID {comment_id} not found for deletion.")
                 return False
 
-            # Finally, remove the top-level comment's ObjectId from any video that references it
-            Videos_Collection.update_many(
-                {'Comments': obj_comment_id},
-                {'$pull': {'Comments': obj_comment_id}}
-            )
-            return True
+            # Authorization Check: Ensure the current user is the author of the comment
+            if comment_to_delete.get('CommentedBy') != obj_user_id:
+                print(f"User {current_user_id} is not authorized to delete comment {comment_id}.")
+                return False # Not authorized
+
+            if comment_to_delete.get('parent_comment_id') is not None:
+                # It's a reply: for a top-level comment deletion, we only care about top-level comments.
+                # This branch implies an attempt to delete a reply using delete_comment, which is not intended.
+                print(f"Comment with ID {comment_id} is a reply. Use delete_reply instead for specific reply deletion.")
+                return False
+            else:
+                # It's a top-level comment:
+                # 1. Delete all replies that reference this comment as their parent
+                Comments_Collection.delete_many({'parent_comment_id': obj_comment_id})
+                
+                # 2. Remove this comment's ID from the associated video's 'Comments' array
+                # Ensure 'video_id' exists in the comment_to_delete document
+                if 'video_id' in comment_to_delete:
+                    Videos_Collection.update_one(
+                        {'_id': comment_to_delete['video_id']},
+                        {'$pull': {'Comments': obj_comment_id}}
+                    )
+                else:
+                    print(f"Comment {comment_id} does not have an associated video_id.")
+
+            # Finally, delete the top-level comment itself
+            delete_result = Comments_Collection.delete_one({'_id': obj_comment_id})
+
+            return delete_result.deleted_count > 0
         except Exception as e:
             print(f"Error deleting comment {comment_id}: {e}")
+            traceback.print_exc() # Added traceback for debugging
+            return False
+
+    @staticmethod
+    def delete_reply(reply_id, current_user_id):
+        """
+        Deletes a specific reply after verifying the current user is the author.
+        """
+        try:
+            obj_reply_id = ObjectId(reply_id)
+            obj_user_id = ObjectId(current_user_id)
+
+            # Find the reply to delete
+            reply_to_delete = Comments_Collection.find_one({"_id": obj_reply_id})
+
+            if not reply_to_delete:
+                print(f"Reply with ID {reply_id} not found for deletion.")
+                return False
+
+            # Ensure it's actually a reply (has a parent_comment_id) and not a top-level comment
+            if reply_to_delete.get('parent_comment_id') is None:
+                print(f"Comment with ID {reply_id} is a top-level comment, not a reply. Use delete_comment instead.")
+                return False
+
+            # Check if the current user is the author of the reply
+            if reply_to_delete.get('CommentedBy') != obj_user_id:
+                print(f"User {current_user_id} is not authorized to delete reply {reply_id}.")
+                return False # Not authorized
+
+            # Delete the reply document
+            delete_result = Comments_Collection.delete_one({'_id': obj_reply_id})
+
+            return delete_result.deleted_count > 0
+        except Exception as e:
+            print(f"Error deleting reply {reply_id}: {e}")
+            traceback.print_exc()
+            return False
+
+    @staticmethod
+    def edit_comment(comment_id, new_text, current_user_id):
+        """
+        Edits the text of an existing comment.
+        Only allows the original author of the comment to edit it.
+        Adds/updates a 'DateEdited' field.
+        """
+        try:
+            comment_obj_id = ObjectId(comment_id)
+            user_obj_id = ObjectId(current_user_id)
+
+            # Find the comment and check if the current_user_id matches the author's CommentedBy
+            comment = Comments_Collection.find_one({"_id": comment_obj_id})
+            
+            if not comment:
+                print(f"Comment with ID {comment_id} not found.")
+                return False
+            
+            # Ensure the user attempting to edit is the author of the comment
+            if comment.get('CommentedBy') != user_obj_id:
+                print(f"User {current_user_id} is not authorized to edit comment {comment_id}.")
+                return False # Not authorized to edit this comment
+
+            # Update the comment text and set/update DateEdited
+            result = Comments_Collection.update_one(
+                {'_id': comment_obj_id},
+                {'$set': {'Comment': new_text, 'DateEdited': datetime.now()}}
+            )
+            return result.matched_count > 0
+        except Exception as e:
+            print(f"Error editing comment: {e}")
+            traceback.print_exc() # Added traceback for debugging
+            return False
+
+    @staticmethod
+    def edit_reply(reply_id, new_text, current_user_id):
+        """
+        Edits the text of an existing reply.
+        Only allows the original author of the reply to edit it.
+        Adds/updates a 'DateEdited' field.
+        """
+        try:
+            reply_obj_id = ObjectId(reply_id)
+            user_obj_id = ObjectId(current_user_id)
+
+            # Find the reply and check if the current_user_id matches the author's CommentedBy
+            reply = Comments_Collection.find_one({"_id": reply_obj_id})
+            
+            if not reply:
+                print(f"Reply with ID {reply_id} not found.")
+                return False
+            
+            # Ensure the user attempting to edit is the author of the reply
+            if reply.get('CommentedBy') != user_obj_id:
+                print(f"User {current_user_id} is not authorized to edit reply {reply_id}.")
+                return False # Not authorized to edit this reply
+
+            # Update the reply text and set/update DateEdited
+            result = Comments_Collection.update_one(
+                {'_id': reply_obj_id},
+                {'$set': {'Comment': new_text, 'DateEdited': datetime.now()}}
+            )
+            return result.matched_count > 0
+        except Exception as e:
+            print(f"Error editing reply: {e}")
+            traceback.print_exc() # Added traceback for debugging
             return False
