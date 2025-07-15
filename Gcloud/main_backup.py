@@ -15,30 +15,27 @@ db = mongo_client["ITP"]
 collection = db["Videos"]
 users_collection = db["Users"]
 
-def find_user_by_name(user_name):
-    """Find user by name in database with multiple field name attempts"""
-    if not user_name:
+def find_user_by_objectid(user_id_str):
+    """Find user by ObjectId extracted from filename"""
+    if not user_id_str:
         return None
         
     try:
-        # Try different field names
-        user = users_collection.find_one({"Name": user_name})
-        if not user:
-            user = users_collection.find_one({"name": user_name})
-        if not user:
-            user = users_collection.find_one({"username": user_name})
+        # Convert the string from the filename into a real ObjectId
+        uploaded_by_oid = ObjectId(user_id_str)
         
-        if user:
-            print(f"Found user: {user}")
+        # Search the database for a document where the '_id' field matches
+        user_doc = users_collection.find_one({"_id": uploaded_by_oid})
+        
+        if user_doc:
+            print(f"Successfully found user '{user_doc.get('Name')}' by ID: {user_id_str}")
+            return user_doc
         else:
-            print(f"No user found with name: {user_name}")
-            # Debug: show sample users
-            sample_users = list(users_collection.find().limit(3))
-            print(f"Sample users in database: {sample_users}")
+            print(f"User with ID '{user_id_str}' not found in the database.")
+            return None
             
-        return user
     except Exception as e:
-        print(f"Error finding user {user_name}: {str(e)}")
+        print(f"Error looking up user by ID in MongoDB: {e}")
         return None
 
 @functions_framework.cloud_event
@@ -68,24 +65,24 @@ def process_uploaded_video(cloud_event):
         video_id = os.path.splitext(video_filename)[0]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
-        # Try to extract username from filename
-        user_name = None
+        # --- PARSE USER ID FROM FILENAME (using ObjectId approach from main(5).py) ---
+        user_id_str = None
         uploaded_by = None
         assignee = None
         
-        if "_" in video_id:
-            user_name = video_id.split("_")[0]
-            print(f"Extracted user name: {user_name}")
+        if "_" in video_filename:
+            user_id_str = video_filename.split("_")[0]
+            print(f"Extracted user ID string: {user_id_str}")
             
-            user = find_user_by_name(user_name)
-            if user:
-                uploaded_by = user.get("_id")
-                assignee = user.get("CreatedBy")  # For old structure, assume uploader = assignee
-                print(f"Found user ID: {uploaded_by}, Assignee (Coach) ID: {assignee}")
+            user_doc = find_user_by_objectid(user_id_str)
+            if user_doc:
+                uploaded_by = user_doc.get("_id")
+                assignee = user_doc.get("_id")
+                print(f"Found user ID: {uploaded_by}")
             else:
-                print(f"User not found: {user_name}")
+                print(f"User not found with ID: {user_id_str}")
         else:
-            print(f"No underscore in video_id: {video_id}, cannot extract user name")
+            print(f"No underscore in video_filename: {video_filename}, cannot extract user ID")
 
         # Generate output paths
         output_video_path = f"processed/{video_id}_output_{timestamp}.mp4"
