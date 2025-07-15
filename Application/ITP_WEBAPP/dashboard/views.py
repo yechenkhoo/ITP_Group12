@@ -434,17 +434,30 @@ def golf_status(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def golf_start_recording(request):
-    """
-    Receives the request from the browser (with user_id) and forwards it
-    to the Raspberry Pi.
-    """
+    """Enhanced recording with assignee support"""
     try:
         data_from_browser = json.loads(request.body)
         
-        # Forward the entire payload to the Raspberry Pi
+        # Get current user info
+        user = User.find_user_by_id(ObjectId(request.session['Id']))
+        user_id_str = str(user['_id'])
+        
+        # Prepare payload with enhanced data
+        payload = {
+            'user_id': user_id_str,
+            'role': user['Role'],
+            'duration': data_from_browser.get('duration', 10)
+        }
+        
+        # If assignee_id provided, include it
+        assignee_id = data_from_browser.get('assignee_id')
+        if assignee_id:
+            payload['assignee_id'] = assignee_id
+        
+        # Forward to RPi
         response = requests.post(
             f'{GOLF_CAMERA_URL}/start_recording',
-            json=data_from_browser,  
+            json=payload,
             timeout=5
         )
         
@@ -453,12 +466,8 @@ def golf_start_recording(request):
         else:
             return JsonResponse({'error': 'Failed to start golf recording on RPi'}, status=response.status_code)
             
-    except requests.exceptions.RequestException as e:
-        return JsonResponse({'error': f'Golf camera connection error: {str(e)}'}, status=503)
-    except json.JSONDecodeError:
-        return JsonResponse({'error': 'Invalid JSON data from browser'}, status=400)
     except Exception as e:
-        return JsonResponse({'error': f'An unexpected error occurred: {str(e)}'}, status=500)
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
 
 @csrf_exempt
 @require_http_methods(["POST"])
@@ -508,21 +517,42 @@ def golf_reload_models(request):
 @csrf_exempt
 @require_http_methods(["POST"])
 def golf_set_user_context(request):
-    """Set current user context on RPi for auto recording"""
+    """Enhanced user context setting with assignee support"""
     try:
         # Get user from session
         user = User.find_user_by_id(ObjectId(request.session['Id']))
         user_id_str = str(user['_id'])
+        user_role = user['Role']
         
-        # Send user context to RPi
+        # Get request data
+        data = json.loads(request.body) if request.body else {}
+        assignee_id = data.get('assignee_id')  # Optional: who the video is for
+        
+        # Prepare payload for RPi
+        payload = {
+            'user_id': user_id_str,
+            'role': user_role
+        }
+        
+        # If assignee_id provided, include it
+        if assignee_id:
+            payload['assignee_id'] = assignee_id
+        
+        # Send to RPi
         response = requests.post(
             f'{GOLF_CAMERA_URL}/set_user_context',
-            json={'user_id': user_id_str},
+            json=payload,
             timeout=5
         )
         
         if response.status_code == 200:
-            return JsonResponse({'status': 'success', 'user_id': user_id_str})
+            response_data = response.json()
+            return JsonResponse({
+                'status': 'success', 
+                'operator_id': user_id_str,
+                'assignee_id': response_data.get('assignee_id', user_id_str),
+                'role': user_role
+            })
         else:
             return JsonResponse({'error': 'Failed to set user context on RPi'}, status=503)
             
@@ -530,6 +560,21 @@ def golf_set_user_context(request):
         return JsonResponse({'error': f'RPi connection error: {str(e)}'}, status=503)
     except Exception as e:
         return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+
+def api_my_students(request):
+    """API endpoint to get coach's students"""
+    if not is_logged_in(request) or not isCoach(request):
+        return JsonResponse({'error': 'Unauthorized'}, status=403)
+    
+    try:
+        students = Coach.fetch_all_students(request.session['Id'])
+        student_list = [
+            {'id': student['id'], 'name': student['Name']} 
+            for student in students
+        ]
+        return JsonResponse(student_list, safe=False)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 def golf_health(request):
     """Check golf camera health"""

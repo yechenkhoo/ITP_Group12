@@ -1,5 +1,5 @@
 from django.urls import include, path
-from .views import dashboard_results, dashboard_videoFeed, logout, home, dashboard_dataSpace, create_account,live_stream, start_recording, upload_from_pi, admin_model, golf_video_feed, golf_status, golf_start_recording, golf_toggle_auto_recording, golf_toggle_pose_detection, golf_reload_models, golf_health, golf_set_user_context
+from .views import dashboard_results, dashboard_videoFeed, logout, home, dashboard_dataSpace, create_account,live_stream, start_recording, upload_from_pi, admin_model, golf_video_feed, golf_status, golf_start_recording, golf_toggle_auto_recording, golf_toggle_pose_detection, golf_reload_models, golf_health, golf_set_user_context, api_my_students
 
 
 urlpatterns = [
@@ -27,4 +27,5 @@ urlpatterns = [
     path("golf/reload-models/", golf_reload_models, name="golf_reload_models"),
     path("golf/health/", golf_health, name="golf_health"),
     path('golf/set-user-context/', golf_set_user_context, name='golf_set_user_context'),
+    path('api/my-students/', api_my_students, name='api_my_students'),
 ]
