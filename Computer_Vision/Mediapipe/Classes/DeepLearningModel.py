@@ -9,7 +9,8 @@ from sklearn.metrics import confusion_matrix, classification_report, accuracy_sc
 import os
 import tensorflow as tf
 from .ModelFactory import ModelFactory
-from keras_tuner import RandomSearch
+from .Tuner import CVTuner
+import keras_tuner as kt
 from sklearn.model_selection import StratifiedKFold
 from sklearn.model_selection import KFold
 
@@ -30,7 +31,7 @@ class DeepLearningModel:
         if not model_fn:
             print("[INFO] Using default model")
             self.model = Sequential([
-                layers.Dense(512, activation='relu', input_shape=[self.inputShape]),
+                layers.Dense(512, activation='relu', input_shape=self.inputShape),
                 layers.Dense(256, activation='relu'),
                 layers.Dense(self.classCount, activation='softmax')
             ])
@@ -54,22 +55,53 @@ class DeepLearningModel:
         print('[INFO] Model compiled.')
 
 
-    def build_model_with_hp(self, hp):
+    def build_model_with_hp(self, hp, architecture):
         model = Sequential()
-        model.add(layers.Dense(
-            hp.Int("units1", 128, 512, step=64),
-            activation='relu',
-            input_shape=[self.inputShape]
-        ))
-        model.add(layers.Dropout(hp.Float("dropout1", 0.1, 0.7, step=0.1)))
-        model.add(layers.Dense(
-            hp.Int("units2", 64, 256, step=64),
-            activation='relu'
-        ))
-        model.add(layers.Dropout(hp.Float("dropout2", 0.1, 0.7, step=0.1)))
-        model.add(layers.Dense(self.classCount, activation='softmax'))
+        model.add(layers.Input(shape=self.inputShape))
 
-        # Compile inside this function
+        if architecture=="mlp":
+            model.add(layers.Dense(
+                hp.Int("units1", 128, 512, step=64),
+                activation='relu',
+            ))
+            model.add(layers.Dropout(hp.Float("dropout1", 0.1, 0.7, step=0.1)))
+            model.add(layers.Dense(
+                hp.Int("units2", 64, 256, step=64),
+                activation='relu'
+            ))
+            model.add(layers.Dropout(hp.Float("dropout2", 0.1, 0.7, step=0.1)))
+            model.add(layers.Dense(self.classCount, activation='softmax'))
+
+        else:
+            model.add(layers.Conv1D(
+                hp.Int("filters1", 16, 64, step=16),
+                hp.Choice("kernel_size", [3, 5]),
+                activation='relu',
+                padding='same'
+            ))
+            model.add(layers.MaxPooling1D(hp.Choice("pool_size", [2, 3])))
+            model.add(layers.Conv1D(
+                hp.Int("filters2", 32, 128, step=32),
+                hp.Choice("kernel_size", [3, 5]),
+                activation='relu',
+                padding='same'
+            ))
+            model.add(layers.MaxPooling1D(hp.Choice("pool_size", [2, 3])))
+            model.add(layers.Conv1D(
+                hp.Int("filters3", 32, 128, step=32),
+                hp.Choice("kernel_size", [3, 5]),
+                activation='relu',
+                padding='same'
+            ))
+            model.add(layers.GlobalMaxPooling1D())
+            model.add(layers.Dense(
+                hp.Int("dense_units", 64, 512, step=64),
+                activation='relu'
+            ))
+            model.add(layers.Dropout(hp.Float("dropout", 0.1, 0.7, step=0.1)))
+            model.add(layers.Dense(self.classCount, activation='softmax'))
+
+
         model.compile(
             optimizer=keras.optimizers.Adam(
                 learning_rate=hp.Float("lr", 1e-4, 1e-2, sampling='log')
@@ -382,19 +414,19 @@ class DeepLearningModel:
         }
     
     
-    def tune_hyperparameters_kerastuner(self, data, architecture_name, max_trials=20, epochs=200):
+    def tune_hyperparameters_kerastuner(self, directory, data, architecture_name, max_trials=20, epochs=200, cv_folds=5):
         """
-        Hyperparameter tuning using KerasTuner RandomSearch (no cross-validation).
-        Uses train/val split only.
+        Hyperparameter tuning using KerasTuner with Cross-Validation.
         Args:
             data: PoseDataset object
             architecture_name: ModelFactory architecture name
             max_trials: Number of hyperparameter sets to try
             epochs: Training epochs per trial
+            cv_folds: Number of cross-validation folds
         Returns:
             dict: Results with best hyperparameters and scores
         """
-        print(f"[INFO] Hyperparameter tuning (KerasTuner) for {architecture_name} (no CV)")
+        print(f"[INFO] Hyperparameter tuning (KerasTuner) with {cv_folds} for {architecture_name}")
         print(f"Max trials: {max_trials}, Epochs per trial: {epochs}")
 
         # Convert one-hot to sparse if needed
@@ -402,52 +434,68 @@ class DeepLearningModel:
             y_train_sparse = np.argmax(data.y_train, axis=1)
         else:
             y_train_sparse = data.y_train
+
         if len(data.y_val.shape) > 1 and data.y_val.shape[1] > 1:
             y_val_sparse = np.argmax(data.y_val, axis=1)
         else:
             y_val_sparse = data.y_val
 
+        # Combine train and validation sets for CV
+        X_full = np.concatenate([data.x_train, data.x_val])
+        y_full = np.concatenate([y_train_sparse, y_val_sparse])
+
         def build_wrapper(hp):
-            return self.build_model_with_hp(hp)
-        tuner = RandomSearch(
+            return self.build_model_with_hp(hp, architecture=architecture_name)
+
+        tuner = CVTuner(
             build_wrapper,
-            objective="val_accuracy",
+            objective=kt.Objective('score', direction='max'),
+            cv_folds=cv_folds,
             max_trials=max_trials,
             executions_per_trial=1,
-            directory="tuner_results",
-            project_name=architecture_name
+            directory=directory,
+            project_name=f"{architecture_name}_cv"
         )
+
         tuner.search(
-            data.x_train, y_train_sparse,
-            validation_data=(data.x_val, y_val_sparse),
-            epochs=epochs,
-            callbacks=[tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)],
-            verbose=1
+            X_full, y_full,
+            epochs=epochs
         )
+
         best_trial = tuner.oracle.get_best_trials(1)[0]
         hp = best_trial.hyperparameters
-        final_model = self.build_model_with_hp(hp)
-        # Train final model on full train+val set (sparse labels)
-        x_full = np.concatenate([data.x_train, data.x_val])
-        y_full = np.concatenate([y_train_sparse, y_val_sparse])
+        final_model = self.build_model_with_hp(hp, architecture=architecture_name)
+
         final_model.fit(
-            x_full,
+            X_full,
             y_full,
             epochs=epochs,
             callbacks=[tf.keras.callbacks.EarlyStopping(patience=10, restore_best_weights=True)],
             verbose=1
         )
         self.model = final_model
+
+        # Collect trial results
+        all_trials = []
+        for trial in tuner.oracle.get_best_trials(num_trials=max_trials):
+            # Get custom metrics from the tuner's trial_metrics dictionary
+            custom_metrics = tuner.trial_metrics.get(trial.trial_id, {})
+            
+            trial_data = {
+                **trial.hyperparameters.values,
+                "cv_score": trial.score,
+                "cv_std": custom_metrics.get("std", 0),
+                "cv_prec": custom_metrics.get("precision", 0),
+                "cv_recall": custom_metrics.get("recall", 0),
+            }
+            all_trials.append(trial_data)
+
+        # Return results
         return {
             "best_hyperparameters": best_trial.hyperparameters.values,
-            "best_score": best_trial.score,
-            "all_trials": [
-                {
-                    **trial.hyperparameters.values,
-                    "score": trial.score
-                }
-                for trial in tuner.oracle.get_best_trials(num_trials=max_trials)
-            ]
+            "best_cv_score": best_trial.score,
+            "cv_folds": cv_folds,
+            "all_trials": all_trials
         }
 
 

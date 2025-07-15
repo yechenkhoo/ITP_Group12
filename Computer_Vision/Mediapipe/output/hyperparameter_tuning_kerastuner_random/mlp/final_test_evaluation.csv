@@ -1,0 +1,2 @@
+architecture,best_cv_score,test_accuracy,test_precision,test_recall,best_hyperparameters
+mlp,0.9242856979370118,0.9375,0.9270820271682341,0.943019978106185,"{'units1': 384, 'dropout1': 0.4, 'units2': 192, 'dropout2': 0.2, 'lr': 0.00020924595191673076}"
