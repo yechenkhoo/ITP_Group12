@@ -97,7 +97,7 @@ class PoseDataset():
 
             print(f"Train: {len(self.x_train)}, Val: {len(self.x_val)}, Test: {len(self.x_test)}")
 
-    def split_dataset_manual(self, val_size=0.2, reshape=False):
+    def split_dataset_manual(self, test_size=0.2, reshape=False, random_state=None):
         """
         Manually splits the dataset:
         - Test set: rows where 'Image_Path' contains 'Charlie'
@@ -148,9 +148,9 @@ class PoseDataset():
 
         # Split trainval into train and val
         self.x_train, self.x_val, self.y_train, self.y_val, self.paths_train, self.paths_val = train_test_split(
-            x_trainval, y_trainval, paths_trainval, test_size=val_size, random_state=0)
+            x_trainval, y_trainval, paths_trainval, test_size=test_size, random_state=0)
 
-        print(f"Train: {len(self.x_train)}, Val: {len(self.x_val)}, Test (Charlie): {len(self.x_test)}")
+        print(f"Train: {len(self.x_train)}, Val: {len(self.x_val)}, Test (Tom): {len(self.x_test)}")
 
 
     

@@ -1,0 +1,2 @@
+architecture,best_cv_score,test_accuracy,test_precision,test_recall,best_hyperparameters
+cnn,0.9214285612106323,0.8152866363525391,0.6978959459771474,0.6994677661169415,"{'filters1': 32, 'kernel_size': 5, 'pool_size': 3, 'filters2': 96, 'filters3': 96, 'dense_units': 320, 'dropout': 0.4, 'lr': 0.002208829598563794}"

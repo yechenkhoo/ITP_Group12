@@ -94,11 +94,10 @@ class DeepLearningModel:
                 padding='same'
             ))
             model.add(layers.GlobalMaxPooling1D())
-            model.add(layers.Dense(
-                hp.Int("dense_units", 64, 512, step=64),
-                activation='relu'
-            ))
-            model.add(layers.Dropout(hp.Float("dropout", 0.1, 0.7, step=0.1)))
+            dense_units = hp.Int("dense_units", 64, 512, step=64)
+            model.add(layers.Dense(dense_units, activation='relu'))
+            dropout = hp.Float("dropout", 0.1, 0.7, step=0.1)
+            model.add(layers.Dropout(dropout))
             model.add(layers.Dense(self.classCount, activation='softmax'))
 
 
@@ -111,6 +110,47 @@ class DeepLearningModel:
         )
 
         return model
+    
+    def build_model_with_hp_layertuning(self, hp, architecture):
+        model = Sequential()
+        model.add(layers.Input(shape=self.inputShape))
+
+        if architecture == "mlp":
+            num_layers = hp.Int("num_dense_layers", 2, 5)
+            for i in range(num_layers):
+                units = hp.Int(f"units_{i+1}", 64, 512, step=64)
+                model.add(layers.Dense(units, activation='relu'))
+                dropout = hp.Float(f"dropout_{i+1}", 0.1, 0.7, step=0.1)
+                model.add(layers.Dropout(dropout))
+            model.add(layers.Dense(self.classCount, activation='softmax'))
+        else:
+            num_blocks = hp.Int("num_blocks", 1, 3)
+            num_layers_per_block = hp.Int("num_layers_per_block", 1, 3)
+            for b in range(num_blocks):
+                for l in range(num_layers_per_block):
+                    filters = hp.Int(f"filters_b{b+1}_l{l+1}", 16, 128, step=16)
+                    kernel_size = hp.Choice(f"kernel_size_b{b+1}_l{l+1}", [3, 5])
+                    model.add(layers.Conv1D(filters, kernel_size, activation='relu', padding='same'))
+                pool_size = hp.Choice(f"pool_size_b{b+1}", [2, 3])
+                model.add(layers.MaxPooling1D(pool_size))
+            model.add(layers.GlobalMaxPooling1D())
+            dense_units = hp.Int("dense_units", 64, 512, step=64)
+            model.add(layers.Dense(dense_units, activation='relu'))
+            dropout = hp.Float("dropout", 0.1, 0.7, step=0.1)
+            model.add(layers.Dropout(dropout))
+            model.add(layers.Dense(self.classCount, activation='softmax'))
+
+
+        model.compile(
+            optimizer=keras.optimizers.Adam(
+                learning_rate=hp.Float("lr", 1e-4, 1e-2, sampling='log')
+            ),
+            loss='sparse_categorical_crossentropy',
+            metrics=['accuracy']
+        )
+
+        return model
+    
 
     def add_callbacks(self, additional_callbacks=[]):
         # Default allback to save best model
@@ -445,7 +485,7 @@ class DeepLearningModel:
         y_full = np.concatenate([y_train_sparse, y_val_sparse])
 
         def build_wrapper(hp):
-            return self.build_model_with_hp(hp, architecture=architecture_name)
+            return self.build_model_with_hp_layertuning(hp, architecture=architecture_name)
 
         tuner = CVTuner(
             build_wrapper,
@@ -489,7 +529,6 @@ class DeepLearningModel:
                 "cv_recall": custom_metrics.get("recall", 0),
             }
             all_trials.append(trial_data)
-
         # Return results
         return {
             "best_hyperparameters": best_trial.hyperparameters.values,

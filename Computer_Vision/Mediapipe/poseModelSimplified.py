@@ -39,9 +39,9 @@ all_models = [
 ]
 
 results = {}
-path_csv = "dataset3.csv"
+path_csv = "dataset4.csv"
 # path_csv = "test_set.csv"
-test_run_name = "D3a_10"
+test_run_name = "D4_tomtest"
 folder = f"output/{test_run_name}"
 os.makedirs(folder, exist_ok=True)
 
@@ -55,7 +55,7 @@ for m in all_models:
     data = PoseDataset(path_csv)
     data.load_csv_data()
     # default: test_size=0.2, random_state=0
-    data.split_dataset(test_size=0.0, reshape=(not flatten), random_state=42)
+    data.split_dataset_manual(test_size=0.2, reshape=(not flatten), random_state=42)
     # data.split_dataset_manual(reshape=(not flatten))
     
 
@@ -88,36 +88,37 @@ for m in all_models:
         early_stopping
     ])
 
-    # Perform cross-validation to understand training data quality
-    print(f"\n[INFO] Running cross-validation for {model_name}...")
-    cv_results = model.cross_validate(data, k_folds=5, epochs=200, batch_size=16, log_dir=f"{path_to_save_diagrams}/cv_logs")
+    # # Perform cross-validation to understand training data quality
+    # print(f"\n[INFO] Running cross-validation for {model_name}...")
+    # cv_results = model.cross_validate(data, k_folds=5, epochs=200, batch_size=16, log_dir=f"{path_to_save_diagrams}/cv_logs")
     
-    # Save CV results
-    cv_df = pd.DataFrame({
-        'fold': range(1, len(cv_results['fold_accuracies']) + 1),
-        'accuracy': cv_results['fold_accuracies'],
-        'loss': cv_results['fold_losses'],
-        'f1_score': cv_results['fold_f1_scores'],
-        'precision': cv_results['fold_precisions'],
-        'recall': cv_results['fold_recalls']
-    })
-    cv_df.to_csv(f"{path_to_save_diagrams}_cv_results.csv", index=False)
-    print(f"[INFO] Cross-validation results saved to {path_to_save_diagrams}_cv_results.csv")
+    # # Save CV results
+    # cv_df = pd.DataFrame({
+    #     'fold': range(1, len(cv_results['fold_accuracies']) + 1),
+    #     'accuracy': cv_results['fold_accuracies'],
+    #     'loss': cv_results['fold_losses'],
+    #     'f1_score': cv_results['fold_f1_scores'],
+    #     'precision': cv_results['fold_precisions'],
+    #     'recall': cv_results['fold_recalls']
+    # })
+    # cv_df.to_csv(f"{path_to_save_diagrams}_cv_results.csv", index=False)
+    # print(f"[INFO] Cross-validation results saved to {path_to_save_diagrams}_cv_results.csv")
 
 
-    # # other params: epoch (default 200), batch_size (default 16)
-    # model.train(data, epochs=200)
+    # other params: epoch (default 200), batch_size (default 16)
+    model.train(data, epochs=200)
 
-    # model.plot_training_metrics(path_to_save_diagrams)
+    model.plot_training_metrics(path_to_save_diagrams)
 
-    # model.plot_confusion_matrix(data, path_to_save_diagrams, "val")
-    # model.plot_confusion_matrix(data, path_to_save_diagrams, "test")
+    model.plot_confusion_matrix(data, path_to_save_diagrams, "val")
+    model.plot_confusion_matrix(data, path_to_save_diagrams, "test")
 
-    # results[model_name] = model.valResults + model.testResults
+    results[model_name] = model.valResults + model.testResults
+    print(results[model_name])
 
-    # columns = ["val_acc", "val_prec", "val_rec", "val_f1", "test_acc", "test_prec", "test_rec", "test_f1"]
-    # print(results)
-    # df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
-    # df_rounded = df.round(3)
-    # df_rounded.to_csv(f"{folder}/Results.csv")
-    # print(f"[INFO] Saved in {folder}/Results.csv")
+    columns = ["val_acc", "val_prec", "val_rec", "test_acc", "test_prec", "test_rec"]
+    print(results)
+    df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+    df_rounded = df.round(3)
+    df_rounded.to_csv(f"{folder}/Results.csv")
+    print(f"[INFO] Saved in {folder}/Results.csv")

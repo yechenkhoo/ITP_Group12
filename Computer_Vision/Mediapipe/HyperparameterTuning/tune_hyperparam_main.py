@@ -19,8 +19,8 @@ def main():
 
     for architecture in architectures:
         print(f"\nArchitecture: {architecture}")
-        path_csv = "dataset3.csv"
-        test_run_name = "hyperparameter_tuning_kerastuner_bayesian"
+        path_csv = "dataset4.csv"
+        test_run_name = "hyperparameter_tuning_kerastuner_bayesian_layertuning_tomsplit"
         folder = f"output/{test_run_name}/{architecture}"
         os.makedirs(folder, exist_ok=True)
         
@@ -35,10 +35,10 @@ def main():
         # Reshape if CNN is selected
         if 'cnn' in architecture:
             print("[INFO] CNN architecture detected - reshaping input to (33, 4)")
-            data.split_dataset(test_size=0.2, reshape=True, random_state=42)
+            data.split_dataset_manual(test_size=0.2, reshape=True, random_state=42)
         else:
             print("[INFO] MLP architecture detected - using flattened input (132 features)")
-            data.split_dataset(test_size=0.2, reshape=False, random_state=42)
+            data.split_dataset_manual(test_size=0.2, reshape=False, random_state=42)
         
         print("\n[INFO] Dataset Summary:")
         print(f"  Train samples: {data.x_train.shape[0]}")
@@ -54,7 +54,7 @@ def main():
             name=f"{test_run_name}"
         )
         
-        # Run hyperparameter tuning
+        # Run hyperparameter tuning using Keras Tuner
         results = model.tune_hyperparameters_kerastuner(
             directory=folder,
             data=data,
@@ -63,16 +63,6 @@ def main():
             epochs=200,
             cv_folds=5
         )
-        
-        # # Run hyperparameter tuning
-        # results = model.tune_hyperparameters_archi(
-        #     data=data,
-        #     architecture_name=architecture,
-        #     k_folds=5,
-        #     max_trials=50,
-        #     epochs=200,
-        # )
-        
 
         # Save and report results
         print("\n[INFO] Tuning complete!")

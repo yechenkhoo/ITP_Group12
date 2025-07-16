@@ -95,6 +95,4 @@ class CVTuner(kt.BayesianOptimization):
         }
 
         print(f"  CV Score: {mean_cv_score:.4f} (+/- {std_cv_score:.4f})")
-        
-        # Return the metric that the tuner is optimizing for
         return mean_cv_score
