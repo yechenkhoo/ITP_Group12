@@ -3,120 +3,255 @@
 {% load custom_filters %}
 {% block dashboard_content %}
 <div class="flex h-full w-full md:p-6 p-1 pt-0">
-  
-  <!-- Rounded card that fits whole div -->
-  <div class="flex flex-col rounded-lg p-4 h-full w-full overflow-auto">    
+    <div class="flex flex-col rounded-lg p-4 h-full w-full overflow-auto relative" id="comment-area-container">
 
-    
-    <div class="top-6 left-6 mb-2">
-      <a href="{% url 'dashboard_dataSpace' studentID %}" class="inline-flex items-center p-2 text-sm font-medium text-gray-600 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
-        <!-- Icon (optional) -->
-        <svg class="w-5 h-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-        </svg>
-        <p class = "md:visible hidden ml-2">Back</p>
-      </a>
-    </div>
-    <!-- Video section -->
-    <div class="flex flex-col justify-center items-center mb-4" style="height: 80%;">
-      <video id="video-player" class="aspect-auto h-full rounded-lg mb-2" controls>
-        <source src="{{ video_url }}" type="video/mp4">
-        Your browser does not support the video tag.
-      </video>
-      
-    </div>
-    
-    <!-- Table with Data Points -->
-    <div class="mb-4">
-      <!-- <h2 class="text-xl font-medium text-gray-800 mb-2">Data Points</h2> -->
-      <div class="overflow-x-auto rounded-lg">
-        <table class="min-w-full border-b">
-          <thead class="bg-gray-100">
-            <tr>
-              {% for column in columns %}
-                <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">{{ column }}</th>
-              {% endfor %}
-              <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">Hip Turn</td>
-              <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">Hip Bend</td>
-              <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">Shoulder Sway</td>
-              <th class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">Hip Sway</td>
-            </tr>
+        <div class="flex items-center justify-between mb-4">
+            <div class="flex items-center">
+                <a href="{% url 'dashboard_dataSpace' studentID %}"
+                    class="inline-flex items-center p-2 text-sm font-medium text-gray-600 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <svg class="w-5 h-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none"
+                        viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+                    </svg>
+                    <p class="md:visible hidden ml-2">Back</p>
+                </a>
 
-          </thead>
-          <tbody class="bg-white">
-            {% for row in full_data %}
-              {% with row|get_item:"Overall Status" as status %}
-                <tr class="border-b hover:bg-indigo-200
-                  {% if status == 'Good' %} bg-green-100 
-                  {% elif status == 'Bad' %} bg-yellow-100 
-                  {% elif status == 'Very Bad' %} bg-red-100 
-                  {% else %} bg-white 
-                  {% endif %}"
-                  data-timestamp="{{ row|get_item:'Time Frame' }}">
-                    {% for column in columns  %}
-                      <td class="px-3 py-4 whitespace-nowrap">
-                        <div class="inline-flex items-center px-3 py-1 md:text-sm text-xs font-medium rounded-full
-                          {% with column_status_mapping|get_item:column as status_column %}
-                              {% if status_column %}
-                                  {% if row|get_item:status_column == 'Good' %} bg-green-100 text-green-800
-                                  {% elif row|get_item:status_column == 'Bad' %} bg-yellow-100 text-yellow-800
-                                  {% elif row|get_item:status_column == 'Very Bad' %} bg-red-100 text-red-800
-                                  {% else %} bg-gray-200 text-gray-800
-                                  {% endif %}
-                              {% endif %}
-                          {% endwith %}">
-                          {{ row|get_item:column }}
+                <h1 class="md:text-xl text-xs font-poppins text-gray-800 ml-6">
+                    {{ video_title }}
+                </h1>
+            </div>
+            <button id="add-comment-btn"
+                class="bg-gray-500 md:text-md text-xs text-white px-4 py-2 rounded hover:bg-gray-400 h-full">
+                Add Comment
+            </button>
+        </div>
+
+        <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-black/10" />
+
+        <div class="relative flex flex-col justify-center items-center flex-grow">
+            <div class="relative flex flex-col justify-center items-center mb-4 w-full" style="height: 60%;">
+                <video id="video-player" class="aspect-auto h-full rounded-lg mb-2" controls>
+                    <source src="{{ video_url }}" type="video/mp4">
+                    Your browser does not support the video tag.
+                </video>
+            </div>
+
+            <div class="mb-4 w-full"> <div class="flex justify-end mb-4 relative">
+                    <button id="download-pdf-btn"
+                        class="mr-2 flex-shrink-0 rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 inline-flex items-center"
+                        data-video-title="{{ video_title|slugify }}">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M12 10v6m0 0l-3-3m3 3l3-3m2 8H5a2 2 0 01-2-2v-8a2 2 0 012-2h5l2-2h4a2 2 0 012 2v8a2 2 0 01-2 2z">
+                            </path>
+                        </svg>
+                        Download as PDF
+                    </button>
+
+                    <button id="filter-dropdown-btn"
+                        class="ml-2 flex-shrink-0 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 inline-flex items-center">
+                        <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                            xmlns="http://www.w3.org/2000/svg">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V19l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z">
+                            </path>
+                        </svg>
+                        Filter
+                    </button>
+
+                    {# Filter Dropdown Panel #}
+                    <div id="filter-panel"
+                        class="absolute right-0 mt-12 w-[48rem] bg-white rounded-lg shadow-lg p-4 z-10 max-h-96 overflow-y-auto hidden">
+                        <div id="filter-options-container" class="flex flex-wrap -mx-2">
+                            {# Checkboxes will be injected here by JavaScript #}
                         </div>
-                    </td>
-                    {% endfor %}
-                    <td class="px-6 py-4 whitespace-nowrap">-</td>
-                    <td class="px-6 py-4 whitespace-nowrap">-</td>
-                    <td class="px-6 py-4 whitespace-nowrap">-</td>
-                    <td class="px-6 py-4 whitespace-nowrap">-</td>
-                </tr>
-                {% endwith %}
-            {% endfor %}
-        </tbody>
-        </table>
-      </div>
-    </div>
-    <form action="{% url 'results' studentID videoId %}" method="POST">
-    {% csrf_token %}
-    <div class="mx-auto mt-4 rounded-lg w-full">
-      <!-- Input for new feedback -->
-      <div class="flex items-center mb-4 w-full">
-        <input 
-          type="text" 
-          name="feedback"
-          placeholder="Create a new feedback" 
-          class="flex-grow w-full md:text-md text-sm p-2 rounded-lg border border-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        />
-        <button 
-          type="submit" 
-          class="ml-2 flex-shrink-0 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500"
-        >
-          +
-        </button>
-      </div>
-    </form>
+                        <div class="flex justify-end mt-4">
+                            <button id="apply-filters-btn"
+                                class="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-500 mr-2">Apply</button>
+                            <button id="clear-filters-btn"
+                                class="bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm hover:bg-gray-400">Clear</button>
+                        </div>
+                    </div>
+                </div>
+                <div class="overflow-x-auto rounded-lg">
+                    <table class="min-w-full border-b" id="data-table">
+                        <thead class="bg-gray-100">
+                            <tr>
+                                <th
+                                    class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                                    Thumbnail</th>
+                                {% for column in columns %}
+                                {# MODIFIED: Do not display the thumbnail URL column header #}
+                                {% if column != "Time Frame" and column != "pose_thumbnail_url" %}
+                                <th
+                                    class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
+                                    {{ column }}
+                                </th>
+                                {% endif %}
+                                {% endfor %}
+                            </tr>
 
-  
-      {% for feedback in comments %}
-      <!-- Chat message -->
-      <div class="p-4 md:mb-4 mb-2 bg-white rounded-lg shadow">
-          <div class="flex justify-between mb-2">
-              <span class="md:text-md text-sm font-medium italic text-gray-600">{{ feedback.CommentedBy}}</span>
-              <span class="md:text-sm text-xs font-medium text-gray-600"> {{ feedback.DateCommented }}</span>
-          </div>
-          <p class="md:text-sm text-xs text-gray-700">
-            {{ feedback.Comment }}
-          </p>
-      </div>
-      {% endfor %}
-  </div>
-  
-    
-  </div>
+                        </thead>
+                        <tbody class="bg-white">
+                            {% for row in full_data %}
+                            {% with row|get_item:"Overall Status" as status %}
+                            <tr class="border-b hover:bg-indigo-200
+                                {% if status == 'Good' %} bg-green-100
+                                {% elif status == 'Bad' %} bg-yellow-100
+                                {% elif status == 'Very Bad' %} bg-red-100
+                                {% else %} bg-white
+                                {% endif %}" data-timestamp="{{ row|get_item:'Time Frame' }}" data-body-tilt="
+                                {% if row|get_item:'Shoulder Tilt Detail' %}{{ row|get_item:'Shoulder Tilt Detail' }}{% endif %}
+                                {% if row|get_item:'Hip Tilt Detail' %}{{ row|get_item:'Hip Tilt Detail' }}{% endif %}
+                                ">
+                                 {# --- MODIFIED: Display the pose class thumbnail --- #}
+                                <td class="px-3 py-4 whitespace-nowrap">
+                                    {% with row|get_item:"pose_thumbnail_url" as thumb_url %}
+                                        {% if thumb_url %}
+                                            <img src="{{ thumb_url }}" alt="Pose Thumbnail" class="rounded-md" style="width: 80px; height: auto;" />
+                                        {% else %}
+                                            <span class="text-xs text-gray-500">No Thumbnail</span>
+                                        {% endif %}
+                                    {% endwith %}
+                                </td>
+                                {% for column in columns %}
+                                {# MODIFIED: Do not display the thumbnail URL as text #}
+                                {% if column != "Time Frame" and column != "pose_thumbnail_url" %}
+                                <td class="px-3 py-4 whitespace-nowrap">
+                                    <div class="inline-flex items-center px-3 py-1 md:text-sm text-xs font-medium rounded-full
+                                        {% with column_status_mapping|get_item:column as status_column %}
+                                            {% if status_column %}
+                                                {% if row|get_item:status_column == 'Good' %} bg-green-100 text-green-800
+                                                {% elif row|get_item:status_column == 'Bad' %} bg-yellow-100 text-yellow-800
+                                                {% elif row|get_item:status_column == 'Very Bad' %} bg-red-100 text-red-800
+                                                {% else %} bg-gray-200 text-gray-800
+                                                {% endif %}
+                                            {% endif %}
+                                        {% endwith %}">
+                                        {% if column == "Overall Status" %}
+                                        {{ status }}
+                                        {% else %}
+                                        {{ row|get_item:column }}
+                                        {% endif %}
+                                    </div>
+                                </td>
+                                {% endif %}
+                                {% endfor %}
+                            </tr>
+                            {% endwith %}
+                            {% endfor %}
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div id="draggable-comments-container" class="absolute inset-0 z-20 pointer-events-none">
+            </div>
+        </div>
+        {# --- PDF CONTENT START --- #}
+        <div id="pdf-content"
+            style="position: absolute; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;">
+            <h1 class="text-xl font-bold mb-4">{{ video_title }} - Results Analysis</h1>
+            <table class="min-w-full border-b" id="pdf-data-table">
+                <thead class="bg-gray-100">
+                    <tr>
+                        <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider bg-white">
+                            Thumbnail
+                        </th>
+                        {% for column in columns %}
+                        {% if column != "Time Frame" and column != "pose_thumbnail_url" %}
+                        <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider bg-white">
+                            {{ column }}
+                        </th>
+                        {% endif %}
+                        {% endfor %}
+                    </tr>
+                </thead>
+                <tbody class="bg-white">
+                    {% for row in full_data %}
+                    {% with row|get_item:"Overall Status" as status %}
+                    <tr class="border-b
+                        {% if status == 'Good' %} bg-green-100
+                        {% elif status == 'Bad' %} bg-yellow-100
+                        {% elif status == 'Very Bad' %} bg-red-100
+                        {% else %} bg-white
+                        {% endif %}">
+                        {# --- MODIFIED: Display the pose class thumbnail in PDF content --- #}
+                        <td class="px-3 py-4 whitespace-nowrap">
+                            {% with row|get_item:"pose_thumbnail_url" as thumb_url %}
+                                {% if thumb_url %}
+                                    <img src="{{ thumb_url }}" alt="Pose Thumbnail" class="rounded-md" style="width: 80px; height: auto;" />
+                                {% else %}
+                                     <span class="text-xs text-gray-500">No Thumbnail</span>
+                                {% endif %}
+                            {% endwith %}
+                        </td>
+                        {% for column in columns %}
+                        {% if column != "Time Frame" and column != "pose_thumbnail_url" %}
+                        <td class="px-3 py-4 whitespace-nowrap">
+                            <div class="inline-flex items-center px-3 py-1 font-medium rounded-full
+                                {% with column_status_mapping|get_item:column as status_column %}
+                                    {% if status_column %}
+                                        {% if row|get_item:status_column == 'Good' %} bg-green-100 text-green-800
+                                        {% elif row|get_item:status_column == 'Bad' %} bg-yellow-100 text-yellow-800
+                                        {% elif row|get_item:status_column == 'Very Bad' %} bg-red-100 text-red-800
+                                        {% else %} bg-gray-200 text-gray-800
+                                        {% endif %}
+                                    {% endif %}
+                                {% endwith %}">
+                                {% if column == "Overall Status" %}
+                                {{ status }}
+                                {% else %}
+                                {{ row|get_item:column }}
+                                {% endif %}
+                            </div>
+                        </td>
+                        {% endif %}
+                        {% endfor %}
+                    </tr>
+                    {% endwith %}
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+        {# --- PDF CONTENT END --- #}
+
+        <div id="comment-modal"
+            class="fixed inset-0 bg-gray-600 bg-opacity-50 flex items-center justify-center z-50 hidden">
+            <div class="bg-white rounded-lg p-6 shadow-lg w-96">
+                <h2 class="text-xl font-semibold mb-4">Add Your Comment</h2>
+                <textarea id="comment-input"
+                    class="w-full p-2 border border-gray-300 rounded-md mb-4 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    rows="4" placeholder="Enter your comment here..."></textarea>
+                <div class="flex justify-end">
+                    <button id="cancel-comment-btn"
+                        class="bg-gray-300 text-gray-800 px-4 py-2 rounded-md mr-2 hover:bg-gray-400">Cancel</button>
+                    <button id="save-comment-btn"
+                        class="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-500">Save Comment</button>
+                </div>
+            </div>
+        </div>
+
+        <div id="comment-data" data-student-id="{{ studentID }}" data-video-id="{{ videoId }}"
+            data-csrf-token="{{ csrf_token }}"
+            data-add-comment-url="{% url 'add_video_comment_ajax' studentID videoId %}"
+            data-update-comment-url="{% url 'update_comment_position_ajax' studentID videoId %}"
+            data-delete-comment-url="{% url 'delete_video_comment_ajax' studentID videoId %}"
+            data-edit-comment-url="{% url 'edit_video_comment_ajax' studentID videoId %}"
+            data-add-reply-url="{% url 'add_video_reply_ajax' studentID videoId %}"
+            data-edit-reply-url="{% url 'edit_video_reply_ajax' studentID videoId %}"
+            data-delete-reply-url="{% url 'delete_video_reply_ajax' studentID videoId %}"
+            data-mark-read-url="{% url 'mark_comment_read' studentID videoId %}"
+            data-current-user-name="{{ current_user_name }}">
+        </div>
+
+    </div>
 </div>
+{{ comments|json_script:"initial-comments-json" }}
+
 <script src="{% static 'js/video-player.js' %}"></script>
+<script src="{% static 'js/dashboard_filter.js' %}"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
+<script src="{% static 'js/dashboard_downloadPdf.js' %}"></script>
+<script src="{% static 'js/dashboard_comments.js' %}"></script>
 {% endblock dashboard_content %}
