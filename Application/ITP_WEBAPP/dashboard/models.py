@@ -324,7 +324,7 @@ class Video:
             # Prepare the request payload
             payload = {
                 
-                "classification_model": "basemodel.keras",
+                "classification_model": "best_model.keras",
                 "video_id":video_id,
                 "video_path": file_path,
                 "output_video_path": f"processed/{file_path.split('/')[-1]}",

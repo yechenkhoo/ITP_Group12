@@ -6,6 +6,7 @@ import os
 from datetime import datetime
 from pymongo import MongoClient
 import traceback
+from bson import ObjectId
 
 # MongoDB setup
 MONGO_URI = "mongodb+srv://ITP_AUTH:SXgJ9MGaEVBKZmN@itpteam13.wtajb.mongodb.net/"
@@ -13,6 +14,29 @@ mongo_client = MongoClient(MONGO_URI)
 db = mongo_client["ITP"]
 collection = db["Videos"]
 users_collection = db["Users"]
+
+def find_user_by_objectid(user_id_str):
+    """Find user by ObjectId extracted from filename"""
+    if not user_id_str:
+        return None
+        
+    try:
+        # Convert the string from the filename into a real ObjectId
+        uploaded_by_oid = ObjectId(user_id_str)
+        
+        # Search the database for a document where the '_id' field matches
+        user_doc = users_collection.find_one({"_id": uploaded_by_oid})
+        
+        if user_doc:
+            print(f"Successfully found user '{user_doc.get('Name')}' by ID: {user_id_str}")
+            return user_doc
+        else:
+            print(f"User with ID '{user_id_str}' not found in the database.")
+            return None
+            
+    except Exception as e:
+        print(f"Error looking up user by ID in MongoDB: {e}")
+        return None
 
 @functions_framework.cloud_event
 def process_uploaded_video(cloud_event):
@@ -23,25 +47,49 @@ def process_uploaded_video(cloud_event):
 
         print(f"Processing file: {file_name} in bucket: {bucket_name}")
 
+        # Check if file is in the golf_videos folder (old structure)
         if not file_name.startswith('golf_videos/'):
             print(f"Ignoring file {file_name} - not in golf_videos folder")
             return "OK"
 
+        # Check if it's a video file
         video_extensions = ['.mp4', '.mov', '.avi', '.mkv', '.webm']
         if not any(file_name.lower().endswith(ext) for ext in video_extensions):
             print(f"Ignoring file {file_name} - not a video file")
             return "OK"
 
-        print(f"Processing new video: {file_name} in bucket: {bucket_name}")
+        print(f"Processing video: {file_name} in bucket: {bucket_name}")
 
+        # Extract filename and video ID
         video_filename = os.path.basename(file_name)
         video_id = os.path.splitext(video_filename)[0]
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
 
+        # --- PARSE USER ID FROM FILENAME (using ObjectId approach from main(5).py) ---
+        user_id_str = None
+        uploaded_by = None
+        assignee = None
+        
+        if "_" in video_filename:
+            user_id_str = video_filename.split("_")[0]
+            print(f"Extracted user ID string: {user_id_str}")
+            
+            user_doc = find_user_by_objectid(user_id_str)
+            if user_doc:
+                uploaded_by = user_doc.get("_id")
+                assignee = user_doc.get("_id")
+                print(f"Found user ID: {uploaded_by}")
+            else:
+                print(f"User not found with ID: {user_id_str}")
+        else:
+            print(f"No underscore in video_filename: {video_filename}, cannot extract user ID")
+
+        # Generate output paths
         output_video_path = f"processed/{video_id}_output_{timestamp}.mp4"
         output_csv_path = f"processed/{video_id}_output_{timestamp}.csv"
         output_angle_csv_path = f"processed/{video_id}_angles_{timestamp}.csv"
 
+        # API payload
         api_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
 
         payload = {
@@ -71,46 +119,19 @@ def process_uploaded_video(cloud_event):
             frame_csv_link = response_data.get("output_csv")
             processed_video = response_data.get("output_video")
 
-            # Enhanced user lookup with better error handling
-            user_name = None
-            uploaded_by = None
-            assignee = None
-            
+            # MongoDB operations
             try:
-                # Extract user ID from filename (e.g., nick_video1.mp4 → "nick")
-                if "_" in video_id:
-                    user_name = video_id.split("_")[0]
-                    print(f"Extracted user name: {user_name}")
-                    
-                    # Try to find user - check what field names actually exist
-                    user = users_collection.find_one({"Name": user_name})
-                    if not user:
-                        # Try alternative field names
-                        user = users_collection.find_one({"name": user_name})
-                    if not user:
-                        user = users_collection.find_one({"username": user_name})
-                    
-                    if user:
-                        print(f"Found user: {user}")
-                        uploaded_by = user.get("_id")
-                        assignee = user.get("CreatedBy")
-                    else:
-                        print(f"No user found with name: {user_name}")
-                        # Let's see what users actually exist
-                        sample_users = list(users_collection.find().limit(3))
-                        print(f"Sample users in database: {sample_users}")
+                # Look for existing video record
+                query_filter = {"Title": video_filename}
+                
+                # Add UploadedBy to query only if we have a valid user
+                if uploaded_by is not None:
+                    query_filter["UploadedBy"] = uploaded_by
+                    print(f"Searching for existing video with title: {video_filename} and UploadedBy: {uploaded_by}")
                 else:
-                    print(f"No underscore in video_id: {video_id}, cannot extract user name")
-                    
-            except Exception as user_error:
-                print(f"Error during user lookup: {str(user_error)}")
-                print(f"Traceback: {traceback.format_exc()}")
-
-            # MongoDB operations with error handling
-            try:
-                # Check if video already exists
-                existing = collection.find_one({"Title": video_filename})
-                print(f"Checking for existing video with title: {video_filename}")
+                    print(f"Searching for existing video with title: {video_filename} (no user found)")
+                
+                existing = collection.find_one(query_filter)
 
                 if existing:
                     print(f"Found existing record: {existing['_id']}")
@@ -122,7 +143,9 @@ def process_uploaded_video(cloud_event):
                                 "frameByFrameCsvLink": frame_csv_link,
                                 "processedVideoLink": processed_video,
                                 "Status": "Completed",
-                                "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y")
+                                "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
+                                "originalVideoPath": file_name,
+                                "processedTimestamp": datetime.now().isoformat()
                             }
                         }
                     )
@@ -130,16 +153,24 @@ def process_uploaded_video(cloud_event):
                     print(f"Updated existing record for {video_filename}")
                 else:
                     print("No existing record found, creating new document")
+                    
+                    # Check if there's any video with same title (different user)
+                    any_existing = collection.find_one({"Title": video_filename})
+                    if any_existing:
+                        print(f"Warning: Found video with same title but different user: {any_existing.get('UploadedBy')}")
+                    
                     new_doc = {
                         "Title": video_filename,
-                        "Type": "face-on",
+                        "Type": "face-on",  # Default type for old structure
                         "DateUploaded": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "Status": "Completed",
                         "UploadedBy": uploaded_by,
                         "Assignee": assignee,
                         "angleCsvLink": angle_link,
                         "frameByFrameCsvLink": frame_csv_link,
-                        "processedVideoLink": processed_video
+                        "processedVideoLink": processed_video,
+                        "originalVideoPath": file_name,
+                        "processedTimestamp": datetime.now().isoformat()
                     }
                     print(f"Inserting document: {json.dumps(new_doc, indent=2, default=str)}")
                     
@@ -150,30 +181,79 @@ def process_uploaded_video(cloud_event):
             except Exception as mongo_error:
                 print(f"MongoDB operation failed: {str(mongo_error)}")
                 print(f"Traceback: {traceback.format_exc()}")
-                # Continue execution even if MongoDB fails
+
                 
         else:
             print(f"API request failed with status {response.status_code}: {response.text}")
             
-            # Still try to create a record with failed status
+            # Handle failed API calls
             try:
-                new_doc = {
-                    "Title": video_filename,
-                    "Type": "face-on",
-                    "DateUploaded": datetime.now().strftime("%H:%M %b %d, %Y"),
-                    "Status": "Failed",
-                    "Error": f"API failed with status {response.status_code}",
-                    "UploadedBy": None,
-                    "Assignee": None
-                }
-                collection.insert_one(new_doc)
-                print(f"Inserted failed record for {video_filename}")
+                # Look for existing record to update with error
+                query_filter = {"Title": video_filename}
+                if uploaded_by is not None:
+                    query_filter["UploadedBy"] = uploaded_by
+
+                existing = collection.find_one(query_filter)
+                
+                if existing:
+                    # Update existing record with error status
+                    collection.update_one(
+                        {"_id": existing["_id"]},
+                        {
+                            "$set": {
+                                "Status": "Failed",
+                                "Error": f"API failed with status {response.status_code}",
+                                "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
+                                "ErrorDetails": response.text[:500] if response.text else "Unknown error",
+                                "originalVideoPath": file_name
+                            }
+                        }
+                    )
+                    print(f"Updated existing record with error status for {video_filename}")
+                else:
+                    # Create new record with failed status
+                    new_doc = {
+                        "Title": video_filename,
+                        "Type": "face-on",
+                        "DateUploaded": datetime.now().strftime("%H:%M %b %d, %Y"),
+                        "Status": "Failed",
+                        "Error": f"API failed with status {response.status_code}",
+                        "ErrorDetails": response.text[:500] if response.text else "Unknown error",
+                        "UploadedBy": uploaded_by,
+                        "Assignee": assignee,
+                        "originalVideoPath": file_name
+                    }
+                    collection.insert_one(new_doc)
+                    print(f"Inserted failed record for {video_filename}")
+                    
             except Exception as mongo_error:
-                print(f"Failed to insert error record: {str(mongo_error)}")
+                print(f"Failed to handle error record: {str(mongo_error)}")
 
     except requests.exceptions.RequestException as e:
         print(f"Error calling API: {str(e)}")
         print(f"Traceback: {traceback.format_exc()}")
+        
+        # Try to create/update record with network error status
+        try:
+            video_filename = os.path.basename(file_name)
+            
+            existing = collection.find_one({"Title": video_filename})
+            if existing:
+                collection.update_one(
+                    {"_id": existing["_id"]},
+                    {
+                        "$set": {
+                            "Status": "Failed",
+                            "Error": "Network error calling ML API",
+                            "ErrorDetails": str(e),
+                            "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y")
+                        }
+                    }
+                )
+                print(f"Updated record with network error for {video_filename}")
+        except Exception as final_error:
+            print(f"Final error handling failed: {str(final_error)}")
+            
     except Exception as e:
         print(f"Unexpected error: {str(e)}")
         print(f"Traceback: {traceback.format_exc()}")
