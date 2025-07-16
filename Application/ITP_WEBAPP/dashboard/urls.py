@@ -7,7 +7,9 @@ from .views import (
     edit_video_comment_ajax,
     add_video_reply_ajax,
     edit_video_reply_ajax,
-    delete_video_reply_ajax
+    delete_video_reply_ajax,
+    mark_comment_read,
+    check_video_status_ajax
 )
 
 urlpatterns = [
@@ -28,6 +30,10 @@ urlpatterns = [
     path('dataSpace/<str:id>/results/<str:VideoId>/add_reply_ajax/', add_video_reply_ajax, name='add_video_reply_ajax'),
     path('dataSpace/<str:id>/results/<str:VideoId>/edit_reply_ajax/', edit_video_reply_ajax, name='edit_video_reply_ajax'),
     path('dataSpace/<str:id>/results/<str:VideoId>/delete_reply_ajax/', delete_video_reply_ajax, name='delete_video_reply_ajax'),
+    path('dataSpace/<str:id>/results/<str:VideoId>/mark_read_ajax/', mark_comment_read, name='mark_comment_read'),
+
+    # New AJAX endpoint for video statuses
+    path('dataSpace/<str:id>/check_video_status_ajax/<str:video_id>/', check_video_status_ajax, name='check_video_status_ajax'),
 
     path("", home, name="home"),
 

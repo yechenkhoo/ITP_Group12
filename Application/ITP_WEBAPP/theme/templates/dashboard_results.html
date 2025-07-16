@@ -34,14 +34,6 @@
                     <source src="{{ video_url }}" type="video/mp4">
                     Your browser does not support the video tag.
                 </video>
-                {# --- OPTIONAL: Display thumbnail separately if desired --- #}
-                {% if thumbnail_url %}
-                <div class="mt-2 text-center">
-                    <p class="text-sm text-gray-600 mb-1">Pose Class Thumbnail:</p>
-                    <img src="{{ thumbnail_url }}" alt="Pose Class Thumbnail" class="mx-auto rounded-lg"
-                        style="max-width: 150px; height: auto;">
-                </div>
-                {% endif %}
             </div>
 
             <div class="mb-4 w-full"> <div class="flex justify-end mb-4 relative">
@@ -90,7 +82,8 @@
                                     class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                                     Thumbnail</th>
                                 {% for column in columns %}
-                                {% if column != "Time Frame" %}
+                                {# MODIFIED: Do not display the thumbnail URL column header #}
+                                {% if column != "Time Frame" and column != "pose_thumbnail_url" %}
                                 <th
                                     class="px-6 py-3 text-left md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white">
                                     {{ column }}
@@ -112,15 +105,19 @@
                                 {% if row|get_item:'Shoulder Tilt Detail' %}{{ row|get_item:'Shoulder Tilt Detail' }}{% endif %}
                                 {% if row|get_item:'Hip Tilt Detail' %}{{ row|get_item:'Hip Tilt Detail' }}{% endif %}
                                 ">
+                                 {# --- MODIFIED: Display the pose class thumbnail --- #}
                                 <td class="px-3 py-4 whitespace-nowrap">
-                                    {% if row.thumbnail_url %} {# Use row.thumbnail_url now #}
-                                    <img src="{{ row.thumbnail_url }}" alt="Thumbnail" style="width: 80px; height: auto;" />
-                                    {% else %}
-                                    No Thumbnail
-                                    {% endif %}
+                                    {% with row|get_item:"pose_thumbnail_url" as thumb_url %}
+                                        {% if thumb_url %}
+                                            <img src="{{ thumb_url }}" alt="Pose Thumbnail" class="rounded-md" style="width: 80px; height: auto;" />
+                                        {% else %}
+                                            <span class="text-xs text-gray-500">No Thumbnail</span>
+                                        {% endif %}
+                                    {% endwith %}
                                 </td>
                                 {% for column in columns %}
-                                {% if column != "Time Frame" %}
+                                {# MODIFIED: Do not display the thumbnail URL as text #}
+                                {% if column != "Time Frame" and column != "pose_thumbnail_url" %}
                                 <td class="px-3 py-4 whitespace-nowrap">
                                     <div class="inline-flex items-center px-3 py-1 md:text-sm text-xs font-medium rounded-full
                                         {% with column_status_mapping|get_item:column as status_column %}
@@ -148,11 +145,10 @@
                     </table>
                 </div>
             </div>
-            <div id="draggable-comments-container" class="absolute inset-0 z-20">
+            <div id="draggable-comments-container" class="absolute inset-0 z-20 pointer-events-none">
             </div>
         </div>
         {# --- PDF CONTENT START --- #}
-        {# Use absolute positioning and opacity to hide it, but keep it rendered #}
         <div id="pdf-content"
             style="position: absolute; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;">
             <h1 class="text-xl font-bold mb-4">{{ video_title }} - Results Analysis</h1>
@@ -163,7 +159,7 @@
                             Thumbnail
                         </th>
                         {% for column in columns %}
-                        {% if column != "Time Frame" %}
+                        {% if column != "Time Frame" and column != "pose_thumbnail_url" %}
                         <th class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider bg-white">
                             {{ column }}
                         </th>
@@ -180,15 +176,18 @@
                         {% elif status == 'Very Bad' %} bg-red-100
                         {% else %} bg-white
                         {% endif %}">
+                        {# --- MODIFIED: Display the pose class thumbnail in PDF content --- #}
                         <td class="px-3 py-4 whitespace-nowrap">
-                            {% if row.thumbnail_url %} {# Use row.thumbnail_url here too #}
-                            <img src="{{ row.thumbnail_url }}" alt="Thumbnail" style="width: 80px; height: auto;" />
-                            {% else %}
-                            No Thumbnail
-                            {% endif %}
+                            {% with row|get_item:"pose_thumbnail_url" as thumb_url %}
+                                {% if thumb_url %}
+                                    <img src="{{ thumb_url }}" alt="Pose Thumbnail" class="rounded-md" style="width: 80px; height: auto;" />
+                                {% else %}
+                                     <span class="text-xs text-gray-500">No Thumbnail</span>
+                                {% endif %}
+                            {% endwith %}
                         </td>
                         {% for column in columns %}
-                        {% if column != "Time Frame" %}
+                        {% if column != "Time Frame" and column != "pose_thumbnail_url" %}
                         <td class="px-3 py-4 whitespace-nowrap">
                             <div class="inline-flex items-center px-3 py-1 font-medium rounded-full
                                 {% with column_status_mapping|get_item:column as status_column %}
@@ -242,6 +241,7 @@
             data-add-reply-url="{% url 'add_video_reply_ajax' studentID videoId %}"
             data-edit-reply-url="{% url 'edit_video_reply_ajax' studentID videoId %}"
             data-delete-reply-url="{% url 'delete_video_reply_ajax' studentID videoId %}"
+            data-mark-read-url="{% url 'mark_comment_read' studentID videoId %}"
             data-current-user-name="{{ current_user_name }}">
         </div>
 
@@ -250,7 +250,7 @@
 {{ comments|json_script:"initial-comments-json" }}
 
 <script src="{% static 'js/video-player.js' %}"></script>
-<script src="{% static 'js/dashboard_tableFilter.js' %}"></script>
+<script src="{% static 'js/dashboard_filter.js' %}"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
 <script src="{% static 'js/dashboard_downloadPdf.js' %}"></script>
 <script src="{% static 'js/dashboard_comments.js' %}"></script>

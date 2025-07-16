@@ -80,7 +80,7 @@ function initializeCommentsSystem() {
     // IMPORTANT: draggableCommentsContainer should *always* have pointer-events: auto
     // so that individual comment icons (which are children) can be clicked and hovered.
     if (draggableCommentsContainer) {
-        draggableCommentsContainer.style.pointerEvents = 'auto';
+        draggableCommentsContainer.style.pointerEvents = 'none';
     }
 
 
@@ -427,6 +427,9 @@ function initializeCommentsSystem() {
 
         // 1. The main comment container (now the visual icon with solid black border)
         const commentContainerDiv = document.createElement('div');
+        // now make this icon itself clickable/draggable
+        commentContainerDiv.style.pointerEvents = 'auto';
+
         commentContainerDiv.id = comment.id;
         commentContainerDiv.className = 'absolute z-30 w-8 h-8 bg-blue-500 rounded-full flex items-center justify-center text-sm font-bold border-2 border-black hover:bg-blue-600 transition-colors duration-200 focus:outline-none focus:ring-0 cursor-grab';
         // This positions the icon's center directly at (x_pos, y_pos).
@@ -436,6 +439,14 @@ function initializeCommentsSystem() {
 
         // The SVG element directly inside the commentContainerDiv
         commentContainerDiv.innerHTML = `<svg class="w-6 h-6" fill="white" stroke="black" stroke-width="1.5" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.336-3.11c-.813-1.013-1.336-2.31-1.336-3.89C2 6.134 5.582 3 10 3s8 3.134 8 7z" clip-rule="evenodd"></path></svg>`;
+            // if this comment is unread by the current user, show a tiny red "new" badge
+        if (!isCommentAuthor && comment.unread) {
+            const badge = document.createElement('span');
+            badge.className = 'comment-new-badge absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold rounded px-1';
+            badge.textContent = 'new';
+            commentContainerDiv.appendChild(badge);
+        }
+
 
         // 2. Preview content (hidden by default, shown on hover)
         const previewContent = document.createElement('div');
@@ -456,6 +467,10 @@ function initializeCommentsSystem() {
 
         // 3. Full content overlay (hidden by default, shown on click)
         const fullContentOverlayElement = document.createElement('div');
+        // allow clicks inside the comment pop‑up
+        fullContentOverlayElement.style.pointerEvents = 'auto';
+
+
         // Changed from fixed modal to absolute popup
         fullContentOverlayElement.className = 'absolute bg-white rounded-lg shadow-2xl p-6 w-96 transform transition-all duration-300 ease-out opacity-0 scale-95 pointer-events-none invisible z-[100] max-h-[90vh] flex flex-col overflow-hidden';
         fullContentOverlayElement.style.minWidth = '300px'; // Ensure a reasonable minimum width for the popup

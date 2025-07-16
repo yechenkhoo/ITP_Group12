@@ -1,3 +1,5 @@
+# dashboard/models.py
+
 from django.db import models
 from db_connection import MONGO_CLIENT
 from bson import ObjectId
@@ -13,6 +15,8 @@ import time
 from concurrent.futures import ThreadPoolExecutor
 import io
 import traceback # Import traceback for detailed error logging
+import random
+import json # Ensure json module is imported for JSONDecodeError
 
 # MongoDB collections
 Users_Collection = MONGO_CLIENT['Users']
@@ -128,9 +132,9 @@ class Video:
         
         try:
             # Read file into memory
-            file_data = file.read()  # Read file data as bytes
-            file_name = file.name  # Preserve the file name
-            content_type = file.content_type  # Preserve the content type
+            file_data = file.read()   # Read file data as bytes
+            file_name = file.name   # Preserve the file name
+            content_type = file.content_type   # Preserve the content type
 
             # Submit the task to the executor
             future = Video.executor.submit(
@@ -169,7 +173,6 @@ class Video:
             bucket = storage_client.bucket(bucket_name)
 
             # Generate a unique blob name
-            unique_id = uuid.uuid4().hex  # Generate a unique ID
             blob_name = f'golf_videos/{file_name}'
 
             # Create a file-like object from the in-memory data
@@ -179,17 +182,25 @@ class Video:
             blob = bucket.blob(blob_name)
             blob.upload_from_file(file_stream, content_type=content_type)
 
+            # --- NEW: Construct the public URL for the raw video ---
+            raw_video_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+
             if not blob.exists():
                 print("Error: File does not exist in GCS.")
                 time.sleep(2)
             
-            video_id = str(result.inserted_id)  # Get the ID as a string
+            video_id = str(result.inserted_id)   # Get the ID as a string
+
+            # --- NEW: Update the document with the raw video URL ---
+            Videos_Collection.update_one(
+                {'_id': result.inserted_id},
+                {'$set': {'rawVideoLink': raw_video_url}}
+            )
 
             response = Video.process_video(blob_name, video_id)
 
             if response.get("status") == "Processing complete":
                 print(f"Processing succeeded; keeping raw upload at {blob_name}")
-                # raw golf_videos/… blob is left in place
             else:
                 print(f"Processing error, raw upload kept: {response.get('error')}")
 
@@ -205,7 +216,7 @@ class Video:
         Handle post-upload completion logic.
         """
         try:
-            result = future.result()  # Retrieve the result of the background task
+            result = future.result()   # Retrieve the result of the background task
             print("Upload task completed")
         except Exception as e:
             print("Error in upload callback:", e)
@@ -224,16 +235,88 @@ class Video:
             {**video, 'id': str(video.pop('_id'))}
             for video in Videos_Collection.find({'Assignee': ObjectId(assignee_id)})
         ]
+
+    @staticmethod
+    def get_video_status(video_id):
+        """Fetches the status of a specific video."""
+        video = Videos_Collection.find_one({'_id': ObjectId(video_id)}, {'Status': 1, 'rawVideoLink': 1, 'processedVideoLink': 1, 'poseClassImagesLink': 1}) # Added 'poseClassImagesLink'
+        if video:
+            return {
+                'status': video.get('Status'),
+                'rawVideoLink': video.get('rawVideoLink'),
+                'processedVideoLink': video.get('processedVideoLink'),
+                'poseClassImagesLink': video.get('poseClassImagesLink') # Return poseClassImagesLink
+            }
+        return None
         
     @staticmethod
     def get_csv_url(video_id):
         """Fetches the URL of a video from Google Cloud Storage."""
         video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
         return video['angleCsvLink']
+
+    @staticmethod
+    def get_random_pro_video_blob_name():
+        """
+        Retrieves a random pro video blob name (e.g., 'videoModels/pro_swing_1.mp4')
+        from Google Cloud Storage under the 'videoModels/' prefix.
+        """
+        try:
+            bucket_name = 'golf-swing-models'
+            storage_client = get_google_cloud_storage_client()
+            bucket = storage_client.get_bucket(bucket_name)
+            blobs = list(bucket.list_blobs(prefix='modelVideos/'))
+            video_blobs = [b.name for b in blobs if b.name.lower().endswith('.mp4')]
+            if not video_blobs:
+                print(f"No pro videos found under 'modelVideos/' in bucket '{bucket_name}'")
+                return None
+            return random.choice(video_blobs)
+        except Exception as e:
+            print(f"Error listing GCS blobs for pro videos: {e}")
+            return None
+
+    @staticmethod
+    def get_pro_video_url_from_blob(blob_name):
+        """
+        Given a pro video blob name under 'modelVideos/', returns its public URL
+        if the blob exists, else None.
+        """
+        if not blob_name:
+            return None
+        bucket_name = 'golf-swing-models'
+        storage_client = get_google_cloud_storage_client()
+        bucket = storage_client.get_bucket(bucket_name)
+        blob = bucket.blob(blob_name)
+        if blob.exists():
+            return f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
+        print(f"Pro video blob not found: {blob_name}")
+        return None
+
+    @staticmethod
+    def get_pro_csv_url_from_blob(blob_name):
+        """
+        Given a pro video blob name (e.g., 'modelVideos/pro_swing_1.mp4'),
+        derives the CSV blob name (e.g., 'modelVideos/pro_swing_1.csv')
+        and returns its public URL if it exists.
+        """
+        if not blob_name:
+            return None
+        bucket_name = 'golf-swing-models'
+        # Replace extension with .csv
+        base, _ = blob_name.rsplit('.', 1)
+        csv_blob_name = f"{base}_angles.csv"
+        storage_client = get_google_cloud_storage_client()
+        bucket = storage_client.get_bucket(bucket_name)
+        blob = bucket.blob(csv_blob_name)
+        if blob.exists():
+            return f"https://storage.googleapis.com/{bucket_name}/{csv_blob_name}"
+        print(f"Pro CSV blob not found: {csv_blob_name}")
+        return None
+
         
     @staticmethod
     def process_video(file_path,video_id):
-        print(file_path)
+        print(f"DEBUG (Django): Initiating video processing for video_id: {video_id} with file_path: {file_path}") # DEBUG: NEW LINE
         try:
             # Define the URL for the GCP function
             gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
@@ -246,44 +329,68 @@ class Video:
                 "video_path": file_path,
                 "output_video_path": f"processed/{file_path.split('/')[-1]}",
                 "output_csv_path": f"processed/{file_path.split('/')[-1]}.csv",
-                "output_angle_csv_path": f"processed/{file_path.split('/')[-1]}_angles.csv"
+                "output_angle_csv_path": f"processed/{file_path.split('/')[-1]}_angles.csv",
+                "output_pose_images_path": f"poseClassImages/{file_path.split('/')[-1].rsplit('.', 1)[0]}/" # NEW: Path for pose class images
             }
+            print(f"DEBUG (Django): Payload sent to GCP function: {payload}") # DEBUG: NEW LINE
 
             # Send the POST request to the GCP function
             headers = {"Content-Type": "application/json"}
-            response = requests.post(gcp_function_url, json=payload, headers=headers)
+            # Added a timeout for robustness.
+            response = requests.post(gcp_function_url, json=payload, headers=headers, timeout=300) # DEBUG: Added timeout
+            response.raise_for_status() # DEBUG: This will raise an HTTPError for bad responses (4xx or 5xx)
 
-            if response.status_code == 200:
-                # Parse the JSON response from the GCP function
-                response_data = response.json()
-                output_video_url = response_data.get('output_video')
-                output_csv_url = response_data.get('output_csv')
-                output_angle_csv_url = response_data.get('output_angle_csv')
-                #thumbnail_url = response_data.get('output_thumbnail')
+            # Parse the JSON response from the GCP function
+            response_data = response.json()
+            print(f"DEBUG (Django): Raw response from GCP function: {response_data}") # DEBUG: NEW LINE
+            
+            output_video_url = response_data.get('output_video')
+            output_csv_url = response_data.get('output_csv')
+            output_angle_csv_url = response_data.get('output_angle_csv')
+            output_pose_images_url = response_data.get('output_pose_images') # NEW: Get pose images URL
+            
+            print(f"DEBUG (Django): Extracted pose images URL dictionary: {output_pose_images_url}") # DEBUG: NEW LINE
 
-                # Update the MongoDB document with the returned URLs and status
-                Videos_Collection.update_one(
-                    {'_id': ObjectId(video_id)},  # Find the document by ID
-                    {
-                        '$set': {
-                            'Status': 'Completed',
-                            'frameByFrameCsvLink': output_csv_url,
-                            'angleCsvLink': output_angle_csv_url,
-                            'processedVideoLink': output_video_url
-                        }
+            # Update the MongoDB document with the returned URLs and status
+            Videos_Collection.update_one(
+                {'_id': ObjectId(video_id)},   # Find the document by ID
+                {
+                    '$set': {
+                        'Status': 'Completed',
+                        'frameByFrameCsvLink': output_csv_url,
+                        'angleCsvLink': output_angle_csv_url,
+                        'processedVideoLink': output_video_url,
+                        'poseClassImagesLink': output_pose_images_url # NEW: Save pose images URL
                     }
-                )
-                return response_data
-            else:
-                print(f"Error in video processing: {response.text}")
-                return {"error": "An error occurred during video processing."}
+                }
+            )
+            print(f"DEBUG (Django): MongoDB updated for video_id {video_id} with poseClassImagesLink.") # DEBUG: NEW LINE
+            return response_data
 
+        except requests.exceptions.Timeout: # DEBUG: Specific timeout error
+            print(f"DEBUG (Django): Request to GCP function timed out after 300 seconds for video_id: {video_id}")
+            traceback.print_exc()
+            return {"error": "GCP function call timed out."}
+        except requests.exceptions.RequestException as e: # DEBUG: Catch any request-related errors
+            print(f"DEBUG (Django): Error communicating with GCP function for video_id: {video_id}: {e}")
+            if hasattr(e, 'response') and e.response is not None:
+                print(f"DEBUG (Django): GCP function HTTP Status: {e.response.status_code}")
+                print(f"DEBUG (Django): GCP function Error Response Text: {e.response.text}")
+            traceback.print_exc() # Print full traceback for request errors
+            return {"error": "An error occurred during communication with the video processing service."}
+        except json.JSONDecodeError as e: # DEBUG: Catch JSON parsing errors
+            print(f"DEBUG (Django): Error decoding JSON response from GCP function for video_id: {video_id}: {e}")
+            if 'response' in locals() and response is not None:
+                print(f"DEBUG (Django): Non-JSON response content: {response.text}") # Print raw response if it's not JSON
+            traceback.print_exc()
+            return {"error": "Invalid response from video processing service."}
         except Exception as e:
-            print(f"Error during video processing: {e}")
-            return {"error": "An error occurred during video processing."}
+            print(f"DEBUG (Django): Unexpected error during video processing for video_id: {video_id}: {e}")
+            traceback.print_exc()
+            return {"error": "An unexpected error occurred during video processing."}
 
     @staticmethod
-    def get_all_video_comments(video_id):
+    def get_all_video_comments(video_id, current_user_id):
         """
         Fetches all comments and their replies for a specific video,
         sorted by DateCommented, and structured hierarchically.
@@ -345,6 +452,12 @@ class Video:
         # Sort top-level comments by DateCommented (descending for latest first)
         structured_comments.sort(key=lambda c: c['DateCommented'], reverse=True)
 
+        user_oid = ObjectId(current_user_id)
+        for c in structured_comments:
+            c['unread'] = user_oid not in c.get('readBy', [])
+            for r in c['replies']:
+                r['unread'] = user_oid not in r.get('readBy', [])
+
         return structured_comments
 
 
@@ -368,6 +481,7 @@ class Comment:
                 'y_pos': y_pos, # Store y-coordinate
                 'video_id': ObjectId(video_id), # Link top-level comment to video as well for easier lookup
                 'parent_comment_id': None, # Explicitly mark as top-level
+                'readBy': [ ObjectId(current_user_id) ],
             }
             inserted_comment = Comments_Collection.insert_one(comment_document)
 
@@ -406,6 +520,7 @@ class Comment:
                 'parent_comment_id': parent_obj_id, # Link to the parent comment
                 'x_pos': None, # Replies do not have explicit positions
                 'y_pos': None, # Replies do not have explicit positions
+                'readBy': [ ObjectId(current_user_id) ], 
             }
             inserted_reply = Comments_Collection.insert_one(reply_document)
             return inserted_reply.inserted_id

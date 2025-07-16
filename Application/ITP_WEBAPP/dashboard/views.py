@@ -5,7 +5,7 @@ from django.urls import reverse
 from django.http import HttpResponseRedirect, JsonResponse, StreamingHttpResponse, HttpResponse, HttpResponseBadRequest
 from ITP_WEBAPP.models import User
 from django.views.decorators.http import require_POST
-from .models import Coach, Video, Comment, Users_Collection # Make sure Comment is imported
+from .models import Coach, Video, Comment, Users_Collection, Videos_Collection  # Make sure Comment is imported
 from ITP_WEBAPP.views import is_logged_in
 from bson import ObjectId
 import requests
@@ -192,6 +192,10 @@ def dashboard_results(request, id, VideoId):
     video_url = Video.get_video_url(VideoId)
     csv_url = Video.get_csv_url(VideoId)
     
+    # NEW: Fetch the pose class images URL
+    video_status_info = Video.get_video_status(VideoId)
+    pose_class_images_url = video_status_info.get('poseClassImagesLink') if video_status_info else None
+
     # Fetch and process the CSV
     response = requests.get(csv_url)
 
@@ -221,7 +225,7 @@ def dashboard_results(request, id, VideoId):
     # Fetch video comments with hierarchical structure using the updated Video.get_all_video_comments
     # This method now returns a list of top-level comments, each with a 'replies' list,
     # and all necessary formatting (id conversion, date formatting, user name, and x_pos/y_pos for top-level)
-    comments_data = Video.get_all_video_comments(VideoId)
+    comments_data = Video.get_all_video_comments(VideoId, request.session['Id'])
     
     # --- IMPORTANT FIX: Convert all ObjectIds in comments_data to strings ---
     processed_comments_data = convert_objectids_to_str(comments_data)
@@ -243,6 +247,7 @@ def dashboard_results(request, id, VideoId):
         'full_data': full_data,  # Full data for other purposes
         'column_status_mapping': column_status_mapping,
         'current_user_name': current_user_name, # ADDED THIS LINE
+        'pose_class_images_url': pose_class_images_url, # NEW: Pass the pose class images URL
     })
 
 # Add these new AJAX views to handle comments
@@ -499,6 +504,91 @@ def delete_video_reply_ajax(request, id, VideoId):
         traceback.print_exc()
         return JsonResponse({'success': False, 'message': str(e)}, status=500)
 
+# Add immediately after delete_video_reply_ajax
+
+@csrf_exempt
+@require_POST
+def mark_comment_read(request, id, VideoId):
+    """
+    AJAX endpoint: mark a comment and all its direct replies as read
+    by the current user (adds them to the comment's `readBy` array).
+    """
+    try:
+        payload = json.loads(request.body)
+        comment_id = payload.get('commentId')
+        if not comment_id:
+            return JsonResponse({'success': False, 'message': 'Missing commentId'}, status=400)
+
+        user_id = request.session.get('Id')
+        if not user_id:
+            return JsonResponse({'success': False, 'message': 'User not authenticated'}, status=401)
+
+        user_oid = ObjectId(user_id)
+        cid = ObjectId(comment_id)
+
+        # Mark the top-level comment read
+        Comments_Collection.update_one(
+            {'_id': cid},
+            {'$addToSet': {'readBy': user_oid}}
+        )
+        # Also mark all direct replies read
+        Comments_Collection.update_many(
+            {'parent_comment_id': cid},
+            {'$addToSet': {'readBy': user_oid}}
+        )
+
+        return JsonResponse({'success': True})
+    except json.JSONDecodeError:
+        return JsonResponse({'success': False, 'message': 'Invalid JSON'}, status=400)
+    except Exception as e:
+        traceback.print_exc()
+        return JsonResponse({'success': False, 'message': str(e)}, status=500)
+
+# New AJAX endpoint for checking a single video status
+@csrf_exempt # Use this decorator if you're not sending CSRF tokens with the AJAX request
+def check_video_status_ajax(request, id, video_id):
+    """
+    Checks the current processing status of a specific video.
+    Expected URL: /dataSpace/<student_id>/check_video_status_ajax/<video_id>/
+    """
+    if request.method == 'GET':
+        try:
+            # Convert the video_id string from the URL to a MongoDB ObjectId
+            video_obj_id = ObjectId(video_id)
+            
+            # Find the video document in the Videos_Collection
+            video_doc = Videos_Collection.find_one({"_id": video_obj_id})
+            
+            if video_doc:
+                # Get the 'Status' field from the video document, default to 'Unknown' if not found
+                status = video_doc.get('Status', 'Unknown')
+                raw_video_link = None
+                processed_video_link = None
+
+                # If the video is completed, include the raw and processed video links
+                if status == 'Completed':
+                    # Assuming 'rawVideoLink' and 'processedVideoLink' fields exist in your MongoDB document
+                    # and store the URLs directly. Adjust field names if they are different.
+                    raw_video_link = video_doc.get('rawVideoLink') 
+                    processed_video_link = video_doc.get('processedVideoLink') # Include if you use it on frontend
+
+                return JsonResponse({
+                    'status': 'success', # Indicate overall success of the AJAX call
+                    'video_status': status, # The actual video processing status
+                    'rawVideoLink': raw_video_link,
+                    'processedVideoLink': processed_video_link # Include if your frontend needs it
+                })
+            else:
+                # Return a 404 error if the video is not found
+                return JsonResponse({'status': 'error', 'message': 'Video not found'}, status=404)
+        except Exception as e:
+            # Log the full traceback for debugging purposes
+            traceback.print_exc()
+            # Return a 500 server error if something goes wrong
+            return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
+    
+    # Return a 405 error if the request method is not GET
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method'}, status=405)
 
 # New view for comparing two swings
 def dashboard_compareSwings(request, id):
@@ -513,7 +603,6 @@ def dashboard_compareSwings(request, id):
     # Grab the two video IDs from the query string
     video_ids_param = request.GET.get('video_ids')
     if not video_ids_param:
-        # Use HttpResponseBadRequest for client-side errors
         return HttpResponseBadRequest("Missing video_ids parameter. Please select two videos to compare.")
 
     video_ids = video_ids_param.split(',')
@@ -532,42 +621,71 @@ def dashboard_compareSwings(request, id):
     if not video1_item or not video2_item:
         return HttpResponseBadRequest("One or more selected videos not found.")
 
-    # Titles and URLs
+    # Titles and URLs for student videos
     video1_title = video1_item.get('Title', 'Untitled Video 1')
     video2_title = video2_item.get('Title', 'Untitled Video 2')
     video1_url   = Video.get_video_url(video1_id)
     video2_url   = Video.get_video_url(video2_id)
 
-    # CSV data for each - MODIFIED TO USE JSON.DUMPS()
-    def fetch_csv_data_json(vid): # Renamed for clarity
+    # Helper function to fetch CSV data and return as JSON string
+    def fetch_csv_data_json(vid):
         url = Video.get_csv_url(vid)
         resp = requests.get(url)
         if resp.status_code == 200:
             df = pd.read_csv(StringIO(resp.content.decode('utf-8')))
-            return json.dumps(df.to_dict('records')) # <-- IMPORTANT: Convert to JSON string here
-        return json.dumps([]) # <-- IMPORTANT: Return empty JSON array string
+            return json.dumps(df.to_dict('records'))
+        return json.dumps([])
 
-    video1_full_data_json = fetch_csv_data_json(video1_id) # Store as JSON string
-    video2_full_data_json = fetch_csv_data_json(video2_id) # Store as JSON string
+    video1_full_data_json = fetch_csv_data_json(video1_id)
+    video2_full_data_json = fetch_csv_data_json(video2_id)
+
+    # --- Fetch Pro Golfer Video Data ---
+    pro_video_title = "Pro Golfer Swing"
+    pro_video_url = "" # Placeholder, will be updated
+    pro_video_full_data_json = json.dumps([]) # Default to empty array
+
+    try:
+        # Assuming you have a `Video` class or similar for handling GCS
+        # And a method to get a random pro video URL and its corresponding CSV URL
+        pro_video_blob_name = Video.get_random_pro_video_blob_name() # You'll need to implement this
+        if pro_video_blob_name:
+            pro_video_url = Video.get_pro_video_url_from_blob(pro_video_blob_name) # Implement this
+            pro_csv_url = Video.get_pro_csv_url_from_blob(pro_video_blob_name) # Implement this
+
+            # Fetch CSV data for the pro video
+            resp_pro = requests.get(pro_csv_url)
+            if resp_pro.status_code == 200:
+                df_pro = pd.read_csv(StringIO(resp_pro.content.decode('utf-8')))
+                pro_video_full_data_json = json.dumps(df_pro.to_dict('records'))
+            else:
+                print(f"Warning: Could not fetch CSV for pro video from {pro_csv_url}. Status code: {resp_pro.status_code}")
+        else:
+            print("Warning: No random pro video blob name found.")
+
+    except Exception as e:
+        print(f"Error fetching pro golfer video data: {e}")
+        # In a production environment, you might want to log this error
+        # and provide a user-friendly fallback.
 
     # Current user (for base template)
     user = User.find_user_by_id(ObjectId(request.session['Id']))
-
-    # Convert ObjectId in user object if it's directly passed
     processed_user = convert_objectids_to_str(user)
 
     context = {
-        'Role': processed_user['Role'], # Use processed user
-        'Name': processed_user['Name'], # Use processed user
+        'Role': processed_user['Role'],
+        'Name': processed_user['Name'],
         'studentID': id,
         'video1_id': video1_id,
         'video1_title': video1_title,
         'video1_url': video1_url,
-        'video1_full_data': video1_full_data_json, # Pass the JSON string
+        'video1_full_data': video1_full_data_json,
         'video2_id': video2_id,
         'video2_title': video2_title,
         'video2_url': video2_url,
-        'video2_full_data': video2_full_data_json, # Pass the JSON string
+        'video2_full_data': video2_full_data_json,
+        'pro_video_title': pro_video_title, # Pass pro video title
+        'pro_video_url': pro_video_url,     # Pass pro video URL
+        'pro_video_full_data': pro_video_full_data_json, # Pass pro video data
     }
     return render(request, 'dashboard_compareSwings.html', context)
 

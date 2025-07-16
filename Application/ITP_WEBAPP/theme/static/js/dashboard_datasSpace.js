@@ -9,6 +9,10 @@ const deleteInput = document.getElementById('deleteVideoIds');
 
 const selectedCount = document.getElementById('selectedCount');
 
+// Polling specific variables
+const POLL_INTERVAL_MS = 5000; // Poll every 5 seconds
+const pollingIntervals = {}; // Stores interval IDs for each video being polled
+
 // Key for storing selected video IDs in sessionStorage
 const SELECTED_VIDEO_IDS_KEY = 'selectedVideoIds';
 
@@ -154,7 +158,7 @@ function updateCompareDeleteButtonState() {
         compareBtn.classList.replace('bg-[#217346]', 'bg-gray-500');
     }
 
-    compareIdsInput.value      = checkedIdsArray.join(',');
+    compareIdsInput.value = checkedIdsArray.join(',');
 
     // --- delete form logic ---
     if (checkedCount >= 1) {
@@ -173,6 +177,188 @@ function updateCompareDeleteButtonState() {
     } else {
         selectedCount.classList.add('hidden');
     }
+}
+
+/**
+ * Updates the UI of a specific video element when its status changes.
+ * @param {HTMLElement} videoElement The HTML element (tr or div/a) representing the video.
+ * @param {object} videoData An object containing updated video data (e.g., status, rawVideoLink).
+ */
+function updateVideoUI(videoElement, videoData) {
+    console.log(`Updating UI for video ${videoData.id} to status: ${videoData.status}`);
+
+    // Update data-video-status attribute
+    videoElement.dataset.videoStatus = videoData.status;
+
+    // Get relevant child elements for update
+    const statusSpan = videoElement.querySelector('.video-status-text');
+    const thumbnailCell = videoElement.querySelector('.video-thumbnail-cell');
+    const videoTitle = videoElement.querySelector('.video-title').textContent; // Get the title for alt text
+
+    if (videoData.status === 'Completed') {
+        // Update status text and color
+        if (statusSpan) {
+            statusSpan.textContent = videoData.status;
+            statusSpan.classList.remove('bg-red-100', 'text-red-800');
+            statusSpan.classList.add('bg-green-100', 'text-green-800');
+        }
+
+        // Add checkbox if it's a list item (table row) and not already present
+        // Or if it's a grid item that became clickable
+        const isGridItem = videoElement.classList.contains('grid-view') || videoElement.tagName === 'A' || videoElement.tagName === 'DIV';
+
+        let checkbox = videoElement.querySelector('.compare-checkbox');
+        if (!checkbox) { // Only add if it doesn't exist
+            checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.classList.add('compare-checkbox');
+            checkbox.dataset.videoId = videoData.id;
+
+            if (isGridItem) {
+                checkbox.classList.add('absolute', 'top-2', 'right-2', 'z-10');
+                videoElement.prepend(checkbox); // Add as first child for grid items
+            } else { // List view (table row)
+                const firstCell = videoElement.querySelector('td:first-child');
+                if (firstCell) {
+                    firstCell.innerHTML = ''; // Clear existing content (which might be empty or 'Processing...')
+                    firstCell.appendChild(checkbox);
+                }
+            }
+            // Re-attach event listener for the newly added checkbox
+            checkbox.addEventListener('click', e => e.stopPropagation());
+            checkbox.addEventListener('change', updateCompareDeleteButtonState);
+
+             // If this video was previously selected (and persisted) before becoming 'Completed', check it
+             const storedSelectedIds = getStoredSelectedVideoIds();
+             if (storedSelectedIds.has(videoData.id)) {
+                 checkbox.checked = true;
+             }
+        }
+
+
+        // Update thumbnail
+        if (thumbnailCell && videoData.rawVideoLink) {
+            const videoThumbnail = document.createElement('video');
+            videoThumbnail.classList.add('w-full', 'h-24', 'object-cover', 'rounded', 'mb-2'); // Tailwind classes
+            if (!isGridItem) { // Different sizes for list vs grid view
+                videoThumbnail.classList.remove('w-full', 'h-24');
+                videoThumbnail.classList.add('h-32', 'w-48');
+            }
+
+            videoThumbnail.preload = 'metadata';
+            videoThumbnail.muted = true;
+            videoThumbnail.loop = true;
+            videoThumbnail.onmouseover = function() { this.play(); };
+            videoThumbnail.onmouseout = function() { this.pause(); this.currentTime = 0; };
+
+            const source = document.createElement('source');
+            source.src = videoData.rawVideoLink;
+            source.type = 'video/mp4';
+            videoThumbnail.appendChild(source);
+
+            // Replace the 'Processing...' div with the new video element
+            thumbnailCell.innerHTML = '';
+            thumbnailCell.appendChild(videoThumbnail);
+        }
+
+        // Make the video element clickable
+        const currentStudentID = window.__studentID;
+        if (videoElement.tagName === 'DIV' && videoElement.dataset.videoStatus === 'Completed') {
+            // If it was a <div> and now completed, change it to an <a>
+            const newAnchor = document.createElement('a');
+            newAnchor.href = `/home/dataSpace/${currentStudentID}/results/${videoData.id}/`;
+            newAnchor.classList.add('relative', 'block', 'bg-white', 'border', 'rounded-lg', 'shadow', 'p-3', 'flex', 'flex-col', 'hover:shadow-md', 'hover:bg-gray-50', 'cursor-pointer', 'max-w-[430px]');
+            newAnchor.dataset.videoId = videoData.id;
+            newAnchor.dataset.videoStatus = videoData.status;
+
+            // Move all children from the old div to the new anchor
+            while (videoElement.firstChild) {
+                newAnchor.appendChild(videoElement.firstChild);
+            }
+            videoElement.replaceWith(newAnchor); // Replace the old div with the new anchor
+            videoElement = newAnchor; // Update reference
+        } else if (videoElement.tagName === 'TR' && !videoElement.dataset.href) {
+            // For list view, add the data-href and clickable classes
+            videoElement.dataset.href = `/home/dataSpace/${currentStudentID}/results/${videoData.id}/`;
+            videoElement.classList.add('hover:bg-gray-50', 'cursor-pointer');
+            // Re-attach click listener for the row
+            videoElement.addEventListener('click', (event) => {
+                if (!event.target.closest('.compare-checkbox')) {
+                    window.location.href = videoElement.dataset.href;
+                }
+            });
+        }
+    } else {
+        // Handle other statuses if necessary (e.g., Error)
+        console.warn(`Video ${videoData.id} status is ${videoData.status}, no special UI update handled for non-completed.`);
+    }
+
+    // After updating UI for a specific video, re-evaluate button states
+    updateCompareDeleteButtonState();
+}
+
+// Function to start polling for all 'Processing' videos
+function startStatusPolling() {
+    // Select all video elements that might need status updates
+    // Use data-video-id and data-video-status attributes
+    document.querySelectorAll('[data-video-id][data-video-status="Processing"]').forEach(videoElement => {
+        const videoId = videoElement.dataset.videoId;
+
+        // If already polling for this video, skip
+        if (pollingIntervals[videoId]) {
+            return;
+        }
+
+        console.log(`Starting polling for video: ${videoId}`);
+
+        // Set up polling interval
+        const intervalId = setInterval(async () => {
+            try {
+                // Use window.__studentID for the student ID from Django template
+                const studentID = window.__studentID; // Ensure studentID is available
+                if (!studentID) {
+                    console.error("studentID not found. Cannot poll for video status.");
+                    clearInterval(pollingIntervals[videoId]);
+                    delete pollingIntervals[videoId];
+                    return;
+                }
+                const response = await fetch(`/home/dataSpace/${studentID}/check_video_status_ajax/${videoId}/`);
+                const data = await response.json();
+
+                if (data.status === 'success' && data.video_status === 'Completed') {
+                    console.log(`Video ${videoId} is now Completed!`);
+                    clearInterval(pollingIntervals[videoId]); // Stop polling
+                    delete pollingIntervals[videoId]; // Remove from tracking
+
+                    // Update UI for this video
+                    updateVideoUI(videoElement, {
+                        id: videoId,
+                        status: data.video_status,
+                        rawVideoLink: data.rawVideoLink, // Ensure this is passed from backend
+                    });
+
+                    // Optional: If you want to automatically move completed videos from 'Processing' tab
+                    // to 'Completed' tab without a full reload, this would be complex.
+                    // A full page reload (e.g., window.location.reload()) would achieve this,
+                    // but it would interrupt user experience.
+                    // For now, the UI within the 'Processing' tab will update.
+                    // If the user navigates to the 'All' or 'Completed' tab, they will see it.
+
+                } else if (data.status === 'error') {
+                    console.error(`Error checking status for video ${videoId}: ${data.message}`);
+                    clearInterval(pollingIntervals[videoId]);
+                    delete pollingIntervals[videoId];
+                }
+                // If still processing, do nothing and wait for next poll
+            } catch (error) {
+                console.error(`Fetch error for video ${videoId}:`, error);
+                clearInterval(pollingIntervals[videoId]);
+                delete pollingIntervals[videoId];
+            }
+        }, POLL_INTERVAL_MS);
+
+        pollingIntervals[videoId] = intervalId; // Store the interval ID
+    });
 }
 
 // Wire up each checkbox
@@ -195,6 +381,7 @@ compareCheckboxes.forEach(cb => {
 // Initial state update (important for when you land on a page)
 // This is called after DOMContentLoaded has handled the clearing/preserving logic.
 updateCompareDeleteButtonState();
+startStatusPolling()
 
 document.querySelectorAll('tr[data-href]').forEach(row => {
     row.addEventListener('click', (event) => {
