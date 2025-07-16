@@ -7,32 +7,20 @@
   <div class="relative flex-row rounded-lg bg-white shadow-lg p-4 h-full w-full overflow-auto">
 
     {% include 'upload_component.html' %}
-    
+
     <div class="flex items-center justify-between">
       <div class="flex items-center">
 
         {% if Role != 'student' %}
-        <a
-          href="{% url 'home' %}"
-          class="inline-flex items-center p-2 text-sm font-medium text-gray-600 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500"
-        >
-        
+        <a href="{% url 'home' %}"
+          class="inline-flex items-center p-2 text-sm font-medium text-gray-600 bg-gray-200 rounded-lg shadow-sm hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-blue-500">
+
           <!-- Icon (optional) -->
-          <svg
-            class="w-5 h-5 text-gray-600"
-            xmlns="http://www.w3.org/2000/svg"
-            fill="none"
-            viewBox="0 0 24 24"
-            stroke="currentColor"
-          >
-            <path
-              stroke-linecap="round"
-              stroke-linejoin="round"
-              stroke-width="2"
-              d="M15 19l-7-7 7-7"
-            />
+          <svg class="w-5 h-5 text-gray-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"
+            stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
           </svg>
-          <p class = "md:visible hidden ml-2">Back</p>
+          <p class="md:visible hidden ml-2">Back</p>
         </a>
         {% endif %}
 
@@ -41,172 +29,319 @@
         </h1>
       </div>
 
-      <button
-        class="bg-gray-500 md:text-md text-xs text-white px-4 py-2 rounded hover:bg-gray-400 h-full" id="openModalBtn"
-      >
+      <button id="openModalBtn"
+        class="bg-gray-500 md:text-md text-xs text-white px-4 py-2 rounded hover:bg-gray-400 h-full">
         Upload
       </button>
     </div>
-    
+
     <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-white/10" />
-    
-    <!-- Nav tabs with highlight on select -->
-    <div class="mb-4">
-        <ul class="flex -mb-px text-sm font-medium text-center" id="myTab" role="tablist">
-          <li class="mr-2" role="presentation">
-            <button class="inline-block p-4 rounded-t-lg border-b-2 border-blue-500 text-blue-500" id="tab1-tab" data-tab-target="#tab1" onclick="openTab(event, 'tab1')">All</button>
-          </li>
-          <li class="mr-2" role="presentation">
-            <button class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300" id="tab2-tab" data-tab-target="#tab2" onclick="openTab(event, 'tab2')">Completed</button>
-          </li>
-          <li class="mr-2" role="presentation">
-            <button class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300" id="tab3-tab" data-tab-target="#tab3" onclick="openTab(event, 'tab3')">Processing</button>
-          </li>
-        </ul>
+
+    <!-- Nav tabs + view toggle -->
+    <div class="mb-4 flex items-center">
+      <ul class="flex -mb-px text-sm font-medium text-center" id="myTab" role="tablist">
+        <li class="mr-2">
+          <button id="tab1-tab" data-tab-target="#tab1" onclick="openTab(event,'tab1')"
+            class="inline-block p-4 rounded-t-lg border-b-2 border-blue-500 text-blue-500">
+            All
+          </button>
+        </li>
+        <li class="mr-2">
+          <button id="tab2-tab" data-tab-target="#tab2" onclick="openTab(event,'tab2')"
+            class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300">
+            Completed
+          </button>
+        </li>
+        <li class="mr-2">
+          <button id="tab3-tab" data-tab-target="#tab3" onclick="openTab(event,'tab3')"
+            class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300">
+            Processing
+          </button>
+        </li>
+      </ul>
+
+      <!-- VIEW TOGGLE -->
+      <button id="toggleViewBtn"
+        class="ml-4 inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-sm">
+        {% if view == 'grid' %}
+        <!-- we’re in grid, so show LIST icon + label -->
+        <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        <span id="toggleLabel">List View</span>
+        {% else %}
+        <!-- we’re in list, so show GRID icon + label -->
+        <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4h6v6H4V4zm0 10h6v6H4v-6zm10-10h6v6h-6V4zm0 10h6v6h-6v-6z" />
+        </svg>
+        <span id="toggleLabel">Grid View</span>
+        {% endif %}
+      </button>
+
+      <!-- COMPARE SWINGS -->
+      <button id="compareBtn"
+        class="ml-4 px-4 py-2 bg-gray-500 text-white rounded-lg text-sm disabled:opacity-50 disabled:cursor-not-allowed"
+        disabled>
+        Compare Swings
+      </button>
+
+      <form method="get" class="ml-auto flex items-center space-x-2">
+        <label for="sortSelect" class="text-sm font-medium text-gray-700">Sort by:</label>
+        <!-- preserve view in the GET -->
+        <input type="hidden" name="view" value="{{ view }}">
+        <select id="sortSelect" name="sort" onchange="this.form.submit()"
+          class="border border-gray-300 rounded-lg pl-2 pr-8 py-1 text-sm w-40">
+          <option value="earliest" {% if sort == 'earliest' %}selected{% endif %}>Earliest Added</option>
+          <option value="latest" {% if sort == 'latest' %}selected{% endif %}>Latest Added</option>
+          <option value="az" {% if sort == 'az' %}selected{% endif %}>A‑Z</option>
+          <option value="za" {% if sort == 'za' %}selected{% endif %}>Z‑A</option>
+        </select>
+      </form>
+    </div>
+
+    <!-- Tab 1: All -->
+    <div id="tab1" class="tab-content">
+      <!-- LIST VIEW -->
+      <div class="list-view overflow-x-auto {% if view == 'grid' %}hidden{% endif %}">
+        {% if not videos %}
+        <p class="text-center text-gray-500 font-medium">No videos uploaded...</p>
+        {% else %}
+        <table class="min-w-full table-fixed">
+          <tbody>
+            {% for video in videos %}
+
+            <tr class="border-b justify-center">
+
+              <td class="px-4 py-4">
+                <input type="checkbox" class="compare-checkbox" data-video-id="{{ video.id }}">
+              </td>
+
+              <td class="md:px-6 px-1 py-4 whitespace-nowrap justify-center hidden md:table-cell">
+                <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
+              </td>
+
+              <td class="md:px-6 px-1 py-4 whitespace-normal break-words">
+                <div class="max-w-[15ch]">
+                  <p class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</p>
+                </div>
+              </td>
+              <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
+                <p class="md:text-sm text-xs text-gray-500">{{ video.DateUploaded }}</p>
+              </td>
+
+              {% if video.Status == 'Completed' %}
+
+              <td class="md:px-6 px-1  py-4 whitespace-nowrap">
+                <span
+                  class="md: px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{video.Status}}</span>
+              </td>
+
+              {% else %}
+
+              <td class="md:px-6 px-1 py-4 whitespace-nowrap">
+                <span
+                  class="md:px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">{{video.Status}}</span>
+              </td>
+
+              {% endif %}
+
+              {% if video.Status != 'Processing' %}
+
+              <td class="md:px-6 px-1  py-4 whitespace-nowrap text-right md:text-sm text-xs font-medium">
+                <a href="{% url 'results' studentID video.id %}" class="text-indigo-600 hover:text-indigo-900">View</a>
+              </td>
+
+              {% else %}
+
+              <td class="md:px-6 px-1  py-4 whitespace-nowrap text-right md:text-sm text-xs font-medium">
+              </td>
+
+              {% endif %}
+
+            </tr>
+
+            {% endfor %}
+
+
+          </tbody>
+        </table>
+        {% endif %}
+
       </div>
-      
-      <!-- Tab content -->
-      <div id="tab1" class="tab-content">
-        <div class="overflow-x-auto">
 
-            {% if not videos %}
-              <p class="text-center text-gray-500 font-medium">No videos uploaded...</p>
-            {% else %}
-            <table class="min-w-full">
-              <tbody class="bg-white">
+      <!-- GRID VIEW -->
+      <div
+        class="grid-view grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-4 {% if view == 'list' %}hidden{% endif %}">
+        {% if not videos %}
+        <p class="col-span-full text-center text-gray-500 font-medium">No videos uploaded...</p>
+        {% else %}
+        {% for video in videos %}
+        <div class="bg-white border rounded-lg shadow p-3 flex flex-col">
+          <img src="https://placehold.co/600x400" alt="{{ video.Title }}"
+            class="w-full h-32 object-cover rounded mb-2" />
+          <h3 class="text-sm font-medium text-gray-800">{{ video.Title }}</h3>
+          <p class="text-xs text-gray-500">{{ video.DateUploaded }}</p>
+          <span class="mt-1 inline-block px-2 py-1 text-xs font-semibold rounded-full
+          {% if video.Status == 'Completed' %}
+            bg-green-100 text-green-800
+          {% else %}
+            bg-red-100 text-red-800
+          {% endif %}">
+            {{ video.Status }}
+          </span>
+          {% if video.Status != 'Processing' %}
+          <a href="{% url 'results' studentID video.id %}"
+            class="mt-auto text-indigo-600 hover:underline text-xs">View</a>
+          {% endif %}
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
 
-                {% for video in videos %}
+    <!-- Tab 2: Completed -->
+    <div id="tab2" class="tab-content hidden">
+      <!-- LIST VIEW -->
+      <div class="list-view overflow-x-auto {% if view == 'grid' %}hidden{% endif %}">
+        {% if not completed_video %}
+        <p class="text-center text-gray-500 font-medium">No videos with status completed...</p>
+        {% else %}
+        <table class="min-w-full table-fixed">
+          <tbody>
+            {% for video in completed_video %}
+            <tr class="border-b justify-center">
 
-                <tr class="border-b justify-center">
+              <td class="px-4 py-4">
+                <input type="checkbox" class="compare-checkbox" data-video-id="{{ video.id }}">
+              </td>
 
-                  <td class="md:px-6 px-1 py-4 whitespace-nowrap justify-center hidden md:table-cell">
-                    <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
-                  </td>
+              <td class="md:px-6 px-1 py-4 whitespace-nowrap justify-center hidden md:table-cell">
+                <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
+              </td>
 
-                  <td class="md:px-6 px-1 py-4 whitespace-nowrap">
-                    <p class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</p>
-                  </td>
-                  <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
-                    <p class="md:text-sm text-xs text-gray-500">{{ video.DateUploaded}}</p>
-                  </td>
+              <td class="md:px-6 px-1 py-4 whitespace-normal break-words">
+                <p class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</p>
+              </td>
+              <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell w-32">
+                <p class="md:text-sm text-xs text-gray-500">{{ video.DateUploaded}}</p>
+              </td>
 
-                  {% if video.Status == 'Completed' %}
-
-                  <td class="md:px-6 px-1  py-4 whitespace-nowrap">
-                    <span class="md: px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{ video.Status}}</span>
-                  </td>
-
-                  {% else %}
-
-                  <td class="md:px-6 px-1 py-4 whitespace-nowrap">
-                    <span class="md:px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">{{ video.Status}}</span>
-                  </td>
-
-                  {% endif %}
-
-                  {% if video.Status != 'Processing' %}
-
-                  <td class="md:px-6 px-1  py-4 whitespace-nowrap text-right md:text-sm text-xs font-medium">
-                    <a href="{% url 'results' studentID video.id %}" class="text-indigo-600 hover:text-indigo-900">View</a>
-                  </td>
-
-                  {% else %}
-
-                  <td class="md:px-6 px-1  py-4 whitespace-nowrap text-right md:text-sm text-xs font-medium">
-                  </td>
-
-                  {% endif %}
-
-                </tr>
-
-                {% endfor %}
-
-                
-              </tbody>
-            </table>
-            {% endif %}
-
-          </div>
+              <td class="md:px-6 px-1  py-4 whitespace-nowrap">
+                <span class="md: px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full
+                {% if video.Status == 'Completed' %}
+                  bg-green-100 text-green-800
+                {% else %}
+                  bg-red-100 text-red-800
+                {% endif %}">
+                  {{ video.Status }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                <a href="{% url 'results' studentID video.id %}"
+                  class="text-indigo-600 hover:underline text-xs">View</a>
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
       </div>
 
-      <div id="tab2" class="tab-content hidden">
-        <div class="overflow-x-auto">
-            {% if not completed_video %}
-            <p class="text-center text-gray-500 font-medium">No videos with status completed...</p>
-            {% else %}
-              <table class="min-w-full">
-                <tbody class="bg-white">
-                  
-                  {% for video in completed_video %}
+      <!-- GRID VIEW -->
+      <div
+        class="grid-view grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-4 {% if view == 'list' %}hidden{% endif %}">
+        {% if not completed_video %}
+        <p class="col-span-full text-center text-gray-500 font-medium">No videos with status completed...</p>
+        {% else %}
+        {% for video in completed_video %}
+        <div class="bg-white border rounded-lg shadow p-3 flex flex-col">
+          <img src="https://placehold.co/600x400" alt="{{ video.Title }}"
+            class="w-full h-32 object-cover rounded mb-2" />
+          <h3 class="text-sm font-medium text-gray-800">{{ video.Title }}</h3>
+          <p class="text-xs text-gray-500">{{ video.DateUploaded }}</p>
+          <span class="mt-1 inline-block px-2 py-1 text-xs font-semibold rounded-full
+          {% if video.Status == 'Completed' %}
+            bg-green-100 text-green-800
+          {% else %}
+            bg-red-100 text-red-800
+          {% endif %}">
+            {{ video.Status }}
+          </span>
+          <a href="{% url 'results' studentID video.id %}"
+            class="mt-auto text-indigo-600 hover:underline text-xs">View</a>
+        </div>
+        {% endfor %}
+        {% endif %}
+      </div>
+    </div>
 
-                    <tr class="border-b">
-                      <td class="md:px-6 px-1  py-4 whitespace-nowrap justify-center hidden md:table-cell">
-                        <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
-                      </td>
-                      <td class="md:px-6 px-1  py-4 whitespace-nowrap">
-                        <div class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</div>
-                      </td>
-                      <td class="md:px-6 px-1  py-4 whitespace-nowrap hidden md:table-cell">
-                        <div class="md:text-sm text-xs text-xs text-gray-500">{{ video.DateUploaded}}</div>
-                      </td>
-                      <td class="md:px-6 px-1  py-4 whitespace-nowrap">
-                        <span class="px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-green-100 text-green-800">{{ video.Status}}</span>
-                      </td>
 
-                      <td class="md:px-6 px-1  py-4 whitespace-nowrap text-right md:text-sm text-xs font-medium">
-                        <a href="{% url 'results' studentID video.id %}" class="text-indigo-600 hover:text-indigo-900">View</a>
-                      </td>
-                    </tr>
+    <!-- Tab 3: Processing -->
+    <div id="tab3" class="tab-content hidden">
+      <!-- LIST VIEW -->
+      <div class="list-view overflow-x-auto {% if view == 'grid' %}hidden{% endif %}">
+        {% if not processing_video %}
+        <p class="text-center text-gray-500 font-medium">No videos with status processing...</p>
+        {% else %}
+        <table class="min-w-full table-fixed">
+          <tbody>
+            {% for video in processing_video %}
+            <tr class="border-b justify-center">
+              <td class="md:px-6 px-1 py-4 whitespace-nowrap justify-center hidden md:table-cell">
+                <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
+              </td>
 
-                  {% endfor %}
-                </tbody>
-              </table>
-            {% endif %}
-          </div>
+              <td class="md:px-6 px-1 py-4 whitespace-normal break-words">
+                <p class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</p>
+              </td>
+              <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell w-32">
+                <p class="md:text-sm text-xs text-gray-500">{{ video.DateUploaded}}</p>
+              </td>
+              <td class="md:px-6 px-1  py-4 whitespace-nowrap">
+                <span class="md: px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">
+                  {{ video.Status }}
+                </span>
+              </td>
+              <td class="px-4 py-3 text-right">
+                {# no “View” link for processing #}
+              </td>
+            </tr>
+            {% endfor %}
+          </tbody>
+        </table>
+        {% endif %}
       </div>
 
-      <div id="tab3" class="tab-content hidden">
-        <div class="overflow-x-auto">
-
-            {% if not processing_video %}
-              <p class="text-center text-gray-500 font-medium">No videos with status processing...</p>
-            {% else %}
-              <table class="min-w-full">
-                <tbody class="bg-white">
-                  
-                  {% for video in processing_video %}
-
-                
-                  <tr class="border-b">
-                    <td class="md:px-6 px-1  py-4 whitespace-nowrap justify-center hidden md:table-cell">
-                      <img src="https://placehold.co/600x400" alt="Video Image" class="h-32 w-48 object-cover rounded">
-                    </td>
-                    <td class="md:px-6 px-1  py-4 whitespace-nowrap ">
-                      <div class="md:text-sm text-xs font-medium text-gray-900">{{ video.Title }}</div>
-                    </td>
-                    <td class="md:px-6 px-1  py-4 whitespace-nowrap hidden md:table-cell">
-                      <div class="md:text-sm text-xs text-gray-500">{{ video.DateUploaded }}</div>
-                    </td>
-                    <td class="md:px-6 px-1  py-4 whitespace-nowrap">
-                      <span class="px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full bg-red-100 text-red-800">{{ video.Status }}</span>
-                    </td>
-
-                    <td class="md:px-6 px-1  py-4 whitespace-nowrap text-rightmd:text-sm text-xs font-medium">
-                      
-                    </td>
-                  </tr>
-
-                  {% endfor %}
-                </tbody>
-              </table>
-            {% endif %}
-          </div>
+      <!-- GRID VIEW -->
+      <div
+        class="grid-view grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-4 {% if view == 'list' %}hidden{% endif %}">
+        {% if not processing_video %}
+        <p class="col-span-full text-center text-gray-500 font-medium">No videos with status processing...</p>
+        {% else %}
+        {% for video in processing_video %}
+        <div class="bg-white border rounded-lg shadow p-3 flex flex-col">
+          <img src="https://placehold.co/600x400" alt="{{ video.Title }}"
+            class="w-full h-32 object-cover rounded mb-2" />
+          <h3 class="text-sm font-medium text-gray-800">{{ video.Title }}</h3>
+          <p class="text-xs text-gray-500">{{ video.DateUploaded }}</p>
+          <span class="mt-1 inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800">
+            {{ video.Status }}
+          </span>
+          {# no “View” link for processing #}
+        </div>
+        {% endfor %}
+        {% endif %}
       </div>
-  </div>
-</div>
+    </div>
 
-<script src="{% static 'js/dashboard_datasSpace.js' %}"></script>
-<script src="{% static 'js/dashboard_popupUploadModal.js' %}"></script>
+    <script>
+      window.__initialView = "{{ view }}";
+    </script>
 
-  
-{% endblock dashboard_content %}
+    <script src="{% static 'js/dashboard_datasSpace.js' %}"></script>
+    <script src="{% static 'js/dashboard_popupUploadModal.js' %}"></script>
+
+    {% endblock dashboard_content %}
