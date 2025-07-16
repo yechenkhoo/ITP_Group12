@@ -1,3 +1,5 @@
+# main.py
+
 from flask import Flask, request, jsonify
 import os
 import cv2
@@ -24,7 +26,7 @@ mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
 
 # Class names
-class_names = ['P1', 'P10', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9']
+class_names = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
 
 # Ideal angles
 ideal_shoulder_tilt = {'P1': 8, 'P2': 24, 'P3': 35, 'P4': 37, 'P5': 33, 'P6': 12, 'P7': 30, 'P8': 38, 'P9': 45, 'P10': 6}
@@ -75,20 +77,6 @@ def evaluate_overall_status(statuses):
     else:
         return 'Very Bad'
 
-def extract_thumbnail(video_path, output_path):
-    print("Extracting thumbnail...")
-    try:
-        (
-            ffmpeg
-            .input(video_path, ss="00:00:01")  # Seek to 1 second into the video
-            .output(output_path, vframes=1, format='image2')  # Save a single frame
-            .overwrite_output()  # Overwrite if the file exists
-            .run()
-        )
-        print(f"Thumbnail saved to {output_path}")
-    except ffmpeg.Error as e:
-        print(f"An error occurred: {e}")
-
 def convert_to_h264(input_path, output_path):
     try:
         ffmpeg.input(input_path).output(output_path, vcodec='libx264', preset='fast', crf=23).run()
@@ -97,48 +85,36 @@ def convert_to_h264(input_path, output_path):
         print(f"FFmpeg error: {e.stderr.decode()}")
 
 def upload_blob(bucket_name, source_file_name, destination_blob_name):
-    # Initialize a Cloud Storage client
+    """Uploads a file to the bucket and returns its public URL."""
     storage_client = storage.Client()
-
-    # Get the bucket
     bucket = storage_client.bucket(bucket_name)
-
-    # Create a new blob in the bucket
     blob = bucket.blob(destination_blob_name)
+    
+    # Determine content type for common files
+    content_type = 'application/octet-stream' # Default
+    if destination_blob_name.endswith('.csv'):
+        content_type = 'text/csv'
+    elif destination_blob_name.endswith('.jpg') or destination_blob_name.endswith('.jpeg'):
+        content_type = 'image/jpeg'
 
-    # Upload the local file to the blob
-    blob.upload_from_filename(source_file_name)
-
-    # Make the blob publicly accessible (if UBLA is disabled)
-    # blob.make_public()
-
-    # Return the direct public URL
-    public_url = f"https://storage.googleapis.com/{bucket_name}/processed/{destination_blob_name}"
-    print(f"Public URL: {public_url}")
-
-    return blob.public_url
+    blob.upload_from_filename(source_file_name, content_type=content_type)
+    
+    # Construct the public URL
+    public_url = f"https://storage.googleapis.com/{bucket_name}/{destination_blob_name}"
+    print(f"Uploaded {source_file_name} to {public_url}")
+    return public_url
 
 def upload_video_blob(bucket_name, source_file_name, destination_blob_name):
-    # Initialize a Cloud Storage client
+    """Uploads a video file to the bucket and returns its public URL."""
     storage_client = storage.Client()
-
-    # Get the bucket
     bucket = storage_client.bucket(bucket_name)
-
-    # Create a new blob in the bucket
     blob = bucket.blob(destination_blob_name)
-
-    # Upload the local file to the blob
     blob.upload_from_filename(source_file_name, content_type="video/mp4")
 
-    # Make the blob publicly accessible (if UBLA is disabled)
-    # blob.make_public()
-
-    # Return the direct public URL
-    public_url = f"https://storage.googleapis.com/{bucket_name}/processed/{destination_blob_name}"
-    print(f"Public URL: {public_url}")
-
-    return blob.public_url
+    # Construct the public URL
+    public_url = f"https://storage.googleapis.com/{bucket_name}/{destination_blob_name}"
+    print(f"Uploaded video to {public_url}")
+    return public_url
 
 # Google Cloud Storage download function
 def download_blob(bucket_name, source_blob_name, destination_file_name):
@@ -251,6 +227,13 @@ def process_video():
 
         # Prepare CSV file for storing predictions
         output_csv_path = '/tmp/predictions.csv'
+        
+        # --- NEW: ---
+        # Dictionary to store public URLs of pose class thumbnails
+        pose_thumbnails = {}
+        # List to keep track of temporary thumbnail files for cleanup
+        temp_thumbnail_files = []
+
         with open(output_csv_path, mode='w', newline='') as csv_file:
             csv_writer = csv.writer(csv_file)
             csv_writer.writerow(['Frame', 'Predicted Class', 'Confidence', 'Video Time(s)', 'Shoulder Tilt','Hip Tilt', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status'])  # CSV header
@@ -317,13 +300,32 @@ def process_video():
                     # Updated logic to handle class index validity
                     if previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index):
                         if not first_instance_added[pose_class]:
+                            # --- NEW: CAPTURE AND UPLOAD THUMBNAIL ---
+                            try:
+                                # Create a unique local path for the thumbnail
+                                local_thumbnail_path = f"/tmp/thumb_{video_id}_{pose_class}.jpg"
+                                # GCS path for the thumbnail
+                                gcs_thumbnail_path = f"poseClassImages/{video_id}/{pose_class}.jpg"
+                                
+                                # Save the frame as a JPEG
+                                cv2.imwrite(local_thumbnail_path, img)
+                                
+                                # Upload to GCS
+                                thumbnail_url = upload_blob(bucket_name, local_thumbnail_path, gcs_thumbnail_path)
+                                
+                                # Store the URL
+                                pose_thumbnails[pose_class] = thumbnail_url
+                                temp_thumbnail_files.append(local_thumbnail_path)
+                            except Exception as e:
+                                print(f"Error saving or uploading thumbnail for {pose_class}: {e}")
+                            # --- END NEW ---
+
                             pose_class_angles[pose_class]["shoulder_tilt"].append(shoulder_tilt_angle)
                             pose_class_angles[pose_class]["hip_tilt"].append(hip_tilt_angle)
                             pose_class_angles[pose_class]["time_frame"].append(video_time)
                             pose_class_angles[pose_class]["shoulder_tilt_status"].append(shoulder_tilt_status)
                             pose_class_angles[pose_class]["hip_tilt_status"].append(hip_tilt_status)
                             pose_class_angles[pose_class]['overall_status'].append(overall_status)
-                            # pose_class_angles[pose_class]["time_frame"].append(video_time)
                             first_instance_added[pose_class] = True
                         previous_class_index = current_class_index
                     else:
@@ -359,20 +361,18 @@ def process_video():
 
         cap.release()
         out.release()  # Close video writer
-        # Write angles to CSV
+        
         convert_to_h264(output_video_path, h264_video_path)
         output_angles_csv_path = '/tmp/angles'+video_id+'.csv'
-        base_name = os.path.splitext(video_path.split('/')[-1])[0]
-        thumbnail_path = 'tmp/'+ base_name + '.jpg'
-        thumbnail_path_gcp = 'thumbnails/'+ base_name + '.jpg'
-        #extract_thumbnail(h264_video_path, thumbnail_path)
 
+        # Write angles and thumbnail URLs to CSV
         with open(output_angles_csv_path, mode='w', newline='') as file:
             writer = csv.writer(file)
-            writer.writerow(['Pose Class', 'Shoulder Tilt', 'Hip Tilt', 'Time Frame', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status'])
-            # Specify the desired order
+            # --- MODIFIED: Added pose_thumbnail_url to header ---
+            writer.writerow(['Pose Class', 'Shoulder Tilt', 'Hip Tilt', 'Time Frame', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status', 'pose_thumbnail_url'])
+            
             ordered_classes = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
-                # Iterate over pose_class_angles in the specified order
+            
             for pose_class in ordered_classes:
                 angles = pose_class_angles[pose_class]
                 shoulder_tilt = ', '.join(map(str, angles["shoulder_tilt"])) if angles["shoulder_tilt"] else 'No data'
@@ -381,24 +381,21 @@ def process_video():
                 shoulder_tilt_status = ', '.join(map(str, angles["shoulder_tilt_status"])) if angles["shoulder_tilt_status"] else 'No data'
                 hip_tilt_status = ', '.join(map(str, angles["hip_tilt_status"])) if angles["hip_tilt_status"] else 'No data'
                 overall_status = ', '.join(map(str, angles["overall_status"])) if angles["overall_status"] else 'No data'
-                writer.writerow([pose_class, shoulder_tilt, hip_tilt, time_frame, shoulder_tilt_status, hip_tilt_status, overall_status])
+                
+                # --- NEW: Get the thumbnail URL for the current pose class ---
+                thumbnail_url = pose_thumbnails.get(pose_class, "") # Default to empty string if not found
+                
+                # --- MODIFIED: Write the thumbnail URL to the row ---
+                writer.writerow([pose_class, shoulder_tilt, hip_tilt, time_frame, shoulder_tilt_status, hip_tilt_status, overall_status, thumbnail_url])
 
-        # Upload the thumbnail to GCS if `thumbnail_path_gcp` is specified
-        #if thumbnail_path_gcp:
-        #    output_thumbnail_url = upload_blob(bucket_name, thumbnail_path, thumbnail_path_gcp)
-        #    print(f"Uploaded output thumbnail to GCS: {output_thumbnail_url}")
-        #else:
-        #    output_thumbnail_url = None
-
-        # Upload the output video to GCS if `output_video_path` is specified
+        # Upload the output video to GCS if a path is specified
         if output_video_path_gcs:
             output_video_url = upload_video_blob(bucket_name, h264_video_path, output_video_path_gcs)
             print(f"Uploaded output video to GCS: {output_video_url}")
         else:
             output_video_url = None
-            
 
-        # Upload the CSV file to GCS if `output_csv_path` is specified
+        # Upload the CSV files to GCS if paths are specified
         if output_csv_path_gcs:
             output_csv_url = upload_blob(bucket_name, output_csv_path, output_csv_path_gcs)
             print(f"Uploaded predictions CSV to GCS: {output_csv_url}")
@@ -406,6 +403,7 @@ def process_video():
             print(f"Uploaded angles CSV to GCS: {output_angle_csv_url}")
         else:
             output_csv_url = None
+            output_angle_csv_url = None
 
 
          # Clean up temporary files
@@ -416,23 +414,27 @@ def process_video():
             h264_video_path,
             output_csv_path,
             output_angles_csv_path,
-            thumbnail_path
         ]
+        # --- NEW: Add temp thumbnail files to cleanup list ---
+        temp_files.extend(temp_thumbnail_files)
+
         for temp_file in temp_files:
             if os.path.exists(temp_file):
                 os.remove(temp_file)
-        
+        print(f"DEBUG: pose_thumbnails content: {pose_thumbnails}")
         return jsonify({
             'status': 'Processing complete',
             'predictions': predictions,
             'output_video': output_video_url,
             'output_csv': output_csv_url,
             'output_angle_csv': output_angle_csv_url,
-            #'output_thumbnail' : output_thumbnail_url
+            'output_pose_images': pose_thumbnails,
         }), 200
 
     except Exception as e:
         print(f"Error: {e}")
+        # Print the full traceback to Google Cloud Logging
+        traceback.print_exc()
         return jsonify({'error': str(e)}), 500 
 
 @app.route('/health', methods=['GET'])
