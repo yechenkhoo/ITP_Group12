@@ -69,6 +69,8 @@ class Coach:
     def fetch_all_students(coach_id):
         """Fetches all students assigned to a specific coach,
            and backfills DateCreated from ObjectId if missing."""
+        """Fetches all students assigned to a specific coach,
+           and backfills DateCreated from ObjectId if missing."""
         coach = Users_Collection.find_one({'_id': ObjectId(coach_id)})
         if not coach or 'Students' not in coach:
             return []
@@ -86,6 +88,7 @@ class Coach:
             oid = student.pop('_id')
             student['id'] = str(oid)
             students.append(student)
+
 
         return students
 
@@ -124,6 +127,28 @@ class Video:
         video_id = str(result.inserted_id)
         
         try:
+            # Read file into memory
+            file_data = file.read()  # Read file data as bytes
+            file_name = file.name  # Preserve the file name
+            content_type = file.content_type  # Preserve the content type
+
+            # Submit the task to the executor
+            future = Video.executor.submit(
+                Video._async_upload_video_task,
+                current_user_id,
+                assignee_id,
+                title,
+                video_type,
+                file_data,
+                file_name,
+                content_type,
+                result,
+            )
+
+            # Optional: Add a callback to handle post-upload logic
+            future.add_done_callback(Video._upload_callback)
+
+            return {"message": "Upload started in the background."}
             if source == "frontend":
                 # Handle frontend file upload - simplified structure
                 file_data = file.read()
@@ -188,6 +213,19 @@ class Video:
                 'upload_timestamp': datetime.now().isoformat()
             }
             blob.upload_from_file(file_stream, content_type=content_type)
+
+            if not blob.exists():
+                print("Error: File does not exist in GCS.")
+                time.sleep(2)
+
+            response = Video.process_video(blob_name, video_id, current_user_id, assignee_id)
+
+            if response.get("status") == "Processing complete":
+                print(f"Deleting original video: {blob_name}")
+                blob.delete()  # Delete the video file
+            else:
+                print(f"Skipping deletion due to processing error: {response.get('error')}")
+
             
             # Store raw video URL
             raw_video_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
@@ -221,127 +259,84 @@ class Video:
     def _upload_callback(future):
         """Handle post-upload completion logic."""
         try:
+            result = future.result()  # Retrieve the result of the background task
+            print("Upload task completed")
             result = future.result()
             print("Upload task completed:", result.get('status', 'unknown'))
         except Exception as e:
             print("Error in upload callback:", e)
-
-    @staticmethod
-    def process_video(file_path, video_id, uploader_id=None, assignee_id=None, source="frontend"):
-        """
-        FIXED: Better error handling and string conversion for JSON serialization.
-        """
-        print(f"Processing {source} video: {file_path} (ID: {video_id})")
-        try:
-            gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
-            
-            # FIXED: Ensure all IDs are strings for JSON serialization
-            payload = {
-                "classification_model": "best_model.keras",
-                "video_id": str(video_id),  # Convert to string
-                "video_path": file_path,
-                "output_video_path": f"processed/{file_path.split('/')[-1]}",
-                "output_csv_path": f"processed/{file_path.split('/')[-1]}.csv",
-                "output_angle_csv_path": f"processed/{file_path.split('/')[-1]}_angles.csv",
-                "output_pose_images_path": f"poseClassImages/{file_path.split('/')[-1].rsplit('.', 1)[0]}/"
-            }
-            
-            # Add user context if available (convert ObjectIds to strings)
-            if uploader_id and assignee_id:
-                payload.update({
-                    "uploader_id": str(uploader_id),    # Ensure string
-                    "assignee_id": str(assignee_id)     # Ensure string
-                })
-            
-            print(f"Sending payload to GCP function: {payload}")
-            
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(gcp_function_url, json=payload, headers=headers, timeout=300)
-            response.raise_for_status()
-            
-            response_data = response.json()
-            print(f"GCP function response: {response_data}")
-            
-            # Extract URLs from response
-            output_video_url = response_data.get('output_video')
-            output_csv_url = response_data.get('output_csv') 
-            output_angle_csv_url = response_data.get('output_angle_csv')
-            output_pose_images_url = response_data.get('output_pose_images')
-            
-            # Update MongoDB with results
-            update_data = {
-                'Status': 'Completed',
-                'frameByFrameCsvLink': output_csv_url,
-                'angleCsvLink': output_angle_csv_url, 
-                'processedVideoLink': output_video_url,
-                'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
-            }
-            
-            if output_pose_images_url:
-                update_data['poseClassImagesLink'] = output_pose_images_url
-                
-            Videos_Collection.update_one(
-                {'_id': ObjectId(video_id)},
-                {'$set': update_data}
-            )
-            
-            print(f"Video {video_id} processing completed successfully")
-            return response_data
-            
-        except requests.exceptions.Timeout:
-            error_msg = "GCP function call timed out."
-            print(f"GCP function timeout for video {video_id}")
-            Videos_Collection.update_one(
-                {'_id': ObjectId(video_id)},
-                {'$set': {'Status': 'Failed', 'Error': error_msg}}
-            )
-            return {"error": error_msg}
-        except requests.exceptions.RequestException as e:
-            error_msg = f"GCP function error: {str(e)}"
-            print(f"GCP function error for video {video_id}: {e}")
-            Videos_Collection.update_one(
-                {'_id': ObjectId(video_id)},
-                {'$set': {'Status': 'Failed', 'Error': error_msg}}
-            )
-            return {"error": "An error occurred during video processing."}
-        except Exception as e:
-            error_msg = f"Unexpected processing error: {str(e)}"
-            print(f"Unexpected error processing video {video_id}: {e}")
-            traceback.print_exc()
-            Videos_Collection.update_one(
-                {'_id': ObjectId(video_id)},
-                {'$set': {'Status': 'Failed', 'Error': error_msg}}
-            )
-            return {"error": "An unexpected error occurred during video processing."}
-
-    @staticmethod
-    def upload_from_camera(user_id, assignee_id, video_title, video_type, gcs_file_path):
-        """
-        FIXED: Ensure proper user context for camera uploads.
-        """
-        print(f"Camera upload: user_id={user_id}, assignee_id={assignee_id}, title={video_title}")
         
-        return Video.upload_video(
-            current_user_id=user_id,
-            assignee_id=assignee_id, 
-            title=video_title,
-            video_type=video_type,
-            file=gcs_file_path,
-            source="camera"
-        )
-
-    # Keep all existing methods unchanged
     @staticmethod
     def get_video_url(video_id):
         """Fetches the URL of a video from Google Cloud Storage."""
         video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
-        return video.get('processedVideoLink') if video else None
+        return video['processedVideoLink'] 
         
     @staticmethod
     def get_csv_url(video_id):
-        """Fetches the URL of a video CSV from Google Cloud Storage."""
+        """Fetches the URL of a video from Google Cloud Storage."""
         video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
-        return video.get('angleCsvLink') if video else None
+        return video['angleCsvLink']
+        
+    @staticmethod
+    def process_video(file_path, video_id, uploader_id, assignee_id):
+        """Process video with user context included in paths"""
+        print(f"Processing video: {file_path}")
+        try:
+            # Define the URL for the GCP function
+            gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
+
+            # Extract filename from path for output naming
+            filename = file_path.split('/')[-1]
+            
+            # Create organized output paths that maintain user context
+            base_output_path = f"processed/{uploader_id}/{assignee_id}"
+            
+            # Prepare the request payload with user context
+            payload = {
+                "classification_model": "models/basemodel.keras",
+                "video_id": video_id,
+                "uploader_id": uploader_id,
+                "assignee_id": assignee_id,
+                "video_path": file_path,
+                "output_video_path": f"{base_output_path}/{filename}",
+                "output_csv_path": f"{base_output_path}/{filename}.csv",
+                "output_angle_csv_path": f"{base_output_path}/{filename}_angles.csv"
+            }
+
+            # Send the POST request to the GCP function
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(gcp_function_url, json=payload, headers=headers)
+
+            if response.status_code == 200:
+                # Parse the JSON response from the GCP function
+                response_data = response.json()
+                output_video_url = response_data.get('output_video')
+                output_csv_url = response_data.get('output_csv')
+                output_angle_csv_url = response_data.get('output_angle_csv')
+
+                # Update the MongoDB document with the returned URLs and status
+                Videos_Collection.update_one(
+                    {'_id': ObjectId(video_id)},  # Find the document by ID
+                    {
+                        '$set': {
+                            'Status': 'Completed',
+                            'frameByFrameCsvLink': output_csv_url,
+                            'angleCsvLink': output_angle_csv_url,
+                            'processedVideoLink': output_video_url,
+                            'originalVideoPath': file_path,  # Store original path for reference
+                            'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
+                        }
+                    }
+                )
+                return response_data
+            else:
+                print(f"Error in video processing: {response.text}")
+                return {"error": "An error occurred during video processing."}
+
+        except Exception as e:
+            print(f"Error during video processing: {e}")
+            return {"error": "An error occurred during video processing."}
 
     @staticmethod
     def get_all_videos(assignee_id):
@@ -350,70 +345,63 @@ class Video:
             {**video, 'id': str(video.pop('_id'))}
             for video in Videos_Collection.find({'Assignee': ObjectId(assignee_id)})
         ]
-
+        
     @staticmethod
-    def get_video_status(video_id):
-        """Fetches the status of a specific video."""
-        video = Videos_Collection.find_one(
-            {'_id': ObjectId(video_id)}, 
-            {'Status': 1, 'rawVideoLink': 1, 'processedVideoLink': 1, 'poseClassImagesLink': 1, 'Error': 1}
-        )
-        if video:
-            return {
-                'status': video.get('Status'),
-                'rawVideoLink': video.get('rawVideoLink'),
-                'processedVideoLink': video.get('processedVideoLink'),
-                'poseClassImagesLink': video.get('poseClassImagesLink'),
-                'error': video.get('Error')
-            }
-        return None
-
+    def get_csv_url(video_id):
+        """Fetches the URL of a video from Google Cloud Storage."""
+        video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
+        return video['angleCsvLink']
+        
     @staticmethod
-    def get_random_pro_video_blob_name():
-        """Retrieves a random pro video blob name from Google Cloud Storage."""
+    def process_video(file_path,video_id):
+        print(file_path)
         try:
-            bucket_name = 'golf-swing-models'
-            storage_client = get_google_cloud_storage_client()
-            bucket = storage_client.get_bucket(bucket_name)
-            blobs = list(bucket.list_blobs(prefix='modelVideos/'))
-            video_blobs = [b.name for b in blobs if b.name.lower().endswith('.mp4')]
-            if not video_blobs:
-                print(f"No pro videos found under 'modelVideos/' in bucket '{bucket_name}'")
-                return None
-            return random.choice(video_blobs)
+            # Define the URL for the GCP function
+            gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
+
+            # Prepare the request payload
+            payload = {
+                
+                "classification_model": "models/best_model.keras",
+                "video_id":video_id,
+                "video_path": file_path,
+                "output_video_path": f"processed/{file_path.split('/')[-1]}",
+                "output_csv_path": f"processed/{file_path.split('/')[-1]}.csv",
+                "output_angle_csv_path": f"processed/{file_path.split('/')[-1]}_angles.csv"
+            }
+
+            # Send the POST request to the GCP function
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(gcp_function_url, json=payload, headers=headers)
+
+            if response.status_code == 200:
+                # Parse the JSON response from the GCP function
+                response_data = response.json()
+                output_video_url = response_data.get('output_video')
+                output_csv_url = response_data.get('output_csv')
+                output_angle_csv_url = response_data.get('output_angle_csv')
+                #thumbnail_url = response_data.get('output_thumbnail')
+
+                # Update the MongoDB document with the returned URLs and status
+                Videos_Collection.update_one(
+                    {'_id': ObjectId(video_id)},  # Find the document by ID
+                    {
+                        '$set': {
+                            'Status': 'Completed',
+                            'frameByFrameCsvLink': output_csv_url,
+                            'angleCsvLink': output_angle_csv_url,
+                            'processedVideoLink': output_video_url
+                        }
+                    }
+                )
+                return response_data
+            else:
+                print(f"Error in video processing: {response.text}")
+                return {"error": "An error occurred during video processing."}
+
         except Exception as e:
-            print(f"Error listing GCS blobs for pro videos: {e}")
-            return None
-
-    @staticmethod
-    def get_pro_video_url_from_blob(blob_name):
-        """Given a pro video blob name, returns its public URL if it exists."""
-        if not blob_name:
-            return None
-        bucket_name = 'golf-swing-models'
-        storage_client = get_google_cloud_storage_client()
-        bucket = storage_client.get_bucket(bucket_name)
-        blob = bucket.blob(blob_name)
-        if blob.exists():
-            return f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
-        print(f"Pro video blob not found: {blob_name}")
-        return None
-
-    @staticmethod
-    def get_pro_csv_url_from_blob(blob_name):
-        """Given a pro video blob name, derives the CSV blob name and returns its public URL."""
-        if not blob_name:
-            return None
-        bucket_name = 'golf-swing-models'
-        base, _ = blob_name.rsplit('.', 1)
-        csv_blob_name = f"{base}_angles.csv"
-        storage_client = get_google_cloud_storage_client()
-        bucket = storage_client.get_bucket(bucket_name)
-        blob = bucket.blob(csv_blob_name)
-        if blob.exists():
-            return f"https://storage.googleapis.com/{bucket_name}/{csv_blob_name}"
-        print(f"Pro CSV blob not found: {csv_blob_name}")
-        return None
+            print(f"Error during video processing: {e}")
+            return {"error": "An error occurred during video processing."}
 
     @staticmethod
     def get_all_video_comments(video_id, current_user_id):
@@ -430,14 +418,32 @@ class Video:
             sort=[("DateCommented", 1)]
         )
         all_related_comments = list(all_related_comments_cursor)
+    def get_all_video_comments(video_id):
+        """Fetches all comments for a specific video, sorted by the latest DateCommented."""
+        video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
+        if not video or 'Comments' not in video:
+            return []
 
+        comment_ids = video['Comments']
+        # Fetch all comments in one query, sorted by DateCommented in descending order
+        comments = list(Comments_Collection.find(
+            {'_id': {'$in': [ObjectId(comment_id) for comment_id in comment_ids]}},
+            sort=[("DateCommented", -1)]  # Sort by DateCommented descending
+        ))
+
+        # Enrich comments with user details
+        for comment in comments:
         comments_map = {}
         for comment in all_related_comments:
             user = Users_Collection.find_one({'_id': ObjectId(comment['CommentedBy'])})
             comment['CommentedBy'] = user['Name'] if user else 'Unknown User'
 
             # Format DateCommented for returning
+
+            # Format DateCommented for returning
             comment['FormattedDate'] = comment['DateCommented'].strftime("%H:%M %b %d, %Y")
+
+        return comments
             comment['id'] = str(comment['_id'])
             comments_map[comment['id']] = comment
             comment['replies'] = []
@@ -470,9 +476,16 @@ class Comment:
     """Handles operations related to comments."""
 
     @staticmethod
+    def add_comment(current_user_id, video_id, comment_text):
+        """
+        Adds a comment to a video and associates it with the commenting user.
+        """
+
     def add_comment(current_user_id, video_id, comment_text, x_pos=None, y_pos=None):
         """Adds a top-level comment to a video."""
         try:
+            # Create comment document
+            
             comment_document = {
                 'Comment': comment_text,
                 'CommentedBy': ObjectId(current_user_id),
@@ -484,13 +497,17 @@ class Comment:
                 'readBy': [ObjectId(current_user_id)],
             }
             Comments_Collection.insert_one(comment_document)
+            Comments_Collection.insert_one(comment_document)
 
+            # Link the comment to the video
             Videos_Collection.update_one(
                 {'_id': ObjectId(video_id)},
+                {'$push': {'Comments': comment_document['_id']}}
                 {'$push': {'Comments': comment_document['_id']}}
             )
         except Exception as e:
             print(f"Error adding comment: {e}")
+
             traceback.print_exc()
             return None
 
