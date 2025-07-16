@@ -1,34 +1,10 @@
 from django.urls import include, path
+from .views import dashboard_results, dashboard_videoFeed, logout, home, dashboard_dataSpace, create_account,live_stream, start_recording, upload_from_pi, admin_model, golf_video_feed, golf_status, golf_start_recording, golf_toggle_auto_recording, golf_toggle_pose_detection, golf_reload_models, golf_health, golf_set_user_context, api_my_students
+
 from .views import (
-    dashboard_results,
-    dashboard_videoFeed,
-    logout,
-    home,
-    dashboard_dataSpace,
-    create_account,
-    # OLD CAMERA SYSTEM
-    live_stream,
-    start_recording,
-    upload_from_pi,  # Keep for backward compatibility
-    # NEW UNIFIED SYSTEM  
-    upload_from_camera_system,  # NEW: Unified camera upload endpoint
-    # ADMIN
-    admin_model,
-    # GOLF CAMERA SYSTEM
-    golf_video_feed,
-    golf_status,
-    golf_start_recording,
-    golf_toggle_auto_recording,
-    golf_toggle_pose_detection,
-    golf_reload_models,
-    golf_health,
-    golf_set_user_context,
-    api_my_students,
-    # COMPARISON
-    dashboard_compareSwings,
-    # AJAX COMMENT ENDPOINTS
-    add_video_comment_ajax,
-    update_comment_position_ajax,
+    dashboard_results, dashboard_videoFeed, logout, home, dashboard_dataSpace,
+    create_account, live_stream, start_recording, upload_from_pi, admin_model,
+    dashboard_compareSwings, add_video_comment_ajax, update_comment_position_ajax,
     delete_video_comment_ajax,
     edit_video_comment_ajax,
     add_video_reply_ajax,
@@ -44,7 +20,6 @@ urlpatterns = [
     path("video_feed/", dashboard_videoFeed, name="dashboard_videoFeed"),
     path("logout/", logout, name="logout"),
 
-    # Data space and results
     path('dataSpace/<str:id>/', dashboard_dataSpace, name='dashboard_dataSpace'),
     path("dataSpace/<str:id>/results/<str:VideoId>/", dashboard_results, name="results"),
     path('dataSpace/<str:id>/compare-swings/', dashboard_compareSwings, name='dashboard_compareSwings'),
@@ -52,6 +27,7 @@ urlpatterns = [
     # Account management
     path("create_account/", create_account, name="create_account"),
     path("uploadModel/", admin_model, name="admin_model"),
+    path('dataSpace/<str:id>/compare-swings/', dashboard_compareSwings, name='dashboard_compareSwings'),
 
     # AJAX endpoints for comments
     path('dataSpace/<str:id>/results/<str:VideoId>/add_comment_ajax/', add_video_comment_ajax, name='add_video_comment_ajax'),
@@ -63,7 +39,7 @@ urlpatterns = [
     path('dataSpace/<str:id>/results/<str:VideoId>/delete_reply_ajax/', delete_video_reply_ajax, name='delete_video_reply_ajax'),
     path('dataSpace/<str:id>/results/<str:VideoId>/mark_read_ajax/', mark_comment_read, name='mark_comment_read'),
 
-    # Video status checking
+    # New AJAX endpoint for video statuses
     path('dataSpace/<str:id>/check_video_status_ajax/<str:video_id>/', check_video_status_ajax, name='check_video_status_ajax'),
 
     # =============================================================================
@@ -71,12 +47,8 @@ urlpatterns = [
     # =============================================================================
     path("live_stream/", live_stream, name="live_stream"),
     path('start_recording/', start_recording, name='start_recording'),
-    path('upload_from_pi/', upload_from_pi, name='upload_from_pi'),  # Keep old endpoint
 
-    # =============================================================================
-    # NEW UNIFIED CAMERA SYSTEM
-    # =============================================================================
-    path('upload_from_camera_system/', upload_from_camera_system, name='upload_from_camera_system'),  # NEW
+    path('upload_from_pi/', upload_from_pi, name='upload_from_pi'),
 
     # =============================================================================
     # GOLF CAMERA SYSTEM ENDPOINTS

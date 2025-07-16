@@ -131,6 +131,9 @@ class Video:
             file_data = file.read()  # Read file data as bytes
             file_name = file.name  # Preserve the file name
             content_type = file.content_type  # Preserve the content type
+            file_data = file.read()  # Read file data as bytes
+            file_name = file.name  # Preserve the file name
+            content_type = file.content_type  # Preserve the content type
 
             # Submit the task to the executor
             future = Video.executor.submit(
@@ -260,6 +263,7 @@ class Video:
         """Handle post-upload completion logic."""
         try:
             result = future.result()  # Retrieve the result of the background task
+            result = future.result()  # Retrieve the result of the background task
             print("Upload task completed")
             result = future.result()
             print("Upload task completed:", result.get('status', 'unknown'))
@@ -355,6 +359,7 @@ class Video:
     @staticmethod
     def process_video(file_path,video_id):
         print(file_path)
+        print(file_path)
         try:
             # Define the URL for the GCP function
             gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
@@ -368,12 +373,21 @@ class Video:
                 "output_video_path": f"processed/{file_path.split('/')[-1]}",
                 "output_csv_path": f"processed/{file_path.split('/')[-1]}.csv",
                 "output_angle_csv_path": f"processed/{file_path.split('/')[-1]}_angles.csv"
+                "output_angle_csv_path": f"processed/{file_path.split('/')[-1]}_angles.csv"
             }
 
             # Send the POST request to the GCP function
             headers = {"Content-Type": "application/json"}
             response = requests.post(gcp_function_url, json=payload, headers=headers)
+            response = requests.post(gcp_function_url, json=payload, headers=headers)
 
+            if response.status_code == 200:
+                # Parse the JSON response from the GCP function
+                response_data = response.json()
+                output_video_url = response_data.get('output_video')
+                output_csv_url = response_data.get('output_csv')
+                output_angle_csv_url = response_data.get('output_angle_csv')
+                #thumbnail_url = response_data.get('output_thumbnail')
             if response.status_code == 200:
                 # Parse the JSON response from the GCP function
                 response_data = response.json()
@@ -399,7 +413,26 @@ class Video:
                 print(f"Error in video processing: {response.text}")
                 return {"error": "An error occurred during video processing."}
 
+                # Update the MongoDB document with the returned URLs and status
+                Videos_Collection.update_one(
+                    {'_id': ObjectId(video_id)},  # Find the document by ID
+                    {
+                        '$set': {
+                            'Status': 'Completed',
+                            'frameByFrameCsvLink': output_csv_url,
+                            'angleCsvLink': output_angle_csv_url,
+                            'processedVideoLink': output_video_url
+                        }
+                    }
+                )
+                return response_data
+            else:
+                print(f"Error in video processing: {response.text}")
+                return {"error": "An error occurred during video processing."}
+
         except Exception as e:
+            print(f"Error during video processing: {e}")
+            return {"error": "An error occurred during video processing."}
             print(f"Error during video processing: {e}")
             return {"error": "An error occurred during video processing."}
 
@@ -477,7 +510,9 @@ class Comment:
 
     @staticmethod
     def add_comment(current_user_id, video_id, comment_text):
+    def add_comment(current_user_id, video_id, comment_text):
         """
+        Adds a comment to a video and associates it with the commenting user.
         Adds a comment to a video and associates it with the commenting user.
         """
 
@@ -485,6 +520,7 @@ class Comment:
         """Adds a top-level comment to a video."""
         try:
             # Create comment document
+            
             
             comment_document = {
                 'Comment': comment_text,
@@ -499,6 +535,7 @@ class Comment:
             Comments_Collection.insert_one(comment_document)
             Comments_Collection.insert_one(comment_document)
 
+            # Link the comment to the video
             # Link the comment to the video
             Videos_Collection.update_one(
                 {'_id': ObjectId(video_id)},
