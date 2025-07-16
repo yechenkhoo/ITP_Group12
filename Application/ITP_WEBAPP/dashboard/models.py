@@ -14,9 +14,9 @@ from dashboard.google_cloud import get_google_cloud_storage_client
 import time
 from concurrent.futures import ThreadPoolExecutor
 import io
-import traceback # Import traceback for detailed error logging
+import traceback
 import random
-import json # Ensure json module is imported for JSONDecodeError
+import json
 
 # MongoDB collections
 Users_Collection = MONGO_CLIENT['Users']
@@ -54,13 +54,9 @@ class Coach:
     def update_student_array(student_email, coach_id):
         """Adds a student to a coach's student list."""
         try:
-            # Ensure coach_id is a valid ObjectId
             coach_object_id = ObjectId(coach_id)
-
-            # Find the student by email
             student = Users_Collection.find_one({'Email': student_email})
             if student:
-                # Add the student's ObjectId to the coach's student list
                 Users_Collection.update_one(
                     {'_id': coach_object_id},
                     {'$push': {'Students': student['_id']}}
@@ -70,7 +66,6 @@ class Coach:
         except Exception as e:
             print(f"Error updating student array: {e}")
             return False
-
 
     @staticmethod
     def fetch_all_students(coach_id):
@@ -85,16 +80,12 @@ class Coach:
             if not student:
                 continue
 
-            # --- backfill DateCreated if the field is missing ---
             if 'DateCreated' not in student:
-                # ObjectId.generation_time is a datetime in UTC
                 ts = student['_id'].generation_time
                 student['DateCreated'] = ts.strftime("%H:%M %b %d, %Y")
 
-            # Replace _id with string id
             oid = student.pop('_id')
             student['id'] = str(oid)
-
             students.append(student)
         return students
 
@@ -108,205 +99,249 @@ class Coach:
 
 
 class Video:
-    """Handles operations related to videos."""
+    """Unified video handling for both frontend uploads and camera recordings."""
 
     executor = ThreadPoolExecutor(max_workers=5)
 
     @staticmethod
-    def upload_video(current_user_id, assignee_id, title, video_type, file):
+    def upload_video(current_user_id, assignee_id, title, video_type, file, source="frontend"):
         """
-        Trigger asynchronous video upload to GCP.
+        FIXED: Simplified video upload with proper user tracking and simple file structure.
         """
         formatted_date = datetime.now().strftime("%H:%M %b %d, %Y")
         
         video_document = {
             'UploadedBy': ObjectId(current_user_id),
             'Assignee': ObjectId(assignee_id),
-            'Title': title,
+            'Title': title,  # Keep original title
             'Type': video_type,
             'DateUploaded': formatted_date,
             'Status': 'Processing',
+            'Source': source,
         }
 
         result = Videos_Collection.insert_one(video_document)
+        video_id = str(result.inserted_id)
         
         try:
-            # Read file into memory
-            file_data = file.read()   # Read file data as bytes
-            file_name = file.name   # Preserve the file name
-            content_type = file.content_type   # Preserve the content type
-
-            # Submit the task to the executor
-            future = Video.executor.submit(
-                Video._async_upload_video_task,
-                current_user_id,
-                assignee_id,
-                title,
-                video_type,
-                file_data,
-                file_name,
-                content_type,
-                result,
-            )
-
-            # Optional: Add a callback to handle post-upload logic
-            future.add_done_callback(Video._upload_callback)
-
-            return {"message": "Upload started in the background."}
+            if source == "frontend":
+                # Handle frontend file upload - simplified structure
+                file_data = file.read()
+                file_name = file.name
+                content_type = file.content_type
+                
+                # Submit async upload task
+                future = Video.executor.submit(
+                    Video._async_upload_video_task,
+                    current_user_id, assignee_id, title, video_type,
+                    file_data, file_name, content_type, result, source
+                )
+                future.add_done_callback(Video._upload_callback)
+                
+                return {"message": "Frontend upload started in the background.", "video_id": video_id}
+                
+            elif source == "camera":
+                # Handle camera recording - file is already in GCS
+                response = Video.process_video(
+                    file_path=file,  # file is GCS path for camera
+                    video_id=video_id,
+                    uploader_id=current_user_id,
+                    assignee_id=assignee_id,
+                    source=source
+                )
+                return {"message": "Camera recording processing started.", "video_id": video_id}
+                
         except Exception as e:
-            print(f"Error starting async upload: {e}")
-            return {"error": "Failed to start the upload process."}
+            print(f"Error starting upload (source: {source}): {e}")
+            # Update status to Failed with error
+            Videos_Collection.update_one(
+                {'_id': result.inserted_id},
+                {'$set': {'Status': 'Failed', 'Error': str(e)}}
+            )
+            return {"error": f"Failed to start {source} upload process.", "video_id": video_id}
 
     @staticmethod
-    def _async_upload_video_task(current_user_id, assignee_id, title, video_type, file_data, file_name, content_type, result):
-        """
-        Perform the actual upload to GCP in the background.
-        """
+    def _async_upload_video_task(current_user_id, assignee_id, title, video_type, 
+                                file_data, file_name, content_type, result, source):
+        """FIXED: Simplified upload task with better error handling."""
         try:
-            print("uploading")
+            print(f"Starting {source} upload for video {result.inserted_id}")
             bucket_name = 'golf-swing-models'
-
-            # Initialize GCP storage client
+            
             storage_client = get_google_cloud_storage_client()
-
-            # Get the bucket
             bucket = storage_client.bucket(bucket_name)
-
-            # Generate a unique blob name with user context
-            unique_id = uuid.uuid4().hex  # Generate a unique ID
-            video_id = str(result.inserted_id)  # Get the video document ID
             
-            # Create organized path structure: videos/{uploader_id}/{assignee_id}/{video_id}_{filename}
-            blob_name = f'videos/{current_user_id}/{assignee_id}/{video_id}_{unique_id}_{file_name}'
-
-            # Create a file-like object from the in-memory data
+            # SIMPLIFIED: Just store in golf_videos/ with original filename
+            video_id = str(result.inserted_id)
+            blob_name = f'golf_videos/{file_name}'  # Simple structure
+            
+            # Upload to GCS
             file_stream = io.BytesIO(file_data)
-
-            # Upload file to GCP Storage with metadata
             blob = bucket.blob(blob_name)
-            
-            # Add metadata to the blob for additional context
             blob.metadata = {
-                'uploaded_by': current_user_id,
-                'assignee': assignee_id,
+                'uploaded_by': str(current_user_id),  # Convert to string to avoid ObjectId issues
+                'assignee': str(assignee_id),
                 'video_id': video_id,
                 'video_type': video_type,
                 'title': title,
+                'source': source,
                 'upload_timestamp': datetime.now().isoformat()
             }
-            
             blob.upload_from_file(file_stream, content_type=content_type)
-
-            # --- NEW: Construct the public URL for the raw video ---
-            raw_video_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
-
-            if not blob.exists():
-                print("Error: File does not exist in GCS.")
-                time.sleep(2)
             
-            video_id = str(result.inserted_id)   # Get the ID as a string
-
-            # --- NEW: Update the document with the raw video URL ---
+            # Store raw video URL
+            raw_video_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
             Videos_Collection.update_one(
                 {'_id': result.inserted_id},
                 {'$set': {'rawVideoLink': raw_video_url}}
             )
-
-            response = Video.process_video(blob_name, video_id, current_user_id, assignee_id)
-
-            if response.get("status") == "Processing complete":
-                print(f"Processing succeeded; keeping raw upload at {blob_name}")
-            else:
-                print(f"Processing error, raw upload kept: {response.get('error')}")
-
+            
+            # Process the video
+            response = Video.process_video(
+                file_path=blob_name,
+                video_id=video_id,
+                uploader_id=str(current_user_id),  # Convert to string
+                assignee_id=str(assignee_id),      # Convert to string
+                source=source
+            )
+            
             return response
-
+            
         except Exception as e:
-            print(f"Error uploading video: {e}")
-            return {"error": "An error occurred during video upload."}
+            print(f"Error in {source} upload task: {e}")
+            traceback.print_exc()
+            # Update status to Failed
+            Videos_Collection.update_one(
+                {'_id': result.inserted_id},
+                {'$set': {'Status': 'Failed', 'Error': str(e)}}
+            )
+            return {"error": f"An error occurred during {source} video upload."}
 
     @staticmethod
     def _upload_callback(future):
-        """
-        Handle post-upload completion logic.
-        """
+        """Handle post-upload completion logic."""
         try:
-            result = future.result()   # Retrieve the result of the background task
-            print("Upload task completed")
+            result = future.result()
+            print("Upload task completed:", result.get('status', 'unknown'))
         except Exception as e:
             print("Error in upload callback:", e)
+
+    @staticmethod
+    def process_video(file_path, video_id, uploader_id=None, assignee_id=None, source="frontend"):
+        """
+        FIXED: Better error handling and string conversion for JSON serialization.
+        """
+        print(f"Processing {source} video: {file_path} (ID: {video_id})")
+        try:
+            gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
+            
+            # FIXED: Ensure all IDs are strings for JSON serialization
+            payload = {
+                "classification_model": "best_model.keras",
+                "video_id": str(video_id),  # Convert to string
+                "video_path": file_path,
+                "output_video_path": f"processed/{file_path.split('/')[-1]}",
+                "output_csv_path": f"processed/{file_path.split('/')[-1]}.csv",
+                "output_angle_csv_path": f"processed/{file_path.split('/')[-1]}_angles.csv",
+                "output_pose_images_path": f"poseClassImages/{file_path.split('/')[-1].rsplit('.', 1)[0]}/"
+            }
+            
+            # Add user context if available (convert ObjectIds to strings)
+            if uploader_id and assignee_id:
+                payload.update({
+                    "uploader_id": str(uploader_id),    # Ensure string
+                    "assignee_id": str(assignee_id)     # Ensure string
+                })
+            
+            print(f"Sending payload to GCP function: {payload}")
+            
+            headers = {"Content-Type": "application/json"}
+            response = requests.post(gcp_function_url, json=payload, headers=headers, timeout=300)
+            response.raise_for_status()
+            
+            response_data = response.json()
+            print(f"GCP function response: {response_data}")
+            
+            # Extract URLs from response
+            output_video_url = response_data.get('output_video')
+            output_csv_url = response_data.get('output_csv') 
+            output_angle_csv_url = response_data.get('output_angle_csv')
+            output_pose_images_url = response_data.get('output_pose_images')
+            
+            # Update MongoDB with results
+            update_data = {
+                'Status': 'Completed',
+                'frameByFrameCsvLink': output_csv_url,
+                'angleCsvLink': output_angle_csv_url, 
+                'processedVideoLink': output_video_url,
+                'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
+            }
+            
+            if output_pose_images_url:
+                update_data['poseClassImagesLink'] = output_pose_images_url
+                
+            Videos_Collection.update_one(
+                {'_id': ObjectId(video_id)},
+                {'$set': update_data}
+            )
+            
+            print(f"Video {video_id} processing completed successfully")
+            return response_data
+            
+        except requests.exceptions.Timeout:
+            error_msg = "GCP function call timed out."
+            print(f"GCP function timeout for video {video_id}")
+            Videos_Collection.update_one(
+                {'_id': ObjectId(video_id)},
+                {'$set': {'Status': 'Failed', 'Error': error_msg}}
+            )
+            return {"error": error_msg}
+        except requests.exceptions.RequestException as e:
+            error_msg = f"GCP function error: {str(e)}"
+            print(f"GCP function error for video {video_id}: {e}")
+            Videos_Collection.update_one(
+                {'_id': ObjectId(video_id)},
+                {'$set': {'Status': 'Failed', 'Error': error_msg}}
+            )
+            return {"error": "An error occurred during video processing."}
+        except Exception as e:
+            error_msg = f"Unexpected processing error: {str(e)}"
+            print(f"Unexpected error processing video {video_id}: {e}")
+            traceback.print_exc()
+            Videos_Collection.update_one(
+                {'_id': ObjectId(video_id)},
+                {'$set': {'Status': 'Failed', 'Error': error_msg}}
+            )
+            return {"error": "An unexpected error occurred during video processing."}
+
+    @staticmethod
+    def upload_from_camera(user_id, assignee_id, video_title, video_type, gcs_file_path):
+        """
+        FIXED: Ensure proper user context for camera uploads.
+        """
+        print(f"Camera upload: user_id={user_id}, assignee_id={assignee_id}, title={video_title}")
         
+        return Video.upload_video(
+            current_user_id=user_id,
+            assignee_id=assignee_id, 
+            title=video_title,
+            video_type=video_type,
+            file=gcs_file_path,
+            source="camera"
+        )
+
+    # Keep all existing methods unchanged
     @staticmethod
     def get_video_url(video_id):
         """Fetches the URL of a video from Google Cloud Storage."""
         video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
-        return video['processedVideoLink'] 
+        return video.get('processedVideoLink') if video else None
         
     @staticmethod
     def get_csv_url(video_id):
-        """Fetches the URL of a video from Google Cloud Storage."""
+        """Fetches the URL of a video CSV from Google Cloud Storage."""
         video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
-        return video['angleCsvLink']
-        
-    @staticmethod
-    def process_video(file_path, video_id, uploader_id, assignee_id):
-        """Process video with user context included in paths"""
-        print(f"Processing video: {file_path}")
-        try:
-            # Define the URL for the GCP function
-            gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
-
-            # Extract filename from path for output naming
-            filename = file_path.split('/')[-1]
-            
-            # Create organized output paths that maintain user context
-            base_output_path = f"processed/{uploader_id}/{assignee_id}"
-            
-            # Prepare the request payload with user context
-            payload = {
-                "classification_model": "models/basemodel.keras",
-                "video_id": video_id,
-                "uploader_id": uploader_id,
-                "assignee_id": assignee_id,
-                "video_path": file_path,
-                "output_video_path": f"{base_output_path}/{filename}",
-                "output_csv_path": f"{base_output_path}/{filename}.csv",
-                "output_angle_csv_path": f"{base_output_path}/{filename}_angles.csv"
-            }
-
-            # Send the POST request to the GCP function
-            headers = {"Content-Type": "application/json"}
-            response = requests.post(gcp_function_url, json=payload, headers=headers)
-
-            if response.status_code == 200:
-                # Parse the JSON response from the GCP function
-                response_data = response.json()
-                output_video_url = response_data.get('output_video')
-                output_csv_url = response_data.get('output_csv')
-                output_angle_csv_url = response_data.get('output_angle_csv')
-
-                # Update the MongoDB document with the returned URLs and status
-                Videos_Collection.update_one(
-                    {'_id': ObjectId(video_id)},  # Find the document by ID
-                    {
-                        '$set': {
-                            'Status': 'Completed',
-                            'frameByFrameCsvLink': output_csv_url,
-                            'angleCsvLink': output_angle_csv_url,
-                            'processedVideoLink': output_video_url,
-                            'originalVideoPath': file_path,  # Store original path for reference
-                            'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
-                        }
-                    }
-                )
-                return response_data
-            else:
-                print(f"Error in video processing: {response.text}")
-                return {"error": "An error occurred during video processing."}
-
-        except Exception as e:
-            print(f"Error during video processing: {e}")
-            return {"error": "An error occurred during video processing."}
+        return video.get('angleCsvLink') if video else None
 
     @staticmethod
     def get_all_videos(assignee_id):
@@ -319,28 +354,23 @@ class Video:
     @staticmethod
     def get_video_status(video_id):
         """Fetches the status of a specific video."""
-        video = Videos_Collection.find_one({'_id': ObjectId(video_id)}, {'Status': 1, 'rawVideoLink': 1, 'processedVideoLink': 1, 'poseClassImagesLink': 1}) # Added 'poseClassImagesLink'
+        video = Videos_Collection.find_one(
+            {'_id': ObjectId(video_id)}, 
+            {'Status': 1, 'rawVideoLink': 1, 'processedVideoLink': 1, 'poseClassImagesLink': 1, 'Error': 1}
+        )
         if video:
             return {
                 'status': video.get('Status'),
                 'rawVideoLink': video.get('rawVideoLink'),
                 'processedVideoLink': video.get('processedVideoLink'),
-                'poseClassImagesLink': video.get('poseClassImagesLink') # Return poseClassImagesLink
+                'poseClassImagesLink': video.get('poseClassImagesLink'),
+                'error': video.get('Error')
             }
         return None
-        
-    @staticmethod
-    def get_csv_url(video_id):
-        """Fetches the URL of a video from Google Cloud Storage."""
-        video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
-        return video['angleCsvLink']
 
     @staticmethod
     def get_random_pro_video_blob_name():
-        """
-        Retrieves a random pro video blob name (e.g., 'videoModels/pro_swing_1.mp4')
-        from Google Cloud Storage under the 'videoModels/' prefix.
-        """
+        """Retrieves a random pro video blob name from Google Cloud Storage."""
         try:
             bucket_name = 'golf-swing-models'
             storage_client = get_google_cloud_storage_client()
@@ -357,10 +387,7 @@ class Video:
 
     @staticmethod
     def get_pro_video_url_from_blob(blob_name):
-        """
-        Given a pro video blob name under 'modelVideos/', returns its public URL
-        if the blob exists, else None.
-        """
+        """Given a pro video blob name, returns its public URL if it exists."""
         if not blob_name:
             return None
         bucket_name = 'golf-swing-models'
@@ -374,15 +401,10 @@ class Video:
 
     @staticmethod
     def get_pro_csv_url_from_blob(blob_name):
-        """
-        Given a pro video blob name (e.g., 'modelVideos/pro_swing_1.mp4'),
-        derives the CSV blob name (e.g., 'modelVideos/pro_swing_1.csv')
-        and returns its public URL if it exists.
-        """
+        """Given a pro video blob name, derives the CSV blob name and returns its public URL."""
         if not blob_name:
             return None
         bucket_name = 'golf-swing-models'
-        # Replace extension with .csv
         base, _ = blob_name.rsplit('.', 1)
         csv_blob_name = f"{base}_angles.csv"
         storage_client = get_google_cloud_storage_client()
@@ -393,143 +415,44 @@ class Video:
         print(f"Pro CSV blob not found: {csv_blob_name}")
         return None
 
-        
-    @staticmethod
-    def process_video(file_path,video_id):
-        print(f"DEBUG (Django): Initiating video processing for video_id: {video_id} with file_path: {file_path}") # DEBUG: NEW LINE
-        try:
-            # Define the URL for the GCP function
-            gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
-
-            # Prepare the request payload
-            payload = {
-                
-                "classification_model": "models/best_model.keras",
-                "video_id":video_id,
-                "video_path": file_path,
-                "output_video_path": f"processed/{file_path.split('/')[-1]}",
-                "output_csv_path": f"processed/{file_path.split('/')[-1]}.csv",
-                "output_angle_csv_path": f"processed/{file_path.split('/')[-1]}_angles.csv",
-                "output_pose_images_path": f"poseClassImages/{file_path.split('/')[-1].rsplit('.', 1)[0]}/" # NEW: Path for pose class images
-            }
-            print(f"DEBUG (Django): Payload sent to GCP function: {payload}") # DEBUG: NEW LINE
-
-            # Send the POST request to the GCP function
-            headers = {"Content-Type": "application/json"}
-            # Added a timeout for robustness.
-            response = requests.post(gcp_function_url, json=payload, headers=headers, timeout=300) # DEBUG: Added timeout
-            response.raise_for_status() # DEBUG: This will raise an HTTPError for bad responses (4xx or 5xx)
-
-            # Parse the JSON response from the GCP function
-            response_data = response.json()
-            print(f"DEBUG (Django): Raw response from GCP function: {response_data}") # DEBUG: NEW LINE
-            
-            output_video_url = response_data.get('output_video')
-            output_csv_url = response_data.get('output_csv')
-            output_angle_csv_url = response_data.get('output_angle_csv')
-            output_pose_images_url = response_data.get('output_pose_images') # NEW: Get pose images URL
-            
-            print(f"DEBUG (Django): Extracted pose images URL dictionary: {output_pose_images_url}") # DEBUG: NEW LINE
-
-            # Update the MongoDB document with the returned URLs and status
-            Videos_Collection.update_one(
-                {'_id': ObjectId(video_id)},   # Find the document by ID
-                {
-                    '$set': {
-                        'Status': 'Completed',
-                        'frameByFrameCsvLink': output_csv_url,
-                        'angleCsvLink': output_angle_csv_url,
-                        'processedVideoLink': output_video_url,
-                        'poseClassImagesLink': output_pose_images_url # NEW: Save pose images URL
-                    }
-                }
-            )
-            print(f"DEBUG (Django): MongoDB updated for video_id {video_id} with poseClassImagesLink.") # DEBUG: NEW LINE
-            return response_data
-
-        except requests.exceptions.Timeout: # DEBUG: Specific timeout error
-            print(f"DEBUG (Django): Request to GCP function timed out after 300 seconds for video_id: {video_id}")
-            traceback.print_exc()
-            return {"error": "GCP function call timed out."}
-        except requests.exceptions.RequestException as e: # DEBUG: Catch any request-related errors
-            print(f"DEBUG (Django): Error communicating with GCP function for video_id: {video_id}: {e}")
-            if hasattr(e, 'response') and e.response is not None:
-                print(f"DEBUG (Django): GCP function HTTP Status: {e.response.status_code}")
-                print(f"DEBUG (Django): GCP function Error Response Text: {e.response.text}")
-            traceback.print_exc() # Print full traceback for request errors
-            return {"error": "An error occurred during communication with the video processing service."}
-        except json.JSONDecodeError as e: # DEBUG: Catch JSON parsing errors
-            print(f"DEBUG (Django): Error decoding JSON response from GCP function for video_id: {video_id}: {e}")
-            if 'response' in locals() and response is not None:
-                print(f"DEBUG (Django): Non-JSON response content: {response.text}") # Print raw response if it's not JSON
-            traceback.print_exc()
-            return {"error": "Invalid response from video processing service."}
-        except Exception as e:
-            print(f"DEBUG (Django): Unexpected error during video processing for video_id: {video_id}: {e}")
-            traceback.print_exc()
-            return {"error": "An unexpected error occurred during video processing."}
-
     @staticmethod
     def get_all_video_comments(video_id, current_user_id):
-        """
-        Fetches all comments and their replies for a specific video,
-        sorted by DateCommented, and structured hierarchically.
-        """
+        """Fetches all comments and their replies for a specific video."""
         video_obj_id = ObjectId(video_id)
-        
-        # Get all comment _ids from the video document (these are explicitly top-level comments)
         video = Videos_Collection.find_one({'_id': video_obj_id}, {'Comments': 1})
         top_level_comment_ids = video.get('Comments', []) if video else []
 
-        # Find all comments related to this video. This includes top-level comments
-        # and all replies, which should have a 'video_id' field.
         all_related_comments_cursor = Comments_Collection.find(
             {'$or': [
                 {'_id': {'$in': top_level_comment_ids}},
-                {'video_id': video_obj_id} # This covers replies that link to the video directly
+                {'video_id': video_obj_id}
             ]},
-            sort=[("DateCommented", 1)] # Sort ascending to build hierarchy easily
+            sort=[("DateCommented", 1)]
         )
         all_related_comments = list(all_related_comments_cursor)
 
-        # Dictionary to store comments by their string ID for easy lookup
         comments_map = {}
         for comment in all_related_comments:
-            # Enrich comment with user details
             user = Users_Collection.find_one({'_id': ObjectId(comment['CommentedBy'])})
             comment['CommentedBy'] = user['Name'] if user else 'Unknown User'
             comment['FormattedDate'] = comment['DateCommented'].strftime("%H:%M %b %d, %Y")
-            comment['id'] = str(comment['_id']) # Convert _id to 'id' string for frontend
-
+            comment['id'] = str(comment['_id'])
             comments_map[comment['id']] = comment
-            comment['replies'] = [] # Initialize replies list for all comments
+            comment['replies'] = []
 
-        # List to hold final structured top-level comments
         structured_comments = []
-
-        # Populate replies and identify top-level comments
         for comment_id_str, comment in comments_map.items():
             if 'parent_comment_id' in comment and comment['parent_comment_id'] is not None:
                 parent_id_str = str(comment['parent_comment_id'])
                 if parent_id_str in comments_map:
                     comments_map[parent_id_str]['replies'].append(comment)
-                else:
-                    # Handle orphaned replies (e.g., if parent was deleted but reply still exists)
-                    print(f"Warning: Orphaned reply {comment['id']} for non-existent parent {parent_id_str}")
             else:
-                # This is a top-level comment (no parent_comment_id)
-                # Ensure it's truly a top-level comment by checking if its original _id was in the video's list
                 if ObjectId(comment['id']) in top_level_comment_ids:
                     structured_comments.append(comment)
-                # If a comment has no parent_comment_id but its _id is NOT in the video's 'Comments' array,
-                # it's an anomaly or a standalone comment not properly linked. We'll ignore it for this video.
 
-
-        # Sort replies within each comment by DateCommented
         for comment in structured_comments:
             comment['replies'].sort(key=lambda r: r['DateCommented'])
 
-        # Sort top-level comments by DateCommented (descending for latest first)
         structured_comments.sort(key=lambda c: c['DateCommented'], reverse=True)
 
         user_oid = ObjectId(current_user_id)
@@ -546,26 +469,20 @@ class Comment:
 
     @staticmethod
     def add_comment(current_user_id, video_id, comment_text, x_pos=None, y_pos=None):
-        """
-        Adds a top-level comment to a video.
-        Includes optional position data for free-moving comments.
-        Returns the inserted comment's _id.
-        """
+        """Adds a top-level comment to a video."""
         try:
-            # Create comment document
             comment_document = {
                 'Comment': comment_text,
                 'CommentedBy': ObjectId(current_user_id),
                 'DateCommented': datetime.now(),
-                'x_pos': x_pos, # Store x-coordinate
-                'y_pos': y_pos, # Store y-coordinate
-                'video_id': ObjectId(video_id), # Link top-level comment to video as well for easier lookup
-                'parent_comment_id': None, # Explicitly mark as top-level
-                'readBy': [ ObjectId(current_user_id) ],
+                'x_pos': x_pos,
+                'y_pos': y_pos,
+                'video_id': ObjectId(video_id),
+                'parent_comment_id': None,
+                'readBy': [ObjectId(current_user_id)],
             }
             inserted_comment = Comments_Collection.insert_one(comment_document)
 
-            # Link the top-level comment to the video's 'Comments' array
             Videos_Collection.update_one(
                 {'_id': ObjectId(video_id)},
                 {'$push': {'Comments': inserted_comment.inserted_id}}
@@ -573,21 +490,14 @@ class Comment:
             return inserted_comment.inserted_id
         except Exception as e:
             print(f"Error adding comment: {e}")
-            traceback.print_exc() # Added traceback for debugging
-            return None # Indicate failure by returning None
+            traceback.print_exc()
+            return None
 
     @staticmethod
     def add_reply(current_user_id, video_id, parent_comment_id, reply_text):
-        """
-        Adds a reply to an existing comment.
-        Replies do not have x_pos/y_pos and are linked via parent_comment_id.
-        They are NOT added to the video's 'Comments' array.
-        """
+        """Adds a reply to an existing comment."""
         try:
-            # Ensure parent_comment_id is a valid ObjectId
             parent_obj_id = ObjectId(parent_comment_id)
-
-            # Check if parent comment exists
             if not Comments_Collection.find_one({'_id': parent_obj_id}):
                 print(f"Parent comment with ID {parent_comment_id} not found.")
                 return None
@@ -596,151 +506,120 @@ class Comment:
                 'Comment': reply_text,
                 'CommentedBy': ObjectId(current_user_id),
                 'DateCommented': datetime.now(),
-                'video_id': ObjectId(video_id), # Store video_id for replies for context/easier lookup
-                'parent_comment_id': parent_obj_id, # Link to the parent comment
-                'x_pos': None, # Replies do not have explicit positions
-                'y_pos': None, # Replies do not have explicit positions
-                'readBy': [ ObjectId(current_user_id) ], 
+                'video_id': ObjectId(video_id),
+                'parent_comment_id': parent_obj_id,
+                'x_pos': None,
+                'y_pos': None,
+                'readBy': [ObjectId(current_user_id)],
             }
             inserted_reply = Comments_Collection.insert_one(reply_document)
             return inserted_reply.inserted_id
         except Exception as e:
             print(f"Error adding reply: {e}")
-            traceback.print_exc() # Added traceback for debugging
+            traceback.print_exc()
             return None
 
     @staticmethod
     def get_comment_by_id(comment_id):
-        """
-        Fetches a single comment by its ID and processes it for frontend display.
-        This will fetch either a top-level comment or a reply.
-        """
+        """Fetches a single comment by its ID and processes it for frontend display."""
         try:
             comment = Comments_Collection.find_one({'_id': ObjectId(comment_id)})
             if not comment:
                 return None
 
-            # Enrich comment with user details
             user = Users_Collection.find_one({'_id': ObjectId(comment['CommentedBy'])})
             comment['CommentedBy'] = user['Name'] if user else 'Unknown User'
-
-            # Format DateCommented for returning
             comment['FormattedDate'] = comment['DateCommented'].strftime("%H:%M %b %d, %Y")
             
-            # If DateEdited exists, format it too
             if 'DateEdited' in comment:
                 comment['FormattedDateEdited'] = comment['DateEdited'].strftime("%H:%M %b %d, %Y")
 
-            # Convert _id to 'id' string for frontend consumption
             comment['id'] = str(comment.pop('_id'))
             
-            # Add 'replies' key for consistency if it's a top-level comment and you plan to expand it
             if 'parent_comment_id' not in comment or comment['parent_comment_id'] is None:
-                comment['replies'] = [] # This ensures a consistent structure
-                # You might want to fetch and populate direct replies here if this method is used in isolation
-                # For now, get_all_video_comments handles full tree, so this is just for single lookup.
+                comment['replies'] = []
 
             return comment
         except Exception as e:
             print(f"Error in get_comment_by_id: {e}")
-            traceback.print_exc() # Added traceback for debugging
+            traceback.print_exc()
             return None
 
     @staticmethod
     def update_comment_position(comment_id, x_pos, y_pos):
-        """Updates the position of an existing comment. Only applies to top-level comments."""
+        """Updates the position of an existing comment."""
         try:
             result = Comments_Collection.update_one(
-                {'_id': ObjectId(comment_id), 'parent_comment_id': None}, # Only update if it's a top-level comment
+                {'_id': ObjectId(comment_id), 'parent_comment_id': None},
                 {'$set': {'x_pos': x_pos, 'y_pos': y_pos}}
             )
             return result.matched_count > 0
         except Exception as e:
             print(f"Error updating comment position: {e}")
-            traceback.print_exc() # Added traceback for debugging
+            traceback.print_exc()
             return False
 
     @staticmethod
-    def delete_comment(comment_id, current_user_id): # Added current_user_id parameter
-        """
-        Deletes a top-level comment and all its direct replies,
-        after verifying the current user is the author of the comment.
-        Also removes the top-level comment's reference from the video.
-        """
+    def delete_comment(comment_id, current_user_id):
+        """Deletes a top-level comment and all its direct replies."""
         try:
             obj_comment_id = ObjectId(comment_id)
-            obj_user_id = ObjectId(current_user_id) # Convert current_user_id to ObjectId
+            obj_user_id = ObjectId(current_user_id)
 
-            # Find the comment to delete
             comment_to_delete = Comments_Collection.find_one({"_id": obj_comment_id})
 
             if not comment_to_delete:
                 print(f"Comment with ID {comment_id} not found for deletion.")
                 return False
 
-            # Authorization Check: Ensure the current user is the author of the comment
             if comment_to_delete.get('CommentedBy') != obj_user_id:
                 print(f"User {current_user_id} is not authorized to delete comment {comment_id}.")
-                return False # Not authorized
+                return False
 
             if comment_to_delete.get('parent_comment_id') is not None:
-                # It's a reply: for a top-level comment deletion, we only care about top-level comments.
-                # This branch implies an attempt to delete a reply using delete_comment, which is not intended.
-                print(f"Comment with ID {comment_id} is a reply. Use delete_reply instead for specific reply deletion.")
+                print(f"Comment with ID {comment_id} is a reply. Use delete_reply instead.")
                 return False
             else:
-                # It's a top-level comment:
-                # 1. Delete all replies that reference this comment as their parent
+                # Delete all replies
                 Comments_Collection.delete_many({'parent_comment_id': obj_comment_id})
                 
-                # 2. Remove this comment's ID from the associated video's 'Comments' array
-                # Ensure 'video_id' exists in the comment_to_delete document
+                # Remove from video's Comments array
                 if 'video_id' in comment_to_delete:
                     Videos_Collection.update_one(
                         {'_id': comment_to_delete['video_id']},
                         {'$pull': {'Comments': obj_comment_id}}
                     )
-                else:
-                    print(f"Comment {comment_id} does not have an associated video_id.")
 
-            # Finally, delete the top-level comment itself
+            # Delete the comment itself
             delete_result = Comments_Collection.delete_one({'_id': obj_comment_id})
-
             return delete_result.deleted_count > 0
         except Exception as e:
             print(f"Error deleting comment {comment_id}: {e}")
-            traceback.print_exc() # Added traceback for debugging
+            traceback.print_exc()
             return False
 
     @staticmethod
     def delete_reply(reply_id, current_user_id):
-        """
-        Deletes a specific reply after verifying the current user is the author.
-        """
+        """Deletes a specific reply after verifying the current user is the author."""
         try:
             obj_reply_id = ObjectId(reply_id)
             obj_user_id = ObjectId(current_user_id)
 
-            # Find the reply to delete
             reply_to_delete = Comments_Collection.find_one({"_id": obj_reply_id})
 
             if not reply_to_delete:
                 print(f"Reply with ID {reply_id} not found for deletion.")
                 return False
 
-            # Ensure it's actually a reply (has a parent_comment_id) and not a top-level comment
             if reply_to_delete.get('parent_comment_id') is None:
-                print(f"Comment with ID {reply_id} is a top-level comment, not a reply. Use delete_comment instead.")
+                print(f"Comment with ID {reply_id} is a top-level comment, not a reply.")
                 return False
 
-            # Check if the current user is the author of the reply
             if reply_to_delete.get('CommentedBy') != obj_user_id:
                 print(f"User {current_user_id} is not authorized to delete reply {reply_id}.")
-                return False # Not authorized
+                return False
 
-            # Delete the reply document
             delete_result = Comments_Collection.delete_one({'_id': obj_reply_id})
-
             return delete_result.deleted_count > 0
         except Exception as e:
             print(f"Error deleting reply {reply_id}: {e}")
@@ -749,28 +628,21 @@ class Comment:
 
     @staticmethod
     def edit_comment(comment_id, new_text, current_user_id):
-        """
-        Edits the text of an existing comment.
-        Only allows the original author of the comment to edit it.
-        Adds/updates a 'DateEdited' field.
-        """
+        """Edits the text of an existing comment."""
         try:
             comment_obj_id = ObjectId(comment_id)
             user_obj_id = ObjectId(current_user_id)
 
-            # Find the comment and check if the current_user_id matches the author's CommentedBy
             comment = Comments_Collection.find_one({"_id": comment_obj_id})
             
             if not comment:
                 print(f"Comment with ID {comment_id} not found.")
                 return False
             
-            # Ensure the user attempting to edit is the author of the comment
             if comment.get('CommentedBy') != user_obj_id:
                 print(f"User {current_user_id} is not authorized to edit comment {comment_id}.")
-                return False # Not authorized to edit this comment
+                return False
 
-            # Update the comment text and set/update DateEdited
             result = Comments_Collection.update_one(
                 {'_id': comment_obj_id},
                 {'$set': {'Comment': new_text, 'DateEdited': datetime.now()}}
@@ -778,33 +650,26 @@ class Comment:
             return result.matched_count > 0
         except Exception as e:
             print(f"Error editing comment: {e}")
-            traceback.print_exc() # Added traceback for debugging
+            traceback.print_exc()
             return False
 
     @staticmethod
     def edit_reply(reply_id, new_text, current_user_id):
-        """
-        Edits the text of an existing reply.
-        Only allows the original author of the reply to edit it.
-        Adds/updates a 'DateEdited' field.
-        """
+        """Edits the text of an existing reply."""
         try:
             reply_obj_id = ObjectId(reply_id)
             user_obj_id = ObjectId(current_user_id)
 
-            # Find the reply and check if the current_user_id matches the author's CommentedBy
             reply = Comments_Collection.find_one({"_id": reply_obj_id})
             
             if not reply:
                 print(f"Reply with ID {reply_id} not found.")
                 return False
             
-            # Ensure the user attempting to edit is the author of the reply
             if reply.get('CommentedBy') != user_obj_id:
                 print(f"User {current_user_id} is not authorized to edit reply {reply_id}.")
-                return False # Not authorized to edit this reply
+                return False
 
-            # Update the reply text and set/update DateEdited
             result = Comments_Collection.update_one(
                 {'_id': reply_obj_id},
                 {'$set': {'Comment': new_text, 'DateEdited': datetime.now()}}
@@ -812,5 +677,5 @@ class Comment:
             return result.matched_count > 0
         except Exception as e:
             print(f"Error editing reply: {e}")
-            traceback.print_exc() # Added traceback for debugging
+            traceback.print_exc()
             return False
