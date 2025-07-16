@@ -53,6 +53,18 @@
           </a>
         </li>
 
+        <li>
+          <!-- Home in side navbar -->
+          <a href="{% url 'admin_model' %}" class="flex items-center truncate space-x-3 text-gray-700 p-2 rounded-md font-medium
+          {% if '/home/model/' in request.path %}bg-gray-200{% endif %} 
+          hover:bg-gray-200 focus:shadow-outline">
+            <span class="text-gray-600">
+              <i class="fa-solid fa-desktop"></i>
+            </span>
+            <span>Upload Model</span>
+          </a>
+        </li>
+
         {% else %}
 
         <li>

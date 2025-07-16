@@ -1,6 +1,6 @@
 from django.shortcuts import render, redirect
 from django.urls import reverse
-from django.http import HttpResponseRedirect, JsonResponse, StreamingHttpResponse, HttpResponse, HttpResponseBadRequest
+from django.http import HttpResponseRedirect, JsonResponse, StreamingHttpResponse, HttpResponse
 from ITP_WEBAPP.models import User
 from django.views.decorators.http import require_POST
 from .models import Coach, Video, Comment, Users_Collection, Videos_Collection
@@ -8,7 +8,7 @@ from ITP_WEBAPP.views import is_logged_in
 from bson import ObjectId
 import requests
 from django.conf import settings
-from django.views.decorators.csrf import csrf_exempt, csrf_protect
+from django.views.decorators.csrf import csrf_exempt
 from django.views.decorators.http import require_http_methods
 import os
 from datetime import datetime
@@ -16,8 +16,6 @@ import json
 from django.utils import timezone
 import pandas as pd
 from io import StringIO
-from django.core.paginator import Paginator
-import traceback
 
 # Helper Functions
 def isCoach(request):
@@ -227,7 +225,7 @@ def dashboard_dataSpace(request, id):
     if request.method == 'POST':
         upload_video(request, student_id)
         base = reverse('dashboard_dataSpace', args=[id])
-        query = f'?tab={tab}&view={view}&sort={sort}'
+        query = f'?view={view}&sort={sort}'
         return HttpResponseRedirect(base + query)
 
     video_processing = [video for video in video_list if video.get('Status') == 'Processing']
@@ -251,13 +249,11 @@ def dashboard_dataSpace(request, id):
         'user_id': user_id_str,
         'studentID': student_id,
         'studentName': student['Name'],
-        'videos': videos_page,
-        'processing_video': processing_page,
-        'completed_video': completed_page,
+        'videos': video_list,
+        'processing_video': video_processing,
+        'completed_video': video_completed,
         'sort': sort,
         'view': view,
-        'tab': tab,
-        "page_obj": page_obj,
     })
 
 def dashboard_videoFeed(request):
@@ -319,7 +315,7 @@ def dashboard_results(request, id, VideoId):
     return render(request, 'dashboard_results.html', {
         'Role': user['Role'],
         'Name': user['Name'],
-        'studentID': id,
+        'studentID': student['_id'],
         'videoId': VideoId,
         'comments': processed_comments_data,
         'video_title': video_title,
@@ -352,9 +348,9 @@ def dashboard_Coach(request):
         return HttpResponseRedirect(reverse('home'))
 
     return render(request, 'dashboard_coach.html', {
-        'Role': processed_user['Role'],
-        'Name': processed_user['Name'],
-        'students': processed_students,
+        'Role': user['Role'],
+        'Name': user['Name'],
+        'students': students,
         'view': view,
     })
 
@@ -367,15 +363,14 @@ def dashboard_admin(request):
         return redirect('home')
 
     user = User.find_user_by_id(ObjectId(request.session['Id']))
-    processed_user = convert_objectids_to_str(user)
 
     if request.method == 'POST':
         create_account(request)
         return HttpResponseRedirect(reverse('home'))
 
     return render(request, 'dashboard_admin.html', {
-        'Role': processed_user['Role'],
-        'Name': processed_user['Name'],
+        'Role': user['Role'],
+        'Name': user['Name'],
     })
 
 def admin_model(request):
@@ -387,14 +382,13 @@ def admin_model(request):
         return redirect('home')
 
     user = User.find_user_by_id(ObjectId(request.session['Id']))
-    processed_user = convert_objectids_to_str(user)
 
     if request.method == 'POST':
         return HttpResponseRedirect(reverse('home'))
 
     return render(request, 'dashboard_model.html', {
-        'Role': processed_user['Role'],
-        'Name': processed_user['Name'],
+        'Role': user['Role'],
+        'Name': user['Name'],
     })
 
 def create_account(request):

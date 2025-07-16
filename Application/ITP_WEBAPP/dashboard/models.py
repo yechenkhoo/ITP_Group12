@@ -1,5 +1,3 @@
-# dashboard/models.py
-
 from django.db import models
 from db_connection import MONGO_CLIENT
 from bson import ObjectId
@@ -69,7 +67,8 @@ class Coach:
 
     @staticmethod
     def fetch_all_students(coach_id):
-        """Fetches all students assigned to a specific coach."""
+        """Fetches all students assigned to a specific coach,
+           and backfills DateCreated from ObjectId if missing."""
         coach = Users_Collection.find_one({'_id': ObjectId(coach_id)})
         if not coach or 'Students' not in coach:
             return []
@@ -87,6 +86,7 @@ class Coach:
             oid = student.pop('_id')
             student['id'] = str(oid)
             students.append(student)
+
         return students
 
     @staticmethod
@@ -435,6 +435,8 @@ class Video:
         for comment in all_related_comments:
             user = Users_Collection.find_one({'_id': ObjectId(comment['CommentedBy'])})
             comment['CommentedBy'] = user['Name'] if user else 'Unknown User'
+
+            # Format DateCommented for returning
             comment['FormattedDate'] = comment['DateCommented'].strftime("%H:%M %b %d, %Y")
             comment['id'] = str(comment['_id'])
             comments_map[comment['id']] = comment
@@ -481,13 +483,12 @@ class Comment:
                 'parent_comment_id': None,
                 'readBy': [ObjectId(current_user_id)],
             }
-            inserted_comment = Comments_Collection.insert_one(comment_document)
+            Comments_Collection.insert_one(comment_document)
 
             Videos_Collection.update_one(
                 {'_id': ObjectId(video_id)},
-                {'$push': {'Comments': inserted_comment.inserted_id}}
+                {'$push': {'Comments': comment_document['_id']}}
             )
-            return inserted_comment.inserted_id
         except Exception as e:
             print(f"Error adding comment: {e}")
             traceback.print_exc()
