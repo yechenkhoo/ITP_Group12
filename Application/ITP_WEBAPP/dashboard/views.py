@@ -806,7 +806,7 @@ def create_account(request):
     return redirect('home')
 
 def upload_video(request, student_id=None):
-    """Handles video upload."""
+    """Handles video upload - UPDATED with upload_source parameter."""
     user_role = request.session.get('Role')
     if user_role not in ['student', 'coach']:
         return redirect('home')
@@ -815,14 +815,30 @@ def upload_video(request, student_id=None):
         video_file = request.FILES.get('videoDBFile')
         video_type = request.POST.get('videoType')
         if video_file and video_type:
-            Video.upload_video(request.session['Id'], request.session['Id'], video_file.name, video_type, video_file)
+            # UPDATED: Added upload_source="manual"
+            Video.upload_video(
+                request.session['Id'], 
+                request.session['Id'], 
+                video_file.name, 
+                video_type, 
+                video_file, 
+                upload_source="manual"
+            )
         return redirect('home')
 
     if user_role == 'coach':
         video_file = request.FILES.get('videoDBFile')
         video_type = request.POST.get('videoType')
         if '/home/dataSpace/' in request.path and video_file and video_type:
-            Video.upload_video(request.session['Id'], student_id, video_file.name, video_type, video_file)
+            # UPDATED: Added upload_source="manual"
+            Video.upload_video(
+                request.session['Id'], 
+                student_id, 
+                video_file.name, 
+                video_type, 
+                video_file, 
+                upload_source="manual"
+            )
             return redirect('home')
 
         student_id = request.POST.get('student_id')
@@ -830,7 +846,15 @@ def upload_video(request, student_id=None):
         video_type = request.POST.get('videoType')
         video_file = request.FILES.get('videoFile')
         if student_id and video_name and video_type and video_file:
-            Video.upload_video(request.session['Id'], student_id, video_name, video_type, video_file)
+            # UPDATED: Added upload_source="manual"
+            Video.upload_video(
+                request.session['Id'], 
+                student_id, 
+                video_name, 
+                video_type, 
+                video_file, 
+                upload_source="manual"
+            )
         return redirect('home')
 
 def logout(request):
@@ -865,41 +889,47 @@ def start_recording(request):
 
 @csrf_exempt
 def upload_from_pi(request):
-    """Handle video upload from old camera system"""
+    """Handle video upload from RPi camera system - UPDATED to use Video.upload_video."""
     if request.method == 'POST':
-        # Directory where videos are saved
-        save_directory = os.path.join(settings.BASE_DIR, "dashboard/pi_video")
-        os.makedirs(save_directory, exist_ok=True)
-        
-        base_filename = "video"
-        extension = ".mp4"
-        counter = 1
+        try:
+            # Get uploaded file
+            uploaded_file = request.FILES.get('file')
+            if not uploaded_file:
+                return JsonResponse({"error": "No file provided"}, status=400)
 
-        # Generate the next available filename
-        while os.path.exists(os.path.join(save_directory, f"{base_filename}{counter}{extension}")):
-            counter += 1
-
-        # Save the uploaded file with the generated filename
-        filename = f"{base_filename}{counter}{extension}"
-        file_path = os.path.join(save_directory, filename)
-        uploaded_file = request.FILES['file']
-        
-        with open(file_path, 'wb+') as destination:
-            for chunk in uploaded_file.chunks():
-                destination.write(chunk)
-
-        return JsonResponse({"message": f"File uploaded successfully as {filename}"}, status=200)
+            # Extract user context from request - RPi should send these
+            operator_id = request.POST.get('operator_id')  # Who recorded it
+            assignee_id = request.POST.get('assignee_id')  # Who it's for
+            video_type = request.POST.get('video_type', 'face-on')
+            
+            if not operator_id:
+                return JsonResponse({"error": "Missing operator_id"}, status=400)
+            
+            # Default assignee to operator if not specified
+            if not assignee_id:
+                assignee_id = operator_id
+            
+            # UPDATED: Use Video.upload_video for RPI uploads
+            result = Video.upload_video(
+                current_user_id=operator_id,
+                assignee_id=assignee_id,
+                title=uploaded_file.name,
+                video_type=video_type,
+                file=uploaded_file,
+                upload_source="rpi"  # ← SPECIFY RPI SOURCE
+            )
+            
+            return JsonResponse({
+                "message": f"RPi video upload initiated: {uploaded_file.name}",
+                "result": result
+            }, status=200)
+            
+        except Exception as e:
+            print(f"Error in RPi upload: {e}")
+            traceback.print_exc()
+            return JsonResponse({"error": str(e)}, status=500)
     else:
         return JsonResponse({"error": "Invalid request method"}, status=405)
-
-@csrf_exempt
-def predict(request):
-    """Placeholder predict endpoint"""
-    if request.method == 'POST':
-        # Placeholder: Does nothing meaningful
-        return JsonResponse({'message': 'Predict endpoint is a placeholder and does nothing.'}, status=200)
-    else:
-        return JsonResponse({'error': 'Invalid request method. Only POST is allowed.'}, status=405)
 
 # =============================================================================
 # 🏌️ NEW GOLF CAMERA SYSTEM (Advanced AI Integration)
