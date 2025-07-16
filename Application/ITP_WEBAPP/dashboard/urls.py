@@ -2,15 +2,13 @@ from django.urls import include, path
 from .views import (
     dashboard_results, dashboard_videoFeed, logout, home, dashboard_dataSpace,
     create_account, live_stream, start_recording, upload_from_pi, admin_model,
-    dashboard_compareSwings, add_video_comment_ajax, update_comment_position_ajax,
-    delete_video_comment_ajax,
-    edit_video_comment_ajax,
-    add_video_reply_ajax,
-    edit_video_reply_ajax,
-    delete_video_reply_ajax,
-    mark_comment_read,
-    check_video_status_ajax
+    golf_video_feed, golf_status, golf_start_recording, golf_toggle_auto_recording,
+    golf_toggle_pose_detection, golf_reload_models, golf_health, golf_set_user_context,
+    api_my_students, dashboard_compareSwings, add_video_comment_ajax, update_comment_position_ajax,
+    delete_video_comment_ajax, edit_video_comment_ajax, add_video_reply_ajax,
+    edit_video_reply_ajax, delete_video_reply_ajax, mark_comment_read, check_video_status_ajax
 )
+
 
 urlpatterns = [
     path("video_feed/", dashboard_videoFeed, name="dashboard_videoFeed"),
