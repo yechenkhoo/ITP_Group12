@@ -19,6 +19,14 @@ window.addEventListener('click', (e) => {
   }
 });
 
+// Close modal when clicking the X
+closeUploadModalBtn.addEventListener('click', () => {
+  fileInput.value = '';
+  fileDisplayName.textContent = 'No file selected';
+  Uploadmodal.classList.add('hidden');
+});
+
+
 // get the file name and display it
 fileInput.addEventListener('change', (e) => {
   const file = fileInput.files[0];

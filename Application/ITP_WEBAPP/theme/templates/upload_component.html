@@ -15,7 +15,7 @@
       
       <!-- Student DataSpace -->
       {% if '/home/dataSpace/' in request.path %}
-      <form action="{% url 'dashboard_dataSpace' studentID %}" method="POST" enctype="multipart/form-data">
+      <form action="{% url 'dashboard_dataSpace' studentID %}?view={{ view }}&sort={{ sort }}" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
         <!-- Video Name and Video Type -->
         <div class="flex-row justify-between mb-4">
@@ -61,7 +61,7 @@
 
       {% else %}
       <!--From Coach POV-->
-      <form action="{% url 'home' %}" method="POST" enctype="multipart/form-data">
+      <form action="{% url 'home' %}?view={{ view }}" method="POST" enctype="multipart/form-data">
         {% csrf_token %}
         <!-- Video Name and Video Type -->
         <div class="flex-row justify-between mb-4">

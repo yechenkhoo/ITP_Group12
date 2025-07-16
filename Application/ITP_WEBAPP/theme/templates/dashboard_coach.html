@@ -1,42 +1,110 @@
-{% extends 'dashboard.html' %} 
-{% load static tailwind_tags %} 
+{% extends 'dashboard.html' %}
+{% load static tailwind_tags %}
+
 {% block dashboard_content %}
 <div class="relative items-center flex h-full w-full p-6">
-  <!-- Rounded card that fits whole div -->
-  <div class="relative  flex-row rounded-lg bg-white shadow-lg p-4 h-full w-full">
+  <!-- Rounded card -->
+  <div class="relative flex-col rounded-lg bg-white shadow-lg p-4 h-full w-full overflow-auto">
     {% include 'CreateAccount_component.html' %}
     {% include 'upload_component.html' %}
-    <!-- Header for the card -->
-    <div class="flex items-center justify-between">
-      
+
+    <!-- Header + Toggle + Create -->
+    <div class="flex items-center mb-4">
+      <!-- Title -->
       <h1 class="md:text-xl text-md font-poppins text-gray-800">My Students</h1>
-      <button
-        class="bg-gray-500 text-white px-2 py-2 rounded hover:bg-gray-300 md:text-md text-xs h-fit" id="openModalBtn"
-      >
+
+      <!-- Toggle (now immediately beside the header) -->
+      <button id="toggleViewBtn"
+        class="ml-4 inline-flex items-center px-3 py-2 border border-gray-300 rounded-lg hover:bg-gray-100 text-sm">
+        {% if view == 'grid' %}
+        <!-- we’re in grid, so show LIST icon + label -->
+        <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 6h16M4 12h16M4 18h16" />
+        </svg>
+        <span id="toggleLabel">List View</span>
+        {% else %}
+        <!-- we’re in list, so show GRID icon + label -->
+        <svg id="toggleIcon" xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 mr-1" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+            d="M4 4h6v6H4V4zm0 10h6v6H4v-6zm10-10h6v6h-6V4zm0 10h6v6h-6v-6z" />
+        </svg>
+        <span id="toggleLabel">Grid View</span>
+        {% endif %}
+      </button>
+
+      <!-- Create button pushed to the far right -->
+      <button id="openModalBtn"
+        class="ml-auto bg-gray-500 text-white px-2 py-2 rounded hover:bg-gray-300 md:text-md text-xs h-fit">
         Create
       </button>
     </div>
     <hr class="my-4 h-0.5 border-t-1 bg-neutral-100 dark:bg-white/10" />
 
-    <!-- Grid content should go left-to-right -->
+    <!-- LIST VIEW -->
+    <div class="list-view {% if view == 'grid' %}hidden{% endif %} overflow-x-auto">
+      {% if not students %}
+      <p class="text-center text-gray-500 font-medium">No students found.</p>
+      {% else %}
+      <table class="min-w-full">
+        <tbody>
+          {% for student in students %}
+          <tr class="border-b hover:bg-gray-100 cursor-pointer"
+            onclick="window.location.href='{% url 'dashboard_dataSpace' student.id %}'">
+            <!-- Name + Icon -->
+            <td class="px-4 py-3">
+              <div class="flex items-center space-x-3">
+                <i class="fa-solid fa-folder text-indigo-500"></i>
+                <span class="font-poppins text-gray-900">{{ student.Name }}</span>
+              </div>
+            </td>
+            <!-- Created Timestamp -->
+            <td class="px-4 py-3 text-right">
+              <span class="text-xs text-gray-500">{{ student.DateCreated }}</span>
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    </div>
 
-    <div class="grid md:grid-cols-6 grid-cols-2 gap-4">
+    <!-- GRID VIEW -->
+    <div
+      class="grid-view grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 p-4 {% if view == 'list' %}hidden{% endif %}">
+      {% if not students %}
+      <p class="col-span-full text-center text-gray-500 font-medium">No students found.</p>
+      {% else %}
       {% for student in students %}
-      <a href="{% url 'dashboard_dataSpace' student.id %}" 
-        class="triggerArea"
-        data-student-id="{{ student.id }}" 
-        data-student-name="{{ student.Name }}">
-        <div class="bg-indigo-500 hover:bg-indigo-400 hover:shadow-lg p-2 shadow-md rounded flex items-center gap-4 mx-auto">
-            <i class="fa-solid fa-folder text-white"></i>
-            <p class="whitespace-nowrap truncate text-white font-poppins md:text-md text-sm">{{ student.Name }}</p>
+      <a href="{% url 'dashboard_dataSpace' student.id %}"
+        class="block triggerArea bg-indigo-500 hover:bg-indigo-400 text-white p-3 rounded flex flex-col items-start"
+        data-student-id="{{ student.id }}" data-student-name="{{ student.Name }}">
+        <div class="flex items-center space-x-2 mb-2">
+          <i class="fa-solid fa-folder"></i>
+          <span class="truncate font-poppins">{{ student.Name }}</span>
         </div>
-        </a>
-        {% endfor %}
+        <span class="text-xs text-gray-200">
+          {{ student.DateCreated }}
+        </span>
+      </a>
+      {% endfor %}
+      {% endif %}
     </div>
   </div>
 </div>
 
 <script src="{% static 'js/dashboard_popupAccountModal.js' %}"></script>
 <script src="{% static 'js/dashboard_popupModalDnD.js' %}"></script>
-
+<script>
+  document.getElementById('toggleViewBtn').addEventListener('click', () => {
+    const params = new URLSearchParams(window.location.search);
+    // flip view
+    const current = params.get('view') || 'list';
+    const next = current === 'list' ? 'grid' : 'list';
+    params.set('view', next);
+    // reload with new view
+    window.location.search = params.toString();
+  });
+</script>
 {% endblock %}
