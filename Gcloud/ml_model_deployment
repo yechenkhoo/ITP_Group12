@@ -1,0 +1,8 @@
+gcloud run deploy ml-model-api \
+  --source=. \
+  --region=asia-southeast1 \
+  --platform=managed \
+  --allow-unauthenticated \
+  --project=golf-swing-analytics-461203 \
+  --memory=2Gi \
+  --max-instances=2

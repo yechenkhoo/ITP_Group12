@@ -24,7 +24,7 @@ mp_pose = mp.solutions.pose
 pose = mp_pose.Pose()
 
 # Class names
-class_names = ['P1', 'P10', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9']
+class_names = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
 
 # Ideal angles
 ideal_shoulder_tilt = {'P1': 8, 'P2': 24, 'P3': 35, 'P4': 37, 'P5': 33, 'P6': 12, 'P7': 30, 'P8': 38, 'P9': 45, 'P10': 6}
@@ -222,7 +222,7 @@ def process_video():
         output_csv_path_gcs = data.get('output_csv_path', None)
         output_angle_csv_path_gcs = data.get('output_angle_csv_path', None)
         # Bucket name where the models and video are stored
-        bucket_name = 'golf-swing-video'
+        bucket_name = 'golf-swing-models'
 
         # Download the required files from GCS to /tmp/
         download_blob(bucket_name, classification_model, '/tmp/' + os.path.basename(classification_model))

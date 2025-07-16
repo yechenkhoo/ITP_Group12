@@ -150,7 +150,7 @@ def process_uploaded_video(cloud_event):
         payload = {
             "video_id": video_id,
             "video_path": file_name,
-            "classification_model": "basemodel.keras",
+            "classification_model": "best_model.keras",
             "output_video_path": output_video_path,
             "output_csv_path": output_csv_path,
             "output_angle_csv_path": output_angle_csv_path
