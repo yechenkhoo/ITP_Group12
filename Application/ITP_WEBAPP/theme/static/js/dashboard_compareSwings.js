@@ -5,11 +5,23 @@ document.addEventListener('DOMContentLoaded', () => {
     //
     // 1) Parse JSON from data-attrs for all three possible sources
     //
-    const allData = {
-      v1: JSON.parse(comparePage.dataset.video1   || '[]'),
-      v2: JSON.parse(comparePage.dataset.video2   || '[]'),
-      pro:JSON.parse(comparePage.dataset.videoPro|| '[]')
-    };
+    function safeParseDataAttr(raw) {
+  if (!raw) return [];
+  // \bNaN\b will only match standalone NaN, not part of a string
+  const cleaned = raw.replace(/\bNaN\b/g, 'null');
+  try {
+    return JSON.parse(cleaned);
+  } catch (err) {
+    console.error('safeParseDataAttr failed:', err, cleaned);
+    return [];
+  }
+}
+
+const allData = {
+  v1: safeParseDataAttr(comparePage.getAttribute('data-video1')),
+  v2: safeParseDataAttr(comparePage.getAttribute('data-video2')),
+  pro: safeParseDataAttr(comparePage.getAttribute('data-video-pro'))
+};
 
     //
     // 2) Grab all URLs & titles
@@ -371,7 +383,14 @@ document.addEventListener('DOMContentLoaded', () => {
         // Now, setup the inner tabs for the newly visible panel
         setupInnerTabs(); // This will also click the table tab by default
         buildTable();
-        buildChart();
+        const chartPane = document.querySelector('.tab-content:not(.hidden) #chart-view');
+chartPane.classList.remove('hidden');
+
+// 2. Build the chart now that the canvas has dimensions
+buildChart();
+
+// 3. Re-hide the chart pane so the user still sees the table by default
+chartPane.classList.add('hidden');
       });
     });
 
@@ -381,5 +400,12 @@ document.addEventListener('DOMContentLoaded', () => {
     updateDatasets();
     setupInnerTabs(); // Call this initially to set up the default v1v2 panel
     buildTable();
-    buildChart();
+    const chartPane = document.querySelector('.tab-content:not(.hidden) #chart-view');
+chartPane.classList.remove('hidden');
+
+// 2. Build the chart now that the canvas has dimensions
+buildChart();
+
+// 3. Re-hide the chart pane so the user still sees the table by default
+chartPane.classList.add('hidden');
 });

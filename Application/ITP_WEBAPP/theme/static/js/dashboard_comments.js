@@ -1,4 +1,4 @@
-// dashboard_comments.js (... svg icons for replies aligned with the comments one now! just need to fix back some minor stylings)
+// dashboard_comments.js (latest working code, haven't push yet)
 
 // This script forces a reload if the page is accessed via BFcache.
 window.addEventListener('pageshow', function (event) {
@@ -268,6 +268,7 @@ function initializeCommentsSystem() {
 
             // Create the dropdown element
             const optionsDropdown = document.createElement('div');
+            optionsDropdown.style.pointerEvents = 'auto';
             optionsDropdown.className = 'reply-options-dropdown absolute w-40 bg-white rounded-md shadow-lg py-1 z-[150] hidden'; // Higher z-index
             optionsDropdown.setAttribute('data-parent-reply-id', reply.id); // Link to its reply
             optionsDropdown.innerHTML = `
@@ -545,6 +546,7 @@ function initializeCommentsSystem() {
         // Create the main comment options dropdown element
         const commentOptionsBtn = fullContentCard.querySelector('.comment-options-btn');
         const commentOptionsDropdown = document.createElement('div');
+        commentOptionsDropdown.style.pointerEvents = 'auto';
         commentOptionsDropdown.className = 'comment-options-dropdown absolute w-40 bg-white rounded-md shadow-lg py-1 z-[150] hidden'; // Higher z-index for main comment dropdown
         commentOptionsDropdown.setAttribute('data-parent-comment-id', comment.id); // Link to its comment
         commentOptionsDropdown.innerHTML = `
@@ -588,11 +590,12 @@ function initializeCommentsSystem() {
         });
 
         commentContainerDiv.addEventListener('click', (e) => {
-            e.stopPropagation();
-
-            // Prevent opening modal if clicking inside the modal or on a button within it
-            if (e.target.closest('.full-content-overlay-element') || // This class should ideally be on the overlay itself
-                e.target.closest('.delete-all-options-btn') ||
+            // *** MODIFICATION START ***
+            // Remove the aggressive stopPropagation here, or condition it very carefully.
+            // A click on the icon should open the overlay, but clicks *within* the overlay
+            // should not be prevented from bubbling up to document for dropdown closing.
+            // If e.target is one of the buttons or inputs inside the overlay, let it propagate.
+            if (e.target.closest('.delete-all-options-btn') ||
                 e.target.closest('.delete-all-dropdown') ||
                 e.target.closest('.delete-entire-comment-option') ||
                 e.target.closest('.close-comment-btn') ||
@@ -603,8 +606,7 @@ function initializeCommentsSystem() {
                 e.target.closest('.comment-options-btn') ||
                 e.target.closest('.comment-options-dropdown') ||
                 e.target.closest('.edit-comment-only-option') ||
-                e.target.closest('.delete-comment-only-option') ||
-                // Added reply-specific buttons to stop propagation
+                // Added reply-specific buttons to stop propagation only for the icon click, not for internal popup elements
                 e.target.closest('.reply-options-btn') ||
                 e.target.closest('.reply-options-dropdown') ||
                 e.target.closest('.edit-reply-option') ||
@@ -612,8 +614,20 @@ function initializeCommentsSystem() {
                 e.target.closest('.save-edit-reply-btn') ||
                 e.target.closest('.cancel-edit-reply-btn')
             ) {
-                return;
+                // If the click originated from *within* the opened fullContentOverlay and specifically on an actionable element,
+                // do not prevent propagation, as it's intended to be handled by that element's listener.
+                // However, the initial click on the icon itself *should* prevent document-level close.
+                // The current logic correctly prevents the *icon* from re-opening if it's already expanded.
+                // The core problem is that `e.stopPropagation()` here prevents clicks *inside* the opened fullContentOverlay
+                // from reaching the document click listener which controls dropdowns.
+                // So, if the element is already expanded, we should not stop propagation.
+                if (commentContainerDiv.classList.contains('is-expanded')) {
+                    return; // Let clicks inside the expanded overlay propagate
+                }
             }
+            e.stopPropagation(); // Stop propagation for the initial click on the icon to prevent document listener from closing it.
+            // *** MODIFICATION END ***
+
 
             if (!commentContainerDiv.classList.contains('is-expanded')) {
                 closeExpandedComment(); // Close any other open comment
@@ -1131,7 +1145,7 @@ function initializeCommentsSystem() {
             currentReplyIdToDelete = idToDelete;
             currentParentCommentIdForReplyDeletion = parentId;
             currentCommentIdToDelete = null; // Clear comment specific ID
-            deleteConfirmModal.querySelector('.modal-message').textContent = 'Are you sure you want to delete this reply? This action cannot be undone.';
+            deleteConfirmModal.querySelector('.modal-message').textContent = 'Are you sure you want to delete this comment? This action cannot be undone.';
         }
 
         if (deleteConfirmModal) {

@@ -142,8 +142,9 @@
         </table>
     </div>
 
-    {# PDF Chart Content #}
-    <h2 class="text-lg font-semibold text-gray-800 mt-8 mb-4">{{ left_title }} vs {{ right_title }} - Body Tilt Comparison</h2>
-    <canvas id="pdf-tiltChart" class="w-full h-64"></canvas>
+    {# PDF Chart Content - This is where the generated image will go #}
+    <h2 class="text-lg font-semibold text-gray-800 mt-8 mb-4" id="pdf-chart-title" style="page-break-before: always;">{{ left_title }} vs {{ right_title }} - Body Tilt Comparison</h2>
+    <div id="pdf-chart-container" class="w-full h-64 flex justify-center items-center">
+        </div>
 </div>
 {# --- PDF CONTENT END --- #}

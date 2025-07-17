@@ -273,10 +273,10 @@ class Video:
             
             # Prepare the request payload with user context
             payload = {
-                "classification_model": "models/basemodel.keras",
+                "classification_model": "best_model.keras",
                 "video_id": video_id,
-                "uploader_id": uploader_id,
-                "assignee_id": assignee_id,
+                "uploader_id": str(uploader_id),
+                "assignee_id": str(assignee_id),
                 "video_path": file_path,
                 "output_video_path": f"{base_output_path}/{filename}",
                 "output_csv_path": f"{base_output_path}/{filename}.csv",
