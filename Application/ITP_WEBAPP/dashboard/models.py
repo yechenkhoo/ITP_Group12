@@ -17,6 +17,7 @@ import io
 import traceback # Import traceback for detailed error logging
 import random
 import json # Ensure json module is imported for JSONDecodeError
+from urllib.parse import urlparse
 
 # MongoDB collections
 Users_Collection = MONGO_CLIENT['Users']
@@ -256,6 +257,89 @@ class Video:
         """Fetches the URL of a video from Google Cloud Storage."""
         video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
         return video['angleCsvLink']
+
+    @staticmethod
+    def delete_videos(video_ids):
+        """
+        Deletes videos and all associated data from MongoDB and Google Cloud Storage.
+        Handles raw video, processed video, CSVs, and comments.
+
+        :param video_ids: A list of video ID strings to be deleted.
+        """
+        if not isinstance(video_ids, list):
+            video_ids = [video_ids]  # Ensure it's a list
+
+        storage_client = get_google_cloud_storage_client()
+        bucket_name = 'golf-swing-models'  # Your GCS bucket name
+        bucket = storage_client.bucket(bucket_name)
+        object_ids = [ObjectId(vid) for vid in video_ids if vid]
+
+        # Find all video documents to gather their associated file URLs and comment lists
+        videos_to_delete = list(Videos_Collection.find({'_id': {'$in': object_ids}}))
+
+        if not videos_to_delete:
+            print("No videos found for the given IDs.")
+            return {'status': 'error', 'message': 'No videos found.'}
+
+        all_comment_ids_to_delete = []
+        blobs_to_delete = []
+
+        def get_blob_name_from_url(url):
+            """Helper function to extract the GCS blob name from a public URL."""
+            if not url or not url.startswith(f'https://storage.googleapis.com/{bucket_name}/'):
+                return None
+            parsed_url = urlparse(url)
+            # The path is /bucket-name/blob/path/file.ext, so we strip the bucket name
+            return parsed_url.path.replace(f'/{bucket_name}/', '', 1)
+
+        for video in videos_to_delete:
+            # 1. Gather all associated GCS blobs to delete
+            urls = [
+                video.get('rawVideoLink'),
+                video.get('processedVideoLink'),
+                video.get('frameByFrameCsvLink'),
+                video.get('angleCsvLink'),
+                video.get('poseClassImagesLink')
+            ]
+            for url in urls:
+                blob_name = get_blob_name_from_url(url)
+                if blob_name:
+                    blobs_to_delete.append(blob_name)
+
+            # 2. Gather all associated comment IDs to delete
+            video_id = video['_id']
+            comments_cursor = Comments_Collection.find({'video_id': video_id}, {'_id': 1})
+            for comment in comments_cursor:
+                all_comment_ids_to_delete.append(comment['_id'])
+
+        # --- Perform Deletions ---
+
+        # A. Delete GCS blobs in parallel for efficiency
+        def delete_blob(blob_name):
+            try:
+                blob = bucket.blob(blob_name)
+                if blob.exists():
+                    blob.delete()
+                    print(f"Successfully deleted GCS blob: {blob_name}")
+                    return True
+            except Exception as e:
+                print(f"Error deleting GCS blob {blob_name}: {e}")
+            return False
+
+        with ThreadPoolExecutor(max_workers=10) as executor:
+            executor.map(delete_blob, blobs_to_delete)
+
+        # B. Delete all associated comments from MongoDB in a single operation
+        if all_comment_ids_to_delete:
+            Comments_Collection.delete_many({'_id': {'$in': all_comment_ids_to_delete}})
+            print(f"Deleted {len(all_comment_ids_to_delete)} comments from MongoDB.")
+
+        # C. Delete video documents from MongoDB in a single operation
+        result_videos = Videos_Collection.delete_many({'_id': {'$in': object_ids}})
+        deleted_videos_count = result_videos.deleted_count
+        print(f"Deleted {deleted_videos_count} video documents from MongoDB.")
+
+        return {'status': 'success', 'deleted_videos': deleted_videos_count}
         
     @staticmethod
     def process_video(file_path, video_id, uploader_id, assignee_id):
@@ -466,6 +550,8 @@ class Video:
                 r['unread'] = user_oid not in r.get('readBy', [])
 
         return structured_comments
+
+        
 
 
 class Comment:
