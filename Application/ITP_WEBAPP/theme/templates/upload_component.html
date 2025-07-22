@@ -1,114 +1,133 @@
 <div id="Uploadmodal" class="absolute inset-0 flex items-center justify-center z-50 h-full w-full hidden">
-    <div class="bg-white rounded-lg shadow-lg h-1/2 w-1/2 p-6 relative" style="margin-top: -15vh;">
-        <div class="flex justify-between items-center mb-4">
-            <h2 class="text-xl font-semibold">Upload Video</h2>
-            <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700 focus:outline-none">
-                <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                    <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-                </svg>
-            </button>
+  <div class="bg-white rounded-lg shadow-lg p-6 relative
+              w-11/12 sm:w-3/4 md:w-2/3 lg:w-1/2 xl:w-2/5
+              max-h-[90vh] overflow-y-auto
+              mt-0 md:mt-[-5vh] lg:mt-[-10vh]"> {# Adjusted margin-top responsively #}
+    <div class="flex justify-between items-center mb-4 md:mb-6">
+      <h2 class="text-lg md:text-xl font-semibold">Upload Video</h2> {# Responsive font size #}
+      <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700 focus:outline-none">
+        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 md:h-6 md:w-6" fill="none" viewBox="0 0 24 24"
+          stroke="currentColor">
+          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+        </svg>
+      </button>
+    </div>
+
+    {% if '/home/dataSpace/' in request.path %}
+    <form action="{% url 'dashboard_dataSpace' studentID %}?view={{ view }}&sort={{ sort }}" method="POST"
+      enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="flex-col justify-between mb-4 md:mb-6"> {# Adjusted margin-bottom #}
+
+        <div id="dropZone" class="w-full h-32 sm:h-40 md:h-48 p-4 sm:p-6 md:p-8
+                                  border-2 border-dashed border-gray-300 rounded-lg bg-gray-50
+                                  text-center flex flex-col items-center justify-center
+                                  hover:border-indigo-400 transition-all duration-200">
+          <input id="videoDBFile" name="videoDBFile" type="file" accept="video/*" class="hidden" />
+          <p class="text-sm md:text-base text-gray-600 mb-1 md:mb-2">Drag & Drop video here, or</p>
+          <label for="videoDBFile"
+            class="inline-block bg-indigo-600 text-white text-sm md:text-base font-medium py-2 px-3 md:px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            Browse Files
+          </label>
+          <p id="fileDBName" class="text-xs md:text-sm text-gray-600 mt-1 md:mt-2 italic">
+            <span id="fileDBIcon" class="inline-block hidden"> {# Added 'hidden' here #}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                class="w-4 h-4 md:w-5 md:h-5 inline-block align-middle mr-1 text-gray-400">
+                <path fill-rule="evenodd"
+                  d="M4.5 2A2.5 2.5 0 0 0 2 4.5v11A2.5 2.5 0 0 0 4.5 18h11a2.5 2.5 0 0 0 2.5-2.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.121-4.12A1.5 1.5 0 0 0 12.379 2H4.5ZM12.25 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5h-2.5V4.75Z"
+                  clip-rule="evenodd" />
+              </svg>
+            </span>
+            <span id="fileDBNameText">No file selected</span>
+          </p>
         </div>
 
-        {% if '/home/dataSpace/' in request.path %}
-        <form action="{% url 'dashboard_dataSpace' studentID %}?view={{ view }}&sort={{ sort }}" method="POST" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="flex-row justify-between mb-4">
+        <fieldset class="w-fit mx-auto mt-4 md:mt-8"> {# Adjusted margin-top #}
+          <legend class="text-sm md:text-base font-medium text-gray-700 text-center">Video Type:</legend>
+          <div class="mt-1 flex items-center text-sm md:text-base"> {# Adjusted font size #}
+            <label class="inline-flex items-center">
+              <input type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
+              <span class="ml-2">Face On</span>
+            </label>
+            <label class="inline-flex items-center ml-4 md:ml-2 pl-0"> {# Adjusted margin #}
+              <input type="radio" name="videoType" value="down-the-line"
+                class="form-radio h-4 w-4 text-indigo-600">
+              <span class="ml-2">Down The Line</span>
+            </label>
+          </div>
+        </fieldset>
+      </div>
 
-                <div id="dropZone" class="w-full h-48 p-8 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-center flex flex-col items-center justify-center hover:border-indigo-400 transition-all duration-200">
-                    <input id="videoDBFile" name="videoDBFile" type="file" accept="video/*" class="hidden" />
-                    <p class="text-gray-600 mb-2">Drag & Drop video here, or</p>
-                    <label
-                        for="videoDBFile"
-                        class="inline-block bg-indigo-600 text-white text-sm font-medium py-2 px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                    >
-                        Browse Files
-                    </label>
-                    <p id="fileDBName" class="text-sm text-gray-600 mt-2 italic">
-                        <span id="fileDBIcon" class="inline-block hidden"> {# Added 'hidden' here #}
-                             <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 inline-block align-middle mr-1 text-gray-400">
-                                <path fill-rule="evenodd" d="M4.5 2A2.5 2.5 0 0 0 2 4.5v11A2.5 2.5 0 0 0 4.5 18h11a2.5 2.5 0 0 0 2.5-2.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.121-4.12A1.5 1.5 0 0 0 12.379 2H4.5ZM12.25 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5h-2.5V4.75Z" clip-rule="evenodd" />
-                            </svg>
-                        </span>
-                        <span id="fileDBNameText">No file selected</span>
-                    </p>
-                </div>
+      <div class="flex justify-center mt-4 md:mt-8"> {# Adjusted margin-top #}
+        <button type="submit"
+          class="w-full py-2 px-4 md:px-6 bg-indigo-500 text-white rounded-md hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
+                 text-sm md:text-base"> {# Responsive font size and padding #}
+          Upload
+        </button>
+      </div>
+    </form>
 
-                <fieldset class="w-fit mx-auto mt-8">
-                    <legend class="text-sm font-medium text-gray-700 text-center">Video Type:</legend>
-                    <div class="mt-1 flex items-center">
-                        <label class="inline-flex items-center">
-                            <input type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
-                            <span class="ml-2">Face On</span>
-                        </label>
-                        <label class="inline-flex items-center md:pl-2">
-                            <input type="radio" name="videoType" value="down-the-line" class="form-radio h-4 w-4 text-indigo-600">
-                            <span class="ml-2">Down The Line</span>
-                        </label>
-                    </div>
-                </fieldset>
-            </div>
+    {% else %}
+    <form action="{% url 'home' %}?view={{ view }}" method="POST" enctype="multipart/form-data">
+      {% csrf_token %}
+      <div class="flex-col justify-between mb-4 md:mb-6">
 
-            <div class="flex justify-center mt-8">
-                <button type="submit" class="w-full py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Upload
-                </button>
-            </div>
-        </form>
+        <div class="w-full mr-2 mb-2">
+          <p class="block text-sm md:text-base font-medium text-gray-700">Data Space:</p>
+          <p id="modalStudentName" class="block text-sm md:text-base font-medium text-indigo-600"></p>
+        </div>
 
-        {% else %}
-        <form action="{% url 'home' %}?view={{ view }}" method="POST" enctype="multipart/form-data">
-            {% csrf_token %}
-            <div class="flex-row justify-between mb-4">
+        <input type="hidden" id="modalStudentId" name="student_id" value="">
 
-                <div class="w-full mr-2 mb-2">
-                    <p class="block text-sm font-medium text-gray-700">Data Space:</p>
-                    <p id="modalStudentName" class="block text-sm font-medium text-indigo-600"></p>
-                </div>
+        <div id="dropZoneCoach" class="w-full h-32 sm:h-40 md:h-48 p-4 sm:p-6 md:p-8
+                                        border-2 border-dashed border-gray-300 rounded-lg bg-gray-50
+                                        text-center flex flex-col items-center justify-center
+                                        hover:border-indigo-400 transition-all duration-200">
+          <input id="videoFile" name="videoFile" type="file" accept="video/*" class="hidden">
+          <p class="text-sm md:text-base text-gray-600 mb-1 md:mb-2">Drag & Drop video here, or</p>
+          <label for="videoFile"
+            class="inline-block bg-indigo-600 text-white text-sm md:text-base font-medium py-2 px-3 md:px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            Browse Files
+          </label>
+          <p id="fileName" name="fileName" class="block text-xs md:text-sm font-poppins text-gray-600 mt-1 md:mt-2 italic">
+            <span id="fileIcon" class="inline-block hidden"> {# Added 'hidden' here #}
+              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
+                class="w-4 h-4 md:w-5 md:h-5 inline-block align-middle mr-1 text-gray-400">
+                <path fill-rule="evenodd"
+                  d="M4.5 2A2.5 2.5 0 0 0 2 4.5v11A2.5 2.5 0 0 0 4.5 18h11a2.5 2.5 0 0 0 2.5-2.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.121-4.12A1.5 1.5 0 0 0 12.379 2H4.5ZM12.25 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5h-2.5V4.75Z"
+                  clip-rule="evenodd" />
+              </svg>
+            </span>
+            <span id="fileNameText">No file selected</span>
+          </p>
+          <input type="hidden" id="fileValue" name="fileValue" value="">
+        </div>
 
-                <input type="hidden" id="modalStudentId" name="student_id" value="">
+        <fieldset class="w-fit mx-auto mt-4 md:mt-8">
+          <legend class="text-sm md:text-base font-medium text-gray-700 text-center">Video Type:</legend>
 
-                <div id="dropZoneCoach" class="w-full h-48 p-8 border-2 border-dashed border-gray-300 rounded-lg bg-gray-50 text-center flex flex-col items-center justify-center hover:border-indigo-400 transition-all duration-200">
-                    <input id="videoFile" name="videoFile" type="file" accept="video/*" class="hidden">
-                    <p class="text-gray-600 mb-2">Drag & Drop video here, or</p>
-                    <label
-                        for="videoFile"
-                        class="inline-block bg-indigo-600 text-white text-sm font-medium py-2 px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
-                    >
-                        Browse Files
-                    </label>
-                    <p id="fileName" name="fileName" class="block text-sm font-poppins text-gray-600 mt-2 italic">
-                        <span id="fileIcon" class="inline-block hidden"> {# Added 'hidden' here #}
-                            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor" class="w-5 h-5 inline-block align-middle mr-1 text-gray-400">
-                                <path fill-rule="evenodd" d="M4.5 2A2.5 2.5 0 0 0 2 4.5v11A2.5 2.5 0 0 0 4.5 18h11a2.5 2.5 0 0 0 2.5-2.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.121-4.12A1.5 1.5 0 0 0 12.379 2H4.5ZM12.25 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5h-2.5V4.75Z" clip-rule="evenodd" />
-                            </svg>
-                        </span>
-                        <span id="fileNameText">No file selected</span>
-                    </p>
-                    <input type="hidden" id="fileValue" name="fileValue" value="">
-                </div>
+          <div class="mt-1 flex items-center text-sm md:text-base">
+            <label class="inline-flex items-center">
+              <input type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
+              <span class="ml-2">Face On</span>
+            </label>
+            <label class="inline-flex items-center ml-4 md:ml-2 pl-0">
+              <input type="radio" name="videoType" value="down-the-line"
+                class="form-radio h-4 w-4 text-indigo-600">
+              <span class="ml-2">Down The Line</span>
+            </label>
+          </div>
+        </fieldset>
+      </div>
 
-                <fieldset class="w-fit mx-auto mt-8">
-                    <legend class="text-sm font-medium text-gray-700 text-center">Video Type:</legend>
-
-                    <div class="mt-1 flex items-center">
-                        <label class="inline-flex items-center">
-                            <input type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
-                            <span class="ml-2">Face On</span>
-                        </label>
-                        <label class="inline-flex items-center md:pl-2">
-                            <input type="radio" name="videoType" value="down-the-line" class="form-radio h-4 w-4 text-indigo-600">
-                            <span class="ml-2">Down The Line</span>
-                        </label>
-                    </div>
-                </fieldset>
-            </div>
-
-            <div class="flex justify-center mt-8">
-                <button type="submit" class="w-full py-2 bg-indigo-500 text-white rounded-md hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
-                    Upload
-                </button>
-            </div>
-        </form>
-        {% endif %}
-    </div>
+      <div class="flex justify-center mt-4 md:mt-8">
+        <button type="submit"
+          class="w-full py-2 px-4 md:px-6 bg-indigo-500 text-white rounded-md hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
+                 text-sm md:text-base">
+          Upload
+        </button>
+      </div>
+    </form>
+    {% endif %}
+  </div>
 </div>

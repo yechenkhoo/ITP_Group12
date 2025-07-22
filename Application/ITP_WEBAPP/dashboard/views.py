@@ -89,32 +89,49 @@ def dashboard_dataSpace(request, id):
 
     view = request.GET.get('view', 'list')
     sort = request.GET.get('sort', 'earliest')
-    tab  = request.GET.get('tab',  'tab1')
-    page_num = request.GET.get('page', 1)
+    tab = request.GET.get('tab', 'tab1')
 
+    # --- HANDLE POST REQUESTS (Deletion or Upload) ---
+    if request.method == 'POST':
+        # Check if it's a delete request by looking for the 'video_ids' parameter
+        if 'video_ids' in request.POST:
+            video_ids_to_delete = request.POST.get("video_ids", "").split(",")
+            # Filter out any empty strings that might result from splitting
+            video_ids_to_delete = [vid for vid in video_ids_to_delete if vid]
+
+            if video_ids_to_delete:
+                # Call the model method to handle deletion from DB and GCS
+                deletion_result = Video.delete_videos(video_ids_to_delete)
+                print(f"Deletion result: {deletion_result}")
+                # You can add a success message here using Django's messaging framework if desired
+
+            # Redirect to the same page, preserving the user's view, sort, and tab settings
+            query_params = request.GET.urlencode()
+            redirect_url = reverse('dashboard_dataSpace', args=[id])
+            return HttpResponseRedirect(f'{redirect_url}?{query_params if query_params else ""}')
+
+        # Otherwise, handle it as a video upload request
+        else:
+            student_id = User.find_user_by_id(ObjectId(id))['_id']
+            upload_video(request, student_id)
+            # Redirect after upload, preserving settings
+            base = reverse('dashboard_dataSpace', args=[id])
+            query = f'?tab={tab}&view={view}&sort={sort}'
+            return HttpResponseRedirect(base + query)
+
+    # --- HANDLE GET REQUESTS (Page Load) ---
+    page_num = request.GET.get('page', 1)
+    
     # Fetch user and student details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     student = user if not isCoach(request) else User.find_user_by_id(ObjectId(id))
 
-    # Fetch videos
+    # Fetch and sort videos
     student_id = student['_id']
     video_list = Video.get_all_videos(student_id)
-
-    user_id_str = str(user['_id'])
-    # Convert ObjectIds in video_list if necessary (though your current error is in comments_data)
-    # It's good practice to ensure all data passed to templates is JSON serializable.
     video_list = convert_objectids_to_str(video_list)
 
-    if request.method == "POST" and "video_ids" in request.POST:
-        ids = request.POST["video_ids"].split(",")
-        # NOTE: Your current `Video.objects.filter(id__in=ids).delete()` line
-        # appears to be Django ORM syntax, but your models.py uses direct PyMongo.
-        # This line might cause an error or not function as expected for MongoDB.
-        # If video deletion is needed, you'll need a corresponding method in your Video class.
-        pass # Placeholder - revisit video deletion if it's not working with current setup
-
     def parse_date(s):
-        # matches "HH:MM Mon DD,YYYY"
         return datetime.strptime(s, "%H:%M %b %d, %Y")
 
     if sort == 'az':
@@ -126,41 +143,32 @@ def dashboard_dataSpace(request, id):
     else:
         video_list.sort(key=lambda v: parse_date(v['DateUploaded']))
 
-    if request.method == 'POST':
-        upload_video(request, student_id)
-        
-        base = reverse('dashboard_dataSpace', args=[id])
-        query = f'?tab={tab}&view={view}&sort={sort}'
-        return HttpResponseRedirect(base + query)
-
-    # Separate videos by status
+    # Separate videos by status for different tabs
     video_processing = [video for video in video_list if video.get('Status') == 'Processing']
     video_completed = [video for video in video_list if video.get('Status') == 'Completed']
+    video_failed = [video for video in video_list if video.get('Status') == 'Failed'] # NEW: Filter for failed videos
 
     # Paginate each list
-    per_page = 4 if view == 'list' else 9
-
+    per_page = 4 if view == 'list' else 10
     videos_page = Paginator(video_list, per_page).get_page(page_num)
     completed_page = Paginator(video_completed, per_page).get_page(page_num)
     processing_page = Paginator(video_processing, per_page).get_page(page_num)
+    failed_page = Paginator(video_failed, per_page).get_page(page_num) # NEW: Paginate failed videos
 
-    page_map = {
-        'tab1': videos_page,
-        'tab2': completed_page,
-        'tab3': processing_page,
-    }
+    page_map = {'tab1': videos_page, 'tab2': completed_page, 'tab3': processing_page, 'tab4': failed_page} # NEW: Add 'tab4' for failed videos
     page_obj = page_map.get(tab, videos_page)
 
     # Render template
     return render(request, 'dashboard_dataSpace.html', {
         'Role': user['Role'],
         'Name': user['Name'],
-        'user_id': user_id_str,
+        'user_id': str(user['_id']),
         'studentID': student_id,
         'studentName': student['Name'],
         'videos': videos_page,
         'processing_video': processing_page,
         'completed_video': completed_page,
+        'failed_video': failed_page, # NEW: Pass failed videos to the template
         'sort': sort,
         'view': view,
         'tab': tab,
