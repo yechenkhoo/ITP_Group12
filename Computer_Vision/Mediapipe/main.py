@@ -152,14 +152,6 @@ def draw_landmarks(image, lm_list, connections, point_radius=2, line_thickness=1
         image = cv2.line(image, start_point, end_point, (0, 255, 0), line_thickness)
     return image
 
-previous_class_index = -1  # Index of the previous class in class_names
-pose_class_angles = {
-    pose: {"shoulder_tilt": [], "hip_tilt": [], "time_frame": [],
-           "shoulder_tilt_status": [],"hip_tilt_status": [], "overall_status":[]} for pose in class_names
-}
-
-first_instance_added = {pose: False for pose in class_names}  # Track first instance of each pose class
-
 valid_transitions = {
     'P1': ['P1','P2'],
     'P10': ['P10'],
@@ -189,6 +181,15 @@ def process_video():
         # Get the request data
         data = request.json
         print(f"Received request: {data}")
+
+        # Initialize per-request variables (moved from global scope)
+        pose_class_angles = {
+            pose: {"shoulder_tilt": [], "hip_tilt": [], "time_frame": [],
+                "shoulder_tilt_status": [], "hip_tilt_status": [], "overall_status": []}
+            for pose in class_names
+        }
+        first_instance_added = {pose: False for pose in class_names}
+        previous_class_index = -1
 
          # Extract MongoDB update fields from the request
         video_id = data['video_id']  # MongoDB document ID for the video
@@ -226,7 +227,7 @@ def process_video():
         out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
         # Prepare CSV file for storing predictions
-        output_csv_path = '/tmp/predictions.csv'
+        output_csv_path = f'/tmp/predictions_{video_id}.csv'
         
         # --- NEW: ---
         # Dictionary to store public URLs of pose class thumbnails
@@ -240,7 +241,6 @@ def process_video():
 
             predictions = []
             frame_count = 0
-            global previous_class_index
 
             # Process video frame by frame
             while True:
@@ -363,7 +363,7 @@ def process_video():
         out.release()  # Close video writer
         
         convert_to_h264(output_video_path, h264_video_path)
-        output_angles_csv_path = '/tmp/angles'+video_id+'.csv'
+        output_angles_csv_path = f'/tmp/angles_{video_id}.csv'
 
         # Write angles and thumbnail URLs to CSV
         with open(output_angles_csv_path, mode='w', newline='') as file:
