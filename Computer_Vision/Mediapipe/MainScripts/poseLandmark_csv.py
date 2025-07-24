@@ -54,11 +54,12 @@ for i in range(n_landmarks):
 full_lm_list = []
 target_list = []
 image_path_list = []
+total_fail = 0
 for class_name in class_list:
     path_to_class = os.path.join(path_data_dir, class_name)
     img_list = glob.glob(path_to_class + '/*.jpg') + glob.glob(path_to_class + '/*.jpeg')+ glob.glob(path_to_class + '/*.png')      
     img_list = sorted(img_list)
-
+    fail = 0 
     # Read reach Images in the each classes
     for img in img_list:
         image = cv2.imread(img)
@@ -104,13 +105,17 @@ for class_name in class_list:
                 target_list.append(class_name)
                 rel_path = os.path.relpath(img, start=path_data_dir)
                 image_path_list.append(rel_path.replace('\\', '/'))  # use forward slashes for consistency
-
-
-            print(f'{os.path.split(img)[1]} Landmarks added Successfully')
+                # print(f'{os.path.split(img)[1]} Landmarks added Successfully')
+            else:
+                print(f'[WARNING] No pose landmarks detected in {img} -- Skipping...')
+                fail += 1
+                total_fail += 1
+                continue
+            
     print(f'[INFO] {class_name} Successfully Completed')
-
+    print(f'[WARNING] {fail} Failed')
 print('[INFO] Landmarks from Dataset Successfully Completed')
-
+print(f'[WARNING] {total_fail} total failed.')
 data_x = pd.DataFrame(full_lm_list, columns=col_names)
 data = data_x.assign(Pose_Class=target_list, Image_Path=image_path_list)
 data.to_csv(path_to_save, encoding='utf-8', index=False)

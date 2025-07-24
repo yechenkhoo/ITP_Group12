@@ -100,7 +100,7 @@ class PoseDataset():
     def split_dataset_manual(self, test_size=0.2, reshape=False, random_state=None):
         """
         Manually splits the dataset:
-        - Test set: rows where 'Image_Path' contains 'Charlie'
+        - Test set: rows where 'Image_Path' contains 'Tom'
         - Train/Val: all other rows
         - Validation set will be val_size fraction of train set
 
@@ -152,6 +152,67 @@ class PoseDataset():
 
         print(f"Train: {len(self.x_train)}, Val: {len(self.x_val)}, Test (Tom): {len(self.x_test)}")
 
+    def split_dataset_by_fixed_test_group(self, reshape=False, test_group_value=5, group_column='group', test_size=0.2, random_state=0):
+        # Copy dataframe
+        x = self.df.copy()
+
+        # Sort by Pose_Class from P1 to P10
+        x['Pose_Class'] = pd.Categorical(x['Pose_Class'], categories=[f'P{i}' for i in range(1, 11)], ordered=True)
+        x = x.sort_values('Pose_Class')
+        x['Pose_Class'], uniques = pd.factorize(x['Pose_Class'])
+        
+        # Extract groups (e.g., person names)
+        groups = x[group_column]
+        print(groups)
+        
+        # Boolean masks for test and trainval
+        test_mask = groups == int(test_group_value)
+        trainval_mask = ~test_mask
+
+        # Split dataframes
+        df_test = x[test_mask]
+        df_trainval = x[trainval_mask]
+
+        # Split trainval into train and val randomly
+        train_idx, val_idx = train_test_split(
+            df_trainval.index, test_size=test_size, random_state=random_state, shuffle=True
+        )
+
+        df_train = df_trainval.loc[train_idx]
+        df_val = df_trainval.loc[val_idx]
+
+        # Helper to convert df to arrays
+        def df_to_xy(df):
+            df = df.copy()  # To avoid modifying original
+
+            # Extract and remove metadata columns
+            image_paths = df.pop('Image_Path').to_list()
+            pose_labels = df.pop('Pose_Class')
+            groups = df.pop(group_column).to_list()
+
+            y = keras.utils.to_categorical(pose_labels)
+
+            # Feature data
+            x_data = df.astype('float64').to_numpy()
+
+            # Reshape if needed
+            if reshape:
+                print(f"Before reshape: {x_data.shape}")
+                x_data = self.reshape_keypoints(x_data)
+                print(f"After reshape: {x_data.shape}")
+
+            return x_data, y, image_paths, groups
+
+        self.x_train, self.y_train, self.paths_train, self.groups_train = df_to_xy(df_train)
+        self.x_val, self.y_val, self.paths_val, self.groups_val = df_to_xy(df_val)
+        self.x_test, self.y_test, self.paths_test, self.groups_test = df_to_xy(df_test)
+
+        # Save groups as numpy arrays for compatibility with scikit-learn splitters
+        self.groups_train = np.array(self.groups_train)
+        self.groups_val = np.array(self.groups_val)
+        self.groups_test = np.array(self.groups_test)
+
+        print(f"Train: {len(self.x_train)}, Val: {len(self.x_val)}, Test (fixed group '{test_group_value}'): {len(self.x_test)}")
 
     
     def reshape_keypoints(self, X_flat):

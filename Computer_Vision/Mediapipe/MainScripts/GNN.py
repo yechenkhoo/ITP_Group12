@@ -7,6 +7,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 from torch_geometric.data import Data, Dataset
+from torch.nn import Linear, Dropout, BatchNorm1d
 from torch_geometric.nn import GCNConv, global_mean_pool
 from torch_geometric.loader import DataLoader
 from sklearn.model_selection import train_test_split
@@ -22,7 +23,7 @@ tf.random.set_seed(0)
 torch.manual_seed(0)
 os.environ['PYTHONHASHSEED'] = str(0)
 
-epochs_count = 500
+epochs_count = 200
 folder_path = "output/T_gnn/"
 
 def main():
@@ -147,6 +148,45 @@ class GNNModel(nn.Module):
             x = self.fc(x)
             return x
 
+
+# class GNNModel(nn.Module):
+#     def __init__(self, input_dim=4, hidden_dim=64, output_dim=10, dropout=0.5):
+#         super(GNNModel, self).__init__()
+#         self.conv1 = GCNConv(input_dim, hidden_dim)
+#         self.bn1 = BatchNorm1d(hidden_dim)
+        
+#         self.conv2 = GCNConv(hidden_dim, hidden_dim)
+#         self.bn2 = BatchNorm1d(hidden_dim)
+
+#         self.fc1 = Linear(hidden_dim, hidden_dim // 2)
+#         self.fc2 = Linear(hidden_dim // 2, output_dim)
+#         self.dropout = Dropout(p=dropout)
+
+#     def forward(self, data):
+#         x, edge_index, batch = data.x, data.edge_index, data.batch
+
+#         # First GCN layer
+#         x = self.conv1(x, edge_index)
+#         x = self.bn1(x)
+#         x = F.relu(x)
+#         x = self.dropout(x)
+
+#         # Second GCN layer
+#         x = self.conv2(x, edge_index)
+#         x = self.bn2(x)
+#         x = F.relu(x)
+#         x = self.dropout(x)
+
+#         # Global Pooling
+#         x = global_mean_pool(x, batch)
+
+#         # Fully connected MLP head
+#         x = self.fc1(x)
+#         x = F.relu(x)
+#         x = self.dropout(x)
+#         x = self.fc2(x)
+
+#         return x
 
 def split_gnn_dataset(pose_vector, labels, edge_index, image_paths=None, test_size=0.2, random_state=0):
     points_trainval, points_test, y_trainval, y_test, paths_trainval, paths_test = train_test_split(

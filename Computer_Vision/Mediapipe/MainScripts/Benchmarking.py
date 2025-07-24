@@ -1,3 +1,8 @@
+"""
+Run this using:
+python -m MainScripts.Benchmarking
+"""
+
 import matplotlib.pyplot as plt
 import random
 import numpy as np
@@ -40,7 +45,6 @@ all_models = [
 
 results = {}
 path_csv = "dataset4.csv"
-# path_csv = "test_set.csv"
 test_run_name = "D4_tomtest"
 folder = f"output/{test_run_name}"
 os.makedirs(folder, exist_ok=True)
@@ -55,10 +59,13 @@ for m in all_models:
     data = PoseDataset(path_csv)
     data.load_csv_data()
     # default: test_size=0.2, random_state=0
-    data.split_dataset_manual(test_size=0.2, reshape=(not flatten), random_state=42)
-    # data.split_dataset_manual(reshape=(not flatten))
-    
+    # data.split_dataset_manual(test_size=0.2, reshape=(not flatten), random_state=42)
+    data.split_dataset_manual(reshape=(not flatten), test_size=0.2)
 
+    print(data.x_train.shape)
+    print(data.x_val.shape)
+    print(data.x_test.shape)
+    
     # initialise model
     model = DeepLearningModel(
         input_shape = data.x_train.shape[1] if flatten else data.x_train.shape[1:],

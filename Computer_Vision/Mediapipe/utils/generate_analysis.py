@@ -134,5 +134,5 @@ sm.set_array([])
 cbar = fig.colorbar(sm, ax=ax, shrink=0.8)
 cbar.set_label('Confusion Count (Edge Weight)')
 
-plt.savefig(f'{folder}/{model}_{value}_confusion_network_colored.png', dpi=300)
+plt.savefig(f'{folder}/confusion_network_colored.png', dpi=300)
 plt.show()
