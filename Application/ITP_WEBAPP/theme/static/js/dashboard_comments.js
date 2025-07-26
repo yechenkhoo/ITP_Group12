@@ -441,12 +441,12 @@ function initializeCommentsSystem() {
         // The SVG element directly inside the commentContainerDiv
         commentContainerDiv.innerHTML = `<svg class="w-6 h-6" fill="white" stroke="black" stroke-width="1.5" viewBox="0 0 20 20" xmlns="http://www.w3.org/2000/svg"><path fill-rule="evenodd" d="M18 10c0 3.866-3.582 7-8 7a8.841 8.841 0 01-4.083-.98L2 17l1.336-3.11c-.813-1.013-1.336-2.31-1.336-3.89C2 6.134 5.582 3 10 3s8 3.134 8 7z" clip-rule="evenodd"></path></svg>`;
             // if this comment is unread by the current user, show a tiny red "new" badge
-        if (!isCommentAuthor && comment.unread) {
-            const badge = document.createElement('span');
-            badge.className = 'comment-new-badge absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold rounded px-1';
-            badge.textContent = 'new';
-            commentContainerDiv.appendChild(badge);
-        }
+        // if (!isCommentAuthor && comment.unread) {
+        //     const badge = document.createElement('span');
+        //     badge.className = 'comment-new-badge absolute top-0 right-0 bg-red-500 text-white text-[10px] font-bold rounded px-1';
+        //     badge.textContent = 'new';
+        //     commentContainerDiv.appendChild(badge);
+        // }
 
 
         // 2. Preview content (hidden by default, shown on hover)
