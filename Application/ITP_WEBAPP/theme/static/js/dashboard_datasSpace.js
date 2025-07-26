@@ -88,7 +88,7 @@ function openTab(event, tabId) { //
     }
     // openTab uses replaceState, which does NOT cause a full page reload.
     // Therefore, sessionStorage persistence for selections will naturally work across tabs.
-    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`); //
+    window.history.replaceState({}, '', `${window.location.pathname}?${params.toString()}`); 
 }
 
 // Initialize the correct tab on page load and manage persistence

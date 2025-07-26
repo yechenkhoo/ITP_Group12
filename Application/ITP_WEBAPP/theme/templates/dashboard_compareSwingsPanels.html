@@ -84,9 +84,11 @@
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Body Tilt
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Video 1
+                    <th id="header-video1-title"
+                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Video 1
                     </th>
-                    <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Video 2
+                    <th id="header-video2-title"
+                        class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Video 2
                     </th>
                     <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                         Difference</th>
@@ -106,14 +108,13 @@
         <h2 class="text-xl font-semibold text-gray-800">Chart Comparison</h2>
         {# Chart Filters (no dropdown needed, just checkboxes) #}
         <div id="chart-filters" class="flex flex-wrap gap-4">
-            </div>
+        </div>
     </div>
     <canvas id="tiltChart" class="w-full h-64"></canvas>
 </div>
 
 {# --- PDF CONTENT START --- #}
-<div id="pdf-content"
-    style="position: absolute; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;">
+<div id="pdf-content" style="position: absolute; left: -9999px; top: -9999px; opacity: 0; pointer-events: none;">
     <h1 class="text-xl font-bold mb-4">Swing Comparison Analysis</h1>
 
     {# PDF Table Content #}
@@ -143,8 +144,9 @@
     </div>
 
     {# PDF Chart Content - This is where the generated image will go #}
-    <h2 class="text-lg font-semibold text-gray-800 mt-8 mb-4" id="pdf-chart-title" style="page-break-before: always;">{{ left_title }} vs {{ right_title }} - Body Tilt Comparison</h2>
+    <h2 class="text-lg font-semibold text-gray-800 mt-8 mb-4" id="pdf-chart-title" style="page-break-before: always;">{{
+        left_title }} vs {{ right_title }} - Body Tilt Comparison</h2>
     <div id="pdf-chart-container" class="w-full h-64 flex justify-center items-center">
-        </div>
+    </div>
 </div>
 {# --- PDF CONTENT END --- #}
