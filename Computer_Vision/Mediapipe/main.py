@@ -282,6 +282,8 @@ def process_video():
                     prediction = model.predict(pose_landmarks)
                     current_class_index = np.argmax(prediction)
 
+                    consecutive_class_buffer = []
+
                     # --- Stabilisation logic: accept if 3 consecutive predictions ---
                     consecutive_class_buffer.append(current_class_index)
                     if len(consecutive_class_buffer) > 3:
