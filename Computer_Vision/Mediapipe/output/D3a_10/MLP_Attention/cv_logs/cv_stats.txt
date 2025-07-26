@@ -1,0 +1,24 @@
+Mean Accuracy: 0.8128
+Std Accuracy: 0.0594
+Mean F1 Score: 0.7979
+Std F1 Score: 0.0716
+Mean Precision: 0.8308
+Std Precision: 0.0494
+Mean Recall: 0.7910
+Std Recall: 0.0776
+Fold Accuracies: [0.8352272510528564, 0.9085714221000671, 0.7657142877578735, 0.7371428608894348, 0.8171428442001343]
+Fold F1 Scores: [0.8341785953408751, 0.9040645421138607, 0.7350837014305984, 0.7035229128436887, 0.8125556594251]
+Fold Precisions: [0.8523392358415578, 0.9081568061568062, 0.8176054664289959, 0.7569985569985571, 0.8188823342942337]
+Fold Recalls: [0.8304990379990379, 0.9029271708683474, 0.7153548024392014, 0.6920783403392099, 0.8142087542087543]
+Epochs per fold: [58, 102, 39, 24, 66] (out of 200)
+Lowest Fold Accuracy: 0.7371
+Highest Fold Accuracy: 0.9086
+Lowest Fold F1 Score: 0.7035
+Highest Fold F1 Score: 0.9041
+Lowest Fold Precision: 0.7570
+Highest Fold Precision: 0.9082
+Lowest Fold Recall: 0.6921
+Highest Fold Recall: 0.9029
+NOTE: There is a large gap between the best and worst fold accuracy. This may indicate data splits are not fully representative or there is class imbalance/outliers.
+WARNING: High variance in CV scores - model may be unstable or data quality issues
+NOTE: Early stopping was triggered in at least one fold (epochs < max). Consider tuning patience or reviewing learning curves.

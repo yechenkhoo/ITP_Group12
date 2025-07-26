@@ -282,7 +282,16 @@ def process_video():
                     prediction = model.predict(pose_landmarks)
                     current_class_index = np.argmax(prediction)
 
-                    # Check if the predicted class is valid
+                    # --- Stabilisation logic: accept if 3 consecutive predictions ---
+                    consecutive_class_buffer.append(current_class_index)
+                    if len(consecutive_class_buffer) > 3:
+                        consecutive_class_buffer.pop(0)
+                    if len(consecutive_class_buffer) == 3 and all(idx == current_class_index for idx in consecutive_class_buffer):
+                        accept_transition = True
+                    else:
+                        accept_transition = (previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index))
+
+                    # Check if the predicted class is valid (with stabilization)
                     pose_class = class_names[current_class_index]
                     confidence = np.max(prediction)
                     shoulder_tilt_angle = calculate_and_draw_shoulder_tilt(img, lm_list, pose_class)
@@ -290,7 +299,6 @@ def process_video():
                 # Calculate hip tilt
                     hip_tilt_angle = calculate_and_draw_hip_tilt(img, lm_list, pose_class)
 
-                   # Use the revised function for checking tilt status
                     # Use the custom function for checking tilt status
                     shoulder_tilt_status = get_tilt_status(shoulder_tilt_angle, ideal_shoulder_tilt[pose_class])
                     status_list.append(shoulder_tilt_status)
@@ -298,7 +306,8 @@ def process_video():
                     status_list.append(hip_tilt_status)
                     overall_status = evaluate_overall_status(status_list)
                     # Updated logic to handle class index validity
-                    if previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index):
+                    # if previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index):
+                    if accept_transition:
                         if not first_instance_added[pose_class]:
                             # --- NEW: CAPTURE AND UPLOAD THUMBNAIL ---
                             try:

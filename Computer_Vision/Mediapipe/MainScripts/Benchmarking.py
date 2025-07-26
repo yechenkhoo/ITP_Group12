@@ -1,0 +1,131 @@
+"""
+Run this using:
+python -m MainScripts.Benchmarking
+"""
+
+import matplotlib.pyplot as plt
+import random
+import numpy as np
+import tensorflow as tf
+import pandas as pd
+import os 
+os.environ['TF_DETERMINISTIC_OPS'] = '1'
+
+# Set seeds for reproducibility
+random.seed(42)
+np.random.seed(42)
+tf.random.set_seed(42)
+
+from Classes import PoseDataset, DeepLearningModel, ModelFactory
+import argparse
+from keras import layers, Sequential, regularizers
+from mpl_toolkits.axes_grid1.inset_locator import inset_axes
+from keras.callbacks import EarlyStopping
+
+# ap = argparse.ArgumentParser()
+# ap.add_argument("-i", "--dataset", type=str, required=True,
+#                 help="path to csv Data")
+# ap.add_argument("-o", "--save", type=str, required=True,
+#                 help="path to save .h5 model, eg: dir/model.h5")
+# args = vars(ap.parse_args())
+# path_csv = args["dataset"]
+# path_to_save = args["save"]
+
+
+all_models = [
+    ("MLP_Basic", ModelFactory.mlp_basic, True),
+    ("MLP_Deep", ModelFactory.mlp_deep, True),
+    ("MLP_Dropout", ModelFactory.mlp_with_dropout, True),
+    ("MLP_Attention", ModelFactory.mlp_attention, False),
+    ("CNN_Basic", ModelFactory.cnn_basic, False),
+    ("CNN_Attention", ModelFactory.cnn_attention, False),
+    ("CNN_2D", ModelFactory.cnn_2d, False),
+    ("CNN_3_block", ModelFactory.cnn_3_block, False) # architecture from paper
+]
+
+results = {}
+path_csv = "dataset4.csv"
+test_run_name = "D4_tomtest"
+folder = f"output/{test_run_name}"
+os.makedirs(folder, exist_ok=True)
+
+
+for m in all_models:
+    model_name, model_chosen, flatten = m[0], m[1], m[2]
+    path_to_save_model = f"{folder}/{model_name}.h5"
+    path_to_save_diagrams = f"{folder}/{model_name}"
+
+    # initialise dataset
+    data = PoseDataset(path_csv)
+    data.load_csv_data()
+    # default: test_size=0.2, random_state=0
+    # data.split_dataset_manual(test_size=0.2, reshape=(not flatten), random_state=42)
+    data.split_dataset_manual(reshape=(not flatten), test_size=0.2)
+
+    print(data.x_train.shape)
+    print(data.x_val.shape)
+    print(data.x_test.shape)
+    
+    # initialise model
+    model = DeepLearningModel(
+        input_shape = data.x_train.shape[1] if flatten else data.x_train.shape[1:],
+        class_count = data.classCount,
+        checkpoint_path = path_to_save_model,
+        name = model_name
+    )
+
+    # a function can be passed in to change the model architecture, otherwise it will use default model (from seniors)
+    # signature: fn(input_shape, class_count)
+    model.build_model(
+        model_chosen
+    )
+
+    #todo: could possibly add customisation type of optimiser, loss, metrics
+    model.compile_model()
+
+    #todo: could possibly add customisation to automatically add type of callbacks
+
+    early_stopping = EarlyStopping(
+        monitor='val_loss',
+        patience=10,
+        restore_best_weights=True,
+        verbose=1
+    )
+    model.add_callbacks([
+        early_stopping
+    ])
+
+    # # Perform cross-validation to understand training data quality
+    # print(f"\n[INFO] Running cross-validation for {model_name}...")
+    # cv_results = model.cross_validate(data, k_folds=5, epochs=200, batch_size=16, log_dir=f"{path_to_save_diagrams}/cv_logs")
+    
+    # # Save CV results
+    # cv_df = pd.DataFrame({
+    #     'fold': range(1, len(cv_results['fold_accuracies']) + 1),
+    #     'accuracy': cv_results['fold_accuracies'],
+    #     'loss': cv_results['fold_losses'],
+    #     'f1_score': cv_results['fold_f1_scores'],
+    #     'precision': cv_results['fold_precisions'],
+    #     'recall': cv_results['fold_recalls']
+    # })
+    # cv_df.to_csv(f"{path_to_save_diagrams}_cv_results.csv", index=False)
+    # print(f"[INFO] Cross-validation results saved to {path_to_save_diagrams}_cv_results.csv")
+
+
+    # other params: epoch (default 200), batch_size (default 16)
+    model.train(data, epochs=200)
+
+    model.plot_training_metrics(path_to_save_diagrams)
+
+    model.plot_confusion_matrix(data, path_to_save_diagrams, "val")
+    model.plot_confusion_matrix(data, path_to_save_diagrams, "test")
+
+    results[model_name] = model.valResults + model.testResults
+    print(results[model_name])
+
+    columns = ["val_acc", "val_prec", "val_rec", "test_acc", "test_prec", "test_rec"]
+    print(results)
+    df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+    df_rounded = df.round(3)
+    df_rounded.to_csv(f"{folder}/Results.csv")
+    print(f"[INFO] Saved in {folder}/Results.csv")

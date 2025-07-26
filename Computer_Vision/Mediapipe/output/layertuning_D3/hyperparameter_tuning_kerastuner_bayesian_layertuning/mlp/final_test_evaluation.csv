@@ -1,0 +1,2 @@
+architecture,best_cv_score,test_accuracy,test_precision,test_recall,best_hyperparameters
+mlp,0.9285714268684387,0.9204545617103577,0.9011667164253371,0.915978835978836,"{'num_dense_layers': 2, 'units_1': 256, 'dropout_1': 0.1, 'units_2': 256, 'dropout_2': 0.5, 'lr': 0.000212916243290288, 'units_3': 192, 'dropout_3': 0.2, 'units_4': 512, 'dropout_4': 0.1, 'units_5': 256, 'dropout_5': 0.4}"

@@ -1,0 +1,2 @@
+architecture,best_cv_score,test_accuracy,test_precision,test_recall,best_hyperparameters
+cnn,0.9193201899528504,0.9175823926925659,0.9009157509157509,0.8796027248613456,"{'num_blocks': 1, 'num_layers_per_block': 2, 'filters_b1_l1': 32, 'kernel_size_b1_l1': 3, 'pool_size_b1': 2, 'dense_units': 384, 'dropout': 0.4, 'lr': 0.0018614191986076204, 'filters_b1_l2': 112, 'kernel_size_b1_l2': 3, 'filters_b2_l1': 80, 'kernel_size_b2_l1': 3, 'filters_b2_l2': 112, 'kernel_size_b2_l2': 3, 'pool_size_b2': 3}"
