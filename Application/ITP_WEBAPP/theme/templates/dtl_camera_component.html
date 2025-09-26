@@ -1,24 +1,24 @@
-<!-- Golf Camera Live Feed Component -->
+<!-- Down-the-Line Golf Camera Live Feed Component -->
 <div class="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
     <h2 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
       <i class="fas fa-camera"></i>
-      Golf Swing Live Feed (Face-On)
+      Golf Swing Live Feed (Down-the-Line)
     </h2>
     <div class="flex items-center gap-2">
-      <i id="connectionIcon" class="fas fa-wifi text-gray-500"></i>
-      <span id="connectionStatus" class="text-sm text-gray-600">connecting...</span>
+      <i id="dtlConnectionIcon" class="fas fa-wifi text-gray-500"></i>
+      <span id="dtlConnectionStatus" class="text-sm text-gray-600">connecting...</span>
     </div>
   </div>
 
   <!-- Coach Options -->
-  <div id="coachOptions" class="mb-6 hidden">
+  <div id="dtlCoachOptions" class="mb-6 hidden">
     <div class="bg-blue-50 p-4 rounded-lg">
       <h3 class="font-semibold text-blue-900 mb-3">Coach Options:</h3>
       <div class="flex items-center gap-4">
         <label class="text-sm font-medium">Record video for:</label>
-        <select id="assigneeSelect" class="px-3 py-2 border border-gray-300 rounded-md">
+        <select id="dtlAssigneeSelect" class="px-3 py-2 border border-gray-300 rounded-md">
           <option value="">Myself (Coach)</option>
         </select>
       </div>
@@ -29,46 +29,46 @@
   <div class="relative mb-6">
     <div class="bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
       <img 
-        id="golfVideoFeed" 
+        id="dtlVideoFeed" 
         class="w-full h-full object-contain hidden"
-        alt="Golf Swing Live Feed"
+        alt="Down-the-Line Golf Swing Live Feed"
       />
-      <div id="videoPlaceholder" class="text-white text-center">
+      <div id="dtlVideoPlaceholder" class="text-white text-center">
         <i class="fas fa-camera text-6xl mb-4 opacity-50"></i>
-        <p class="text-lg">Face-On Camera Ready</p>
+        <p class="text-lg">Down-the-Line Camera Ready</p>
         <p class="text-sm opacity-75 mt-2">Click "Start Live Feed" to begin</p>
       </div>
     </div>
     
     <!-- Recording Indicator -->
-    <div id="recordingIndicator" class="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full items-center gap-2 hidden animate-pulse">
+    <div id="dtlRecordingIndicator" class="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full items-center gap-2 hidden animate-pulse">
       <div class="w-2 h-2 bg-white rounded-full"></div>
       RECORDING
     </div>
 
     <!-- Auto Mode Indicator -->
-    <div id="autoModeIndicator" class="absolute top-4 right-4 bg-blue-600 text-white px-3 py-1 rounded-full hidden">
+    <div id="dtlAutoModeIndicator" class="absolute top-4 right-4 bg-blue-600 text-white px-3 py-1 rounded-full hidden">
       AUTO MODE
     </div>
   </div>
 
   <!-- Pose Detection Status -->
-  <div id="poseStatus" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 hidden">
+  <div id="dtlPoseStatus" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 hidden">
     <div class="bg-gray-50 p-4 rounded-lg text-center">
       <div class="text-sm text-gray-600">Current Pose</div>
-      <div id="currentPose" class="text-lg font-bold text-blue-600">Unknown</div>
+      <div id="dtlCurrentPose" class="text-lg font-bold text-blue-600">Unknown</div>
     </div>
     <div class="bg-gray-50 p-4 rounded-lg text-center">
       <div class="text-sm text-gray-600">Stage</div>
-      <div id="poseStage" class="text-lg font-bold text-gray-600">waiting</div>
+      <div id="dtlPoseStage" class="text-lg font-bold text-gray-600">waiting</div>
     </div>
     <div class="bg-gray-50 p-4 rounded-lg text-center">
       <div class="text-sm text-gray-600">P1 Confidence</div>
-      <div id="p1Confidence" class="text-lg font-bold text-green-600">0.0%</div>
+      <div id="dtlP1Confidence" class="text-lg font-bold text-green-600">0.0%</div>
     </div>
     <div class="bg-gray-50 p-4 rounded-lg text-center">
       <div class="text-sm text-gray-600">P10 Confidence</div>
-      <div id="p10Confidence" class="text-lg font-bold text-purple-600">0.0%</div>
+      <div id="dtlP10Confidence" class="text-lg font-bold text-purple-600">0.0%</div>
     </div>
   </div>
 
@@ -77,7 +77,7 @@
     <!-- Recording Duration -->
     <div class="flex items-center justify-center gap-4">
       <label class="text-sm font-medium">Recording Duration:</label>
-      <select id="recordingDuration" class="px-3 py-2 border border-gray-300 rounded-md">
+      <select id="dtlRecordingDuration" class="px-3 py-2 border border-gray-300 rounded-md">
         <option value="5">5 seconds</option>
         <option value="10" selected>10 seconds</option>
         <option value="15">15 seconds</option>
@@ -87,27 +87,27 @@
 
     <!-- Main Controls -->
     <div class="flex flex-wrap gap-4 justify-center">
-      <button id="startFeedBtn" class="flex items-center gap-2 px-6 py-3 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors">
+      <button id="dtlStartFeedBtn" class="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
         <i class="fas fa-play"></i>
         Start Live Feed
       </button>
 
-      <button id="recordBtn" class="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors" disabled>
+      <button id="dtlRecordBtn" class="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors" disabled>
         <i class="fas fa-circle"></i>
-        <span id="recordBtnText">Record</span>
+        <span id="dtlRecordBtnText">Record</span>
       </button>
 
-      <button id="autoBtn" class="flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+      <button id="dtlAutoBtn" class="flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
         <i class="fas fa-robot"></i>
-        <span id="autoBtnText">Auto: OFF</span>
+        <span id="dtlAutoBtnText">Auto: OFF</span>
       </button>
 
-      <button id="poseBtn" class="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+      <button id="dtlPoseBtn" class="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
         <i class="fas fa-eye"></i>
-        <span id="poseBtnText">Pose: ON</span>
+        <span id="dtlPoseBtnText">Pose: ON</span>
       </button>
 
-      <button id="reloadBtn" class="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors">
+      <button id="dtlReloadBtn" class="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors">
         <i class="fas fa-refresh"></i>
         Reload AI
       </button>
@@ -115,20 +115,21 @@
   </div>
 
   <!-- Instructions -->
-  <div class="mt-6 p-4 bg-blue-50 rounded-lg">
-    <h3 class="font-semibold text-blue-900 mb-2">How to use (Face-On):</h3>
-    <ul class="text-sm text-blue-800 space-y-1">
+  <div class="mt-6 p-4 bg-purple-50 rounded-lg">
+    <h3 class="font-semibold text-purple-900 mb-2">How to use (Down-the-Line View):</h3>
+    <ul class="text-sm text-purple-800 space-y-1">
       <li>• <strong>Start Live Feed:</strong> Click to begin video streaming</li>
       <li>• <strong>Manual Record:</strong> Choose duration and click "Record"</li>
       <li>• <strong>Auto Mode:</strong> Stand in P1 address position to auto-start recording</li>
       <li>• <strong>Auto Stop:</strong> Recording stops when P10 (follow-through) is detected</li>
+      <li>• <strong>Camera Angle:</strong> Down-the-line view provides side perspective of swing</li>
     </ul>
   </div>
 </div>
 
 <script>
-// Golf Camera Controller
-class GolfCameraController {
+// Down-the-Line Golf Camera Controller
+class DTLCameraController {
   constructor() {
     this.isRecording = false;
     this.autoRecordingEnabled = false;
@@ -147,45 +148,43 @@ class GolfCameraController {
   }
 
   setupCoachOptions() {
-    // 🔧 FIXED: Get user role from global variable
     const userRole = window.currentUserRole || 'student';
     
     if (userRole === 'coach') {
-      document.getElementById('coachOptions').classList.remove('hidden');
+      document.getElementById('dtlCoachOptions').classList.remove('hidden');
       this.loadStudentList();
     }
   }
 
   bindEvents() {
     // Start live feed
-    document.getElementById('startFeedBtn').addEventListener('click', () => {
+    document.getElementById('dtlStartFeedBtn').addEventListener('click', () => {
       this.toggleLiveFeed();
     });
 
     // Manual recording
-    document.getElementById('recordBtn').addEventListener('click', () => {
+    document.getElementById('dtlRecordBtn').addEventListener('click', () => {
       this.startRecording();
     });
 
     // Toggle auto recording
-    document.getElementById('autoBtn').addEventListener('click', () => {
+    document.getElementById('dtlAutoBtn').addEventListener('click', () => {
       this.toggleAutoRecording();
     });
 
     // Toggle pose detection
-    document.getElementById('poseBtn').addEventListener('click', () => {
+    document.getElementById('dtlPoseBtn').addEventListener('click', () => {
       this.togglePoseDetection();
     });
 
     // Reload models
-    document.getElementById('reloadBtn').addEventListener('click', () => {
+    document.getElementById('dtlReloadBtn').addEventListener('click', () => {
       this.reloadModels();
     });
   }
 
   async loadStudentList() {
     try {
-      // 🔧 FIXED: Use correct endpoint
       const response = await fetch('/home/api/my-students/');
       
       if (!response.ok) {
@@ -194,7 +193,7 @@ class GolfCameraController {
       }
       
       const students = await response.json();
-      const select = document.getElementById('assigneeSelect');
+      const select = document.getElementById('dtlAssigneeSelect');
       
       students.forEach(student => {
         const option = document.createElement('option');
@@ -204,14 +203,14 @@ class GolfCameraController {
       });
       
     } catch (error) {
-      console.error('Failed to load student list:', error);
+      console.error('Failed to load student list for DTL:', error);
       console.log('Coach can record for themselves only');
     }
   }
 
   async checkHealth() {
     try {
-      const response = await fetch('/home/golf/health/');
+      const response = await fetch('/home/dtl_health/');
       const data = await response.json();
       
       if (data.status === 'connected') {
@@ -221,19 +220,19 @@ class GolfCameraController {
         this.updateConnectionStatus('error');
       }
     } catch (error) {
-      console.error('Health check failed:', error);
+      console.error('DTL Health check failed:', error);
       this.updateConnectionStatus('disconnected');
     }
   }
 
   updateConnectionStatus(status) {
     this.connectionStatus = status;
-    const statusEl = document.getElementById('connectionStatus');
-    const iconEl = document.getElementById('connectionIcon');
+    const statusEl = document.getElementById('dtlConnectionStatus');
+    const iconEl = document.getElementById('dtlConnectionIcon');
     
     switch (status) {
       case 'connected':
-        statusEl.textContent = 'Connected';
+        statusEl.textContent = 'Connected (Port 5001)';
         iconEl.setAttribute('class', 'fas fa-wifi text-green-500');
         break;
       case 'connecting':
@@ -251,30 +250,30 @@ class GolfCameraController {
   }
 
   toggleLiveFeed() {
-    const videoFeed = document.getElementById('golfVideoFeed');
-    const placeholder = document.getElementById('videoPlaceholder');
-    const btn = document.getElementById('startFeedBtn');
+    const videoFeed = document.getElementById('dtlVideoFeed');
+    const placeholder = document.getElementById('dtlVideoPlaceholder');
+    const btn = document.getElementById('dtlStartFeedBtn');
 
     if (!this.streamActive) {
       this.setUserContextOnRPi().then(() => {
         // Start stream
-        videoFeed.src = '/home/golf/video-feed/';
+        videoFeed.src = '/home/dtl_video_feed/';
         videoFeed.classList.remove('hidden');
         placeholder.classList.add('hidden');
         
         btn.innerHTML = '<i class="fas fa-stop"></i> Stop Feed';
-        btn.classList.remove('bg-blue-600', 'hover:bg-blue-700');
+        btn.classList.remove('bg-purple-600', 'hover:bg-purple-700');
         btn.classList.add('bg-gray-600', 'hover:bg-gray-700');
         
         this.streamActive = true;
         
         // Show pose status when stream starts
         if (this.poseDetectionEnabled) {
-          document.getElementById('poseStatus').classList.remove('hidden');
+          document.getElementById('dtlPoseStatus').classList.remove('hidden');
         }
       }).catch(error => {
-        console.error('Failed to set user context:', error);
-        alert('Failed to initialize camera with user context. Auto recording may not work properly.');
+        console.error('Failed to set DTL user context:', error);
+        alert('Failed to initialize DTL camera with user context. Auto recording may not work properly.');
       });
     } else {
       // Stop stream
@@ -284,10 +283,10 @@ class GolfCameraController {
       
       btn.innerHTML = '<i class="fas fa-play"></i> Start Live Feed';
       btn.classList.remove('bg-gray-600', 'hover:bg-gray-700');
-      btn.classList.add('bg-blue-600', 'hover:bg-blue-700');
+      btn.classList.add('bg-purple-600', 'hover:bg-purple-700');
       
       this.streamActive = false;
-      document.getElementById('poseStatus').classList.add('hidden');
+      document.getElementById('dtlPoseStatus').classList.add('hidden');
     }
   }
 
@@ -302,20 +301,20 @@ class GolfCameraController {
       };
       
       if (userRole === 'coach') {
-        const selectedStudentId = document.getElementById('assigneeSelect')?.value;
+        const selectedStudentId = document.getElementById('dtlAssigneeSelect')?.value;
         if (selectedStudentId) {
           payload.assignee_id = selectedStudentId;
           this.currentAssigneeId = selectedStudentId;
-          console.log(`Coach recording for student: ${selectedStudentId}`);
+          console.log(`Coach recording DTL for student: ${selectedStudentId}`);
         } else {
           this.currentAssigneeId = userId;
-          console.log('Coach recording for themselves');
+          console.log('Coach recording DTL for themselves');
         }
       } else {
         this.currentAssigneeId = userId;
       }
       
-      const response = await fetch('/home/golf/set-user-context/', {
+      const response = await fetch('/home/dtl_set_user_context/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -323,15 +322,15 @@ class GolfCameraController {
 
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || 'Failed to set user context');
+        throw new Error(errorData.error || 'Failed to set DTL user context');
       }
 
       const data = await response.json();
-      console.log('User context set successfully:', data);
+      console.log('DTL User context set successfully:', data);
       return data;
       
     } catch (error) {
-      console.error('Error setting user context:', error);
+      console.error('Error setting DTL user context:', error);
       throw error;
     }
   }
@@ -339,7 +338,7 @@ class GolfCameraController {
   async startRecording() {
     if (this.isRecording) return;
 
-    const duration = document.getElementById('recordingDuration').value;
+    const duration = document.getElementById('dtlRecordingDuration').value;
     const userId = window.currentUserId;
 
     if (!userId) {
@@ -348,7 +347,6 @@ class GolfCameraController {
     }
     
     try {
-      // 🔧 FIXED: Properly construct payload
       let payload = { 
         duration: parseInt(duration),
         user_id: userId 
@@ -359,7 +357,7 @@ class GolfCameraController {
         payload.assignee_id = this.currentAssigneeId;
       }
 
-      const response = await fetch('/home/golf/start-recording/', {
+      const response = await fetch('/home/dtl_start_recording/', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
@@ -367,21 +365,21 @@ class GolfCameraController {
 
       if (response.ok) {
         const data = await response.json();
-        console.log('Recording started:', data.message);
+        console.log('DTL Recording started:', data.message);
       } else {
         const errorData = await response.json();
-        console.error('Recording failed:', errorData.error);
-        alert('Failed to start recording: ' + errorData.error);
+        console.error('DTL Recording failed:', errorData.error);
+        alert('Failed to start DTL recording: ' + errorData.error);
       }
     } catch (error) {
-      console.error('Recording error:', error);
-      alert('An error occurred while trying to start the recording.');
+      console.error('DTL Recording error:', error);
+      alert('An error occurred while trying to start the DTL recording.');
     }
   }
 
   async toggleAutoRecording() {
     try {
-      const response = await fetch('/home/golf/toggle-auto/', { method: 'POST' });
+      const response = await fetch('/home/dtl_toggle_auto_recording/', { method: 'POST' });
       
       if (response.ok) {
         const data = await response.json();
@@ -389,13 +387,13 @@ class GolfCameraController {
         this.updateAutoButton();
       }
     } catch (error) {
-      console.error('Toggle auto recording error:', error);
+      console.error('Toggle DTL auto recording error:', error);
     }
   }
 
   async togglePoseDetection() {
     try {
-      const response = await fetch('/home/golf/toggle-pose/', { method: 'POST' });
+      const response = await fetch('/home/dtl_toggle_pose_detection/', { method: 'POST' });
       
       if (response.ok) {
         const data = await response.json();
@@ -405,30 +403,30 @@ class GolfCameraController {
         // Show/hide pose status based on detection state
         if (this.streamActive) {
           if (this.poseDetectionEnabled) {
-            document.getElementById('poseStatus').classList.remove('hidden');
+            document.getElementById('dtlPoseStatus').classList.remove('hidden');
           } else {
-            document.getElementById('poseStatus').classList.add('hidden');
+            document.getElementById('dtlPoseStatus').classList.add('hidden');
           }
         }
       }
     } catch (error) {
-      console.error('Toggle pose detection error:', error);
+      console.error('Toggle DTL pose detection error:', error);
     }
   }
 
   async reloadModels() {
-    const btn = document.getElementById('reloadBtn');
+    const btn = document.getElementById('dtlReloadBtn');
     btn.disabled = true;
     btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
 
     try {
-      const response = await fetch('/home/golf/reload-models/', { method: 'POST' });
+      const response = await fetch('/home/dtl_reload_models/', { method: 'POST' });
       
       if (response.ok) {
-        console.log('Models reloaded');
+        console.log('DTL Models reloaded');
       }
     } catch (error) {
-      console.error('Reload models error:', error);
+      console.error('Reload DTL models error:', error);
     } finally {
       btn.disabled = false;
       btn.innerHTML = '<i class="fas fa-refresh"></i> Reload AI';
@@ -443,14 +441,14 @@ class GolfCameraController {
 
   async fetchStatus() {
     try {
-      const response = await fetch('/home/golf/status/');
+      const response = await fetch('/home/dtl_status/');
       
       if (response.ok) {
         const data = await response.json();
         this.updateUI(data);
       }
     } catch (error) {
-      console.error('Status fetch error:', error);
+      console.error('DTL Status fetch error:', error);
     }
   }
 
@@ -462,26 +460,26 @@ class GolfCameraController {
 
     // Update recording indicator
     if (this.isRecording) {
-      document.getElementById('recordingIndicator').classList.remove('hidden');
+      document.getElementById('dtlRecordingIndicator').classList.remove('hidden');
     } else {
-      document.getElementById('recordingIndicator').classList.add('hidden');
+      document.getElementById('dtlRecordingIndicator').classList.add('hidden');
     }
 
     // Update auto mode indicator
     if (this.autoRecordingEnabled && !this.isRecording) {
-      document.getElementById('autoModeIndicator').classList.remove('hidden');
+      document.getElementById('dtlAutoModeIndicator').classList.remove('hidden');
     } else {
-      document.getElementById('autoModeIndicator').classList.add('hidden');
+      document.getElementById('dtlAutoModeIndicator').classList.add('hidden');
     }
 
     // Update pose data
-    document.getElementById('currentPose').textContent = data.predicted_class || 'Unknown';
-    document.getElementById('poseStage').textContent = data.pose_stage || 'waiting';
-    document.getElementById('p1Confidence').textContent = `${(data.p1_confidence * 100).toFixed(1)}%`;
-    document.getElementById('p10Confidence').textContent = `${(data.p10_confidence * 100).toFixed(1)}%`;
+    document.getElementById('dtlCurrentPose').textContent = data.predicted_class || 'Unknown';
+    document.getElementById('dtlPoseStage').textContent = data.pose_stage || 'waiting';
+    document.getElementById('dtlP1Confidence').textContent = `${(data.p1_confidence * 100).toFixed(1)}%`;
+    document.getElementById('dtlP10Confidence').textContent = `${(data.p10_confidence * 100).toFixed(1)}%`;
 
     // Update stage color
-    const stageEl = document.getElementById('poseStage');
+    const stageEl = document.getElementById('dtlPoseStage');
     stageEl.className = 'text-lg font-bold ' + this.getStageColor(data.pose_stage);
 
     // Update buttons
@@ -491,8 +489,8 @@ class GolfCameraController {
   }
 
   updateAutoButton() {
-    const btn = document.getElementById('autoBtn');
-    const text = document.getElementById('autoBtnText');
+    const btn = document.getElementById('dtlAutoBtn');
+    const text = document.getElementById('dtlAutoBtnText');
     
     text.textContent = `Auto: ${this.autoRecordingEnabled ? 'ON' : 'OFF'}`;
     
@@ -506,8 +504,8 @@ class GolfCameraController {
   }
 
   updatePoseButton() {
-    const btn = document.getElementById('poseBtn');
-    const text = document.getElementById('poseBtnText');
+    const btn = document.getElementById('dtlPoseBtn');
+    const text = document.getElementById('dtlPoseBtnText');
     
     text.textContent = `Pose: ${this.poseDetectionEnabled ? 'ON' : 'OFF'}`;
     
@@ -521,9 +519,9 @@ class GolfCameraController {
   }
 
   updateRecordButton() {
-    const btn = document.getElementById('recordBtn');
-    const text = document.getElementById('recordBtnText');
-    const duration = document.getElementById('recordingDuration').value;
+    const btn = document.getElementById('dtlRecordBtn');
+    const text = document.getElementById('dtlRecordBtnText');
+    const duration = document.getElementById('dtlRecordingDuration').value;
     
     if (this.connectionStatus === 'connected' && !this.isRecording) {
       btn.disabled = false;
@@ -544,8 +542,24 @@ class GolfCameraController {
   }
 }
 
-// Initialize when page loads
+// Initialize when DTL camera tab is active
 document.addEventListener('DOMContentLoaded', () => {
-  new GolfCameraController();
+  // Initialize DTL camera controller only when the DTL tab is visible
+  const dtlContent = document.getElementById('dtlCameraContent');
+  if (dtlContent && !dtlContent.classList.contains('hidden')) {
+    new DTLCameraController();
+  }
+  
+  // Listen for tab switches to initialize controller when DTL tab becomes active
+  const dtlTab = document.getElementById('dtlCameraTab');
+  if (dtlTab) {
+    dtlTab.addEventListener('click', () => {
+      setTimeout(() => {
+        if (!window.dtlCameraController) {
+          window.dtlCameraController = new DTLCameraController();
+        }
+      }, 100);
+    });
+  }
 });
 </script>

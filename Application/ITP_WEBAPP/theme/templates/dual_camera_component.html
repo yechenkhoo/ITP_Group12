@@ -1,0 +1,722 @@
+<!-- Dual Camera Live Feed Component -->
+<div class="max-w-7xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+      <i class="fas fa-camera-retro"></i>
+      Dual Golf Swing Analysis
+    </h2>
+    <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <i id="dualFaceOnIcon" class="fas fa-wifi text-gray-500"></i>
+        <span id="dualFaceOnStatus" class="text-sm text-gray-600">Face-On: connecting...</span>
+      </div>
+      <div class="flex items-center gap-2">
+        <i id="dualDtlIcon" class="fas fa-wifi text-gray-500"></i>
+        <span id="dualDtlStatus" class="text-sm text-gray-600">DTL: connecting...</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- Coach Options -->
+  <div id="dualCoachOptions" class="mb-6 hidden">
+    <div class="bg-gradient-to-r from-blue-50 to-purple-50 p-4 rounded-lg border border-gray-200">
+      <h3 class="font-semibold text-gray-900 mb-3">Coach Options:</h3>
+      <div class="flex items-center gap-4">
+        <label class="text-sm font-medium">Record videos for:</label>
+        <select id="dualAssigneeSelect" class="px-3 py-2 border border-gray-300 rounded-md">
+          <option value="">Myself (Coach)</option>
+        </select>
+        <button 
+          id="dualSetContextBtn" 
+          class="px-4 py-2 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 font-medium whitespace-nowrap"
+        >
+          Set Context (Both Cameras)
+        </button>
+      </div>
+      <div id="dualContextStatus" class="mt-2 text-sm text-gray-600"></div>
+    </div>
+  </div>
+
+  <!-- Video Streams Side by Side -->
+  <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+    
+    <!-- Face-On Camera Stream -->
+    <div class="relative">
+      <div class="bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center relative">
+        <img 
+          id="dualFaceOnFeed" 
+          class="w-full h-full object-contain hidden"
+          alt="Face-On Golf Swing Live Feed"
+        />
+        <div id="dualFaceOnPlaceholder" class="text-white text-center">
+          <i class="fas fa-camera text-4xl mb-2 opacity-50"></i>
+          <p class="text-sm font-semibold">Face-On Camera</p>
+          <p class="text-xs opacity-75 mt-1">Ready to stream</p>
+        </div>
+        <!-- Face-On Recording Indicator -->
+        <div id="dualFaceOnRecording" class="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-xs font-bold animate-pulse hidden">
+          <div class="w-1.5 h-1.5 bg-white rounded-full inline-block mr-1"></div>
+          REC
+        </div>
+        <!-- Face-On Auto Mode Indicator -->
+        <div id="dualFaceOnAutoMode" class="absolute top-2 right-2 bg-blue-600 text-white px-2 py-1 rounded text-xs hidden">
+          AUTO
+        </div>
+      </div>
+      <div class="mt-2 text-center">
+        <span class="text-sm font-medium text-blue-600">Face-On View</span>
+      </div>
+    </div>
+
+    <!-- Down-the-Line Camera Stream -->
+    <div class="relative">
+      <div class="bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center relative">
+        <img 
+          id="dualDtlFeed" 
+          class="w-full h-full object-contain hidden"
+          alt="Down-the-Line Golf Swing Live Feed"
+        />
+        <div id="dualDtlPlaceholder" class="text-white text-center">
+          <i class="fas fa-camera text-4xl mb-2 opacity-50"></i>
+          <p class="text-sm font-semibold">Down-the-Line Camera</p>
+          <p class="text-xs opacity-75 mt-1">Ready to stream</p>
+        </div>
+        <!-- DTL Recording Indicator -->
+        <div id="dualDtlRecording" class="absolute top-2 left-2 bg-red-600 text-white px-2 py-1 rounded text-xs font-bold animate-pulse hidden">
+          <div class="w-1.5 h-1.5 bg-white rounded-full inline-block mr-1"></div>
+          REC
+        </div>
+        <!-- DTL Auto Mode Indicator -->
+        <div id="dualDtlAutoMode" class="absolute top-2 right-2 bg-purple-600 text-white px-2 py-1 rounded text-xs hidden">
+          AUTO
+        </div>
+      </div>
+      <div class="mt-2 text-center">
+        <span class="text-sm font-medium text-purple-600">Down-the-Line View</span>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Dual Pose Detection Status -->
+  <div id="dualPoseStatus" class="mb-6 hidden">
+    <h3 class="text-lg font-semibold text-gray-900 mb-4">Real-Time Analysis</h3>
+    
+    <!-- Face-On Analysis -->
+    <div class="mb-4">
+      <h4 class="text-sm font-medium text-blue-600 mb-2">Face-On Analysis</h4>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-blue-50 p-3 rounded text-center">
+          <div class="text-xs text-gray-600">Current Pose</div>
+          <div id="dualFaceOnPose" class="text-sm font-bold text-blue-600">Unknown</div>
+        </div>
+        <div class="bg-blue-50 p-3 rounded text-center">
+          <div class="text-xs text-gray-600">Stage</div>
+          <div id="dualFaceOnStage" class="text-sm font-bold text-gray-600">waiting</div>
+        </div>
+        <div class="bg-blue-50 p-3 rounded text-center">
+          <div class="text-xs text-gray-600">P1 Confidence</div>
+          <div id="dualFaceOnP1" class="text-sm font-bold text-green-600">0.0%</div>
+        </div>
+        <div class="bg-blue-50 p-3 rounded text-center">
+          <div class="text-xs text-gray-600">P10 Confidence</div>
+          <div id="dualFaceOnP10" class="text-sm font-bold text-purple-600">0.0%</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Down-the-Line Analysis -->
+    <div>
+      <h4 class="text-sm font-medium text-purple-600 mb-2">Down-the-Line Analysis</h4>
+      <div class="grid grid-cols-2 md:grid-cols-4 gap-3">
+        <div class="bg-purple-50 p-3 rounded text-center">
+          <div class="text-xs text-gray-600">Current Pose</div>
+          <div id="dualDtlPose" class="text-sm font-bold text-purple-600">Unknown</div>
+        </div>
+        <div class="bg-purple-50 p-3 rounded text-center">
+          <div class="text-xs text-gray-600">Stage</div>
+          <div id="dualDtlStage" class="text-sm font-bold text-gray-600">waiting</div>
+        </div>
+        <div class="bg-purple-50 p-3 rounded text-center">
+          <div class="text-xs text-gray-600">P1 Confidence</div>
+          <div id="dualDtlP1" class="text-sm font-bold text-green-600">0.0%</div>
+        </div>
+        <div class="bg-purple-50 p-3 rounded text-center">
+          <div class="text-xs text-gray-600">P10 Confidence</div>
+          <div id="dualDtlP10" class="text-sm font-bold text-purple-600">0.0%</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="space-y-4">
+    <!-- Recording Duration -->
+    <div class="flex items-center justify-center gap-4">
+      <label class="text-sm font-medium">Recording Duration:</label>
+      <select id="dualRecordingDuration" class="px-3 py-2 border border-gray-300 rounded-md">
+        <option value="5">5 seconds</option>
+        <option value="10" selected>10 seconds</option>
+        <option value="15">15 seconds</option>
+        <option value="20">20 seconds</option>
+      </select>
+    </div>
+
+    <!-- Main Controls -->
+    <div class="flex flex-wrap gap-4 justify-center">
+      <button id="dualStartFeedBtn" class="flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 text-white rounded-lg hover:from-blue-700 hover:to-purple-700 transition-all">
+        <i class="fas fa-play"></i>
+        Start Both Live Feeds
+      </button>
+
+      <button id="dualRecordBtn" class="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors" disabled>
+        <i class="fas fa-circle"></i>
+        <span id="dualRecordBtnText">Record Both</span>
+      </button>
+
+      <button id="dualAutoBtn" class="flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
+        <i class="fas fa-robot"></i>
+        <span id="dualAutoBtnText">Auto: OFF</span>
+      </button>
+
+      <button id="dualPoseBtn" class="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
+        <i class="fas fa-eye"></i>
+        <span id="dualPoseBtnText">Pose: ON</span>
+      </button>
+
+      <button id="dualReloadBtn" class="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors">
+        <i class="fas fa-refresh"></i>
+        Reload AI Models
+      </button>
+    </div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="mt-6 p-4 bg-gradient-to-r from-blue-50 to-purple-50 rounded-lg border border-gray-200">
+    <h3 class="font-semibold text-gray-900 mb-2">How to use Dual Camera View:</h3>
+    <ul class="text-sm text-gray-800 space-y-1">
+      <li>• <strong>Start Both Live Feeds:</strong> Simultaneously activates Face-On and Down-the-Line cameras</li>
+      <li>• <strong>Synchronized Recording:</strong> Records from both angles simultaneously for comprehensive analysis</li>
+      <li>• <strong>Auto Mode:</strong> Both cameras detect P1 stance and automatically start recording</li>
+      <li>• <strong>Dual Analysis:</strong> Real-time pose detection and confidence scores from both perspectives</li>
+      <li>• <strong>Perfect for:</strong> Complete swing analysis, form comparison, and professional instruction</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+// Dual Camera Controller
+class DualCameraController {
+  constructor() {
+    this.faceOnRecording = false;
+    this.dtlRecording = false;
+    this.faceOnAutoRecording = false;
+    this.dtlAutoRecording = false;
+    this.faceOnPoseDetection = true;
+    this.dtlPoseDetection = true;
+    this.faceOnConnectionStatus = 'disconnected';
+    this.dtlConnectionStatus = 'disconnected';
+    this.bothStreamsActive = false;
+    this.currentAssigneeId = null;
+    
+    this.init();
+  }
+
+  init() {
+    this.bindEvents();
+    this.setupCoachOptions();
+    this.checkBothHealths();
+  }
+
+  setupCoachOptions() {
+    const userRole = window.currentUserRole || 'student';
+    
+    if (userRole === 'coach') {
+      document.getElementById('dualCoachOptions').classList.remove('hidden');
+      this.loadStudentList();
+    }
+  }
+
+  bindEvents() {
+    // Start both live feeds
+    document.getElementById('dualStartFeedBtn').addEventListener('click', () => {
+      this.toggleBothLiveFeeds();
+    });
+
+    // Dual recording
+    document.getElementById('dualRecordBtn').addEventListener('click', () => {
+      this.startDualRecording();
+    });
+
+    // Toggle auto recording on both
+    document.getElementById('dualAutoBtn').addEventListener('click', () => {
+      this.toggleDualAutoRecording();
+    });
+
+    // Toggle pose detection on both
+    document.getElementById('dualPoseBtn').addEventListener('click', () => {
+      this.toggleDualPoseDetection();
+    });
+
+    // Reload models on both
+    document.getElementById('dualReloadBtn').addEventListener('click', () => {
+      this.reloadDualModels();
+    });
+
+    // Set context for both cameras
+    document.getElementById('dualSetContextBtn').addEventListener('click', () => {
+      this.setDualUserContext();
+    });
+  }
+
+  async loadStudentList() {
+    try {
+      const response = await fetch('/home/api/my-students/');
+      
+      if (!response.ok) {
+        console.log('Student list endpoint not available - coach can only record for themselves');
+        return;
+      }
+      
+      const students = await response.json();
+      const select = document.getElementById('dualAssigneeSelect');
+      
+      students.forEach(student => {
+        const option = document.createElement('option');
+        option.value = student.id;
+        option.textContent = student.name;
+        select.appendChild(option);
+      });
+      
+    } catch (error) {
+      console.error('Failed to load student list for dual camera:', error);
+    }
+  }
+
+  async checkBothHealths() {
+    // Check Face-On camera health
+    try {
+      const faceOnResponse = await fetch('/home/golf/health/');
+      const faceOnData = await faceOnResponse.json();
+      
+      if (faceOnData.status === 'connected') {
+        this.updateConnectionStatus('face-on', 'connected');
+        this.faceOnConnectionStatus = 'connected';
+      } else {
+        this.updateConnectionStatus('face-on', 'error');
+      }
+    } catch (error) {
+      console.error('Face-On health check failed:', error);
+      this.updateConnectionStatus('face-on', 'disconnected');
+    }
+
+    // Check DTL camera health
+    try {
+      const dtlResponse = await fetch('/home/dtl_health/');
+      const dtlData = await dtlResponse.json();
+      
+      if (dtlData.status === 'connected') {
+        this.updateConnectionStatus('dtl', 'connected');
+        this.dtlConnectionStatus = 'connected';
+      } else {
+        this.updateConnectionStatus('dtl', 'error');
+      }
+    } catch (error) {
+      console.error('DTL health check failed:', error);
+      this.updateConnectionStatus('dtl', 'disconnected');
+    }
+
+    // Start polling if both are connected
+    if (this.faceOnConnectionStatus === 'connected' && this.dtlConnectionStatus === 'connected') {
+      this.startDualStatusPolling();
+    }
+  }
+
+  updateConnectionStatus(camera, status) {
+    let statusEl, iconEl;
+    
+    if (camera === 'face-on') {
+      statusEl = document.getElementById('dualFaceOnStatus');
+      iconEl = document.getElementById('dualFaceOnIcon');
+    } else {
+      statusEl = document.getElementById('dualDtlStatus');
+      iconEl = document.getElementById('dualDtlIcon');
+    }
+    
+    switch (status) {
+      case 'connected':
+        statusEl.textContent = `${camera === 'face-on' ? 'Face-On' : 'DTL'}: Connected`;
+        iconEl.setAttribute('class', 'fas fa-wifi text-green-500');
+        break;
+      case 'error':
+        statusEl.textContent = `${camera === 'face-on' ? 'Face-On' : 'DTL'}: Error`;
+        iconEl.setAttribute('class', 'fas fa-wifi text-red-500');
+        break;
+      default:
+        statusEl.textContent = `${camera === 'face-on' ? 'Face-On' : 'DTL'}: Disconnected`;
+        iconEl.setAttribute('class', 'fas fa-wifi text-gray-500');
+    }
+  }
+
+  async toggleBothLiveFeeds() {
+    const btn = document.getElementById('dualStartFeedBtn');
+    
+    if (!this.bothStreamsActive) {
+      // Set user context for both cameras first
+      await this.setDualUserContext();
+      
+      // Start both streams
+      const faceOnFeed = document.getElementById('dualFaceOnFeed');
+      const dtlFeed = document.getElementById('dualDtlFeed');
+      const faceOnPlaceholder = document.getElementById('dualFaceOnPlaceholder');
+      const dtlPlaceholder = document.getElementById('dualDtlPlaceholder');
+      
+      faceOnFeed.src = '/home/golf/video-feed/';
+      dtlFeed.src = '/home/dtl_video_feed/';
+      
+      faceOnFeed.classList.remove('hidden');
+      dtlFeed.classList.remove('hidden');
+      faceOnPlaceholder.classList.add('hidden');
+      dtlPlaceholder.classList.add('hidden');
+      
+      btn.innerHTML = '<i class="fas fa-stop"></i> Stop Both Feeds';
+      btn.classList.remove('bg-gradient-to-r', 'from-blue-600', 'to-purple-600', 'hover:from-blue-700', 'hover:to-purple-700');
+      btn.classList.add('bg-gray-600', 'hover:bg-gray-700');
+      
+      this.bothStreamsActive = true;
+      
+      // Show pose status when streams start
+      if (this.faceOnPoseDetection || this.dtlPoseDetection) {
+        document.getElementById('dualPoseStatus').classList.remove('hidden');
+      }
+      
+    } else {
+      // Stop both streams
+      const faceOnFeed = document.getElementById('dualFaceOnFeed');
+      const dtlFeed = document.getElementById('dualDtlFeed');
+      const faceOnPlaceholder = document.getElementById('dualFaceOnPlaceholder');
+      const dtlPlaceholder = document.getElementById('dualDtlPlaceholder');
+      
+      faceOnFeed.src = '';
+      dtlFeed.src = '';
+      faceOnFeed.classList.add('hidden');
+      dtlFeed.classList.add('hidden');
+      faceOnPlaceholder.classList.remove('hidden');
+      dtlPlaceholder.classList.remove('hidden');
+      
+      btn.innerHTML = '<i class="fas fa-play"></i> Start Both Live Feeds';
+      btn.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+      btn.classList.add('bg-gradient-to-r', 'from-blue-600', 'to-purple-600', 'hover:from-blue-700', 'hover:to-purple-700');
+      
+      this.bothStreamsActive = false;
+      document.getElementById('dualPoseStatus').classList.add('hidden');
+    }
+  }
+
+  async setDualUserContext() {
+    const userId = window.currentUserId;
+    const userRole = window.currentUserRole || 'student';
+    const studentSelect = document.getElementById('dualAssigneeSelect');
+    const selectedStudentId = studentSelect?.value;
+    const statusDiv = document.getElementById('dualContextStatus');
+    
+    let payload = { 
+      user_id: userId,
+      role: userRole 
+    };
+    
+    if (userRole === 'coach' && selectedStudentId) {
+      payload.assignee_id = selectedStudentId;
+      this.currentAssigneeId = selectedStudentId;
+    } else {
+      this.currentAssigneeId = userId;
+    }
+    
+    try {
+      // Set context for both cameras simultaneously
+      const [faceOnResponse, dtlResponse] = await Promise.all([
+        fetch('/home/golf/set-user-context/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }),
+        fetch('/home/dtl_set_user_context/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+      ]);
+
+      if (faceOnResponse.ok && dtlResponse.ok) {
+        statusDiv.textContent = selectedStudentId ? 
+          'Context set for selected student (Both cameras)' : 
+          `Context set for ${userRole} (Both cameras)`;
+        statusDiv.className = 'mt-2 text-sm text-green-600';
+      } else {
+        statusDiv.textContent = 'Failed to set context for one or both cameras';
+        statusDiv.className = 'mt-2 text-sm text-red-600';
+      }
+    } catch (error) {
+      console.error('Dual context error:', error);
+      statusDiv.textContent = 'Error setting dual camera context';
+      statusDiv.className = 'mt-2 text-sm text-red-600';
+    }
+  }
+
+  async startDualRecording() {
+    if (this.faceOnRecording || this.dtlRecording) return;
+
+    const duration = document.getElementById('dualRecordingDuration').value;
+    const userId = window.currentUserId;
+
+    let payload = { 
+      duration: parseInt(duration),
+      user_id: userId 
+    };
+
+    if (this.currentAssigneeId && this.currentAssigneeId !== userId) {
+      payload.assignee_id = this.currentAssigneeId;
+    }
+
+    try {
+      // Start recording on both cameras simultaneously
+      const [faceOnResponse, dtlResponse] = await Promise.all([
+        fetch('/home/golf/start-recording/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }),
+        fetch('/home/dtl_start_recording/', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        })
+      ]);
+
+      if (faceOnResponse.ok && dtlResponse.ok) {
+        console.log('Dual recording started successfully');
+      } else {
+        alert('Failed to start recording on one or both cameras');
+      }
+    } catch (error) {
+      console.error('Dual recording error:', error);
+      alert('Error starting dual recording');
+    }
+  }
+
+  async toggleDualAutoRecording() {
+    try {
+      const [faceOnResponse, dtlResponse] = await Promise.all([
+        fetch('/home/golf/toggle-auto/', { method: 'POST' }),
+        fetch('/home/dtl_toggle_auto_recording/', { method: 'POST' })
+      ]);
+
+      if (faceOnResponse.ok && dtlResponse.ok) {
+        const [faceOnData, dtlData] = await Promise.all([
+          faceOnResponse.json(),
+          dtlResponse.json()
+        ]);
+        
+        this.faceOnAutoRecording = faceOnData.auto_recording_enabled;
+        this.dtlAutoRecording = dtlData.auto_recording_enabled;
+        this.updateDualAutoButton();
+      }
+    } catch (error) {
+      console.error('Toggle dual auto recording error:', error);
+    }
+  }
+
+  async toggleDualPoseDetection() {
+    try {
+      const [faceOnResponse, dtlResponse] = await Promise.all([
+        fetch('/home/golf/toggle-pose/', { method: 'POST' }),
+        fetch('/home/dtl_toggle_pose_detection/', { method: 'POST' })
+      ]);
+
+      if (faceOnResponse.ok && dtlResponse.ok) {
+        const [faceOnData, dtlData] = await Promise.all([
+          faceOnResponse.json(),
+          dtlResponse.json()
+        ]);
+        
+        this.faceOnPoseDetection = faceOnData.pose_detection_enabled;
+        this.dtlPoseDetection = dtlData.pose_detection_enabled;
+        this.updateDualPoseButton();
+        
+        // Show/hide pose status based on detection state
+        if (this.bothStreamsActive && (this.faceOnPoseDetection || this.dtlPoseDetection)) {
+          document.getElementById('dualPoseStatus').classList.remove('hidden');
+        } else if (!this.faceOnPoseDetection && !this.dtlPoseDetection) {
+          document.getElementById('dualPoseStatus').classList.add('hidden');
+        }
+      }
+    } catch (error) {
+      console.error('Toggle dual pose detection error:', error);
+    }
+  }
+
+  async reloadDualModels() {
+    const btn = document.getElementById('dualReloadBtn');
+    btn.disabled = true;
+    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Reloading Both...';
+
+    try {
+      const [faceOnResponse, dtlResponse] = await Promise.all([
+        fetch('/home/golf/reload-models/', { method: 'POST' }),
+        fetch('/home/dtl_reload_models/', { method: 'POST' })
+      ]);
+
+      if (faceOnResponse.ok && dtlResponse.ok) {
+        console.log('Both AI models reloaded successfully');
+      }
+    } catch (error) {
+      console.error('Reload dual models error:', error);
+    } finally {
+      btn.disabled = false;
+      btn.innerHTML = '<i class="fas fa-refresh"></i> Reload AI Models';
+    }
+  }
+
+  startDualStatusPolling() {
+    setInterval(() => {
+      this.fetchDualStatus();
+    }, 2000);
+  }
+
+  async fetchDualStatus() {
+    try {
+      const [faceOnResponse, dtlResponse] = await Promise.all([
+        fetch('/home/golf/status/'),
+        fetch('/home/dtl_status/')
+      ]);
+
+      if (faceOnResponse.ok && dtlResponse.ok) {
+        const [faceOnData, dtlData] = await Promise.all([
+          faceOnResponse.json(),
+          dtlResponse.json()
+        ]);
+        
+        this.updateDualUI(faceOnData, dtlData);
+      }
+    } catch (error) {
+      console.error('Dual status fetch error:', error);
+    }
+  }
+
+  updateDualUI(faceOnData, dtlData) {
+    // Update recording states
+    this.faceOnRecording = faceOnData.is_recording;
+    this.dtlRecording = dtlData.is_recording;
+    this.faceOnAutoRecording = faceOnData.auto_recording_enabled;
+    this.dtlAutoRecording = dtlData.auto_recording_enabled;
+    this.faceOnPoseDetection = faceOnData.pose_detection_enabled;
+    this.dtlPoseDetection = dtlData.pose_detection_enabled;
+
+    // Update recording indicators
+    document.getElementById('dualFaceOnRecording').classList.toggle('hidden', !this.faceOnRecording);
+    document.getElementById('dualDtlRecording').classList.toggle('hidden', !this.dtlRecording);
+
+    // Update auto mode indicators
+    document.getElementById('dualFaceOnAutoMode').classList.toggle('hidden', !this.faceOnAutoRecording || this.faceOnRecording);
+    document.getElementById('dualDtlAutoMode').classList.toggle('hidden', !this.dtlAutoRecording || this.dtlRecording);
+
+    // Update pose data
+    document.getElementById('dualFaceOnPose').textContent = faceOnData.predicted_class || 'Unknown';
+    document.getElementById('dualFaceOnStage').textContent = faceOnData.pose_stage || 'waiting';
+    document.getElementById('dualFaceOnP1').textContent = `${(faceOnData.p1_confidence * 100).toFixed(1)}%`;
+    document.getElementById('dualFaceOnP10').textContent = `${(faceOnData.p10_confidence * 100).toFixed(1)}%`;
+
+    document.getElementById('dualDtlPose').textContent = dtlData.predicted_class || 'Unknown';
+    document.getElementById('dualDtlStage').textContent = dtlData.pose_stage || 'waiting';
+    document.getElementById('dualDtlP1').textContent = `${(dtlData.p1_confidence * 100).toFixed(1)}%`;
+    document.getElementById('dualDtlP10').textContent = `${(dtlData.p10_confidence * 100).toFixed(1)}%`;
+
+    // Update stage colors
+    document.getElementById('dualFaceOnStage').className = 'text-sm font-bold ' + this.getStageColor(faceOnData.pose_stage);
+    document.getElementById('dualDtlStage').className = 'text-sm font-bold ' + this.getStageColor(dtlData.pose_stage);
+
+    // Update buttons
+    this.updateDualAutoButton();
+    this.updateDualPoseButton();
+    this.updateDualRecordButton();
+  }
+
+  updateDualAutoButton() {
+    const btn = document.getElementById('dualAutoBtn');
+    const text = document.getElementById('dualAutoBtnText');
+    
+    const bothAuto = this.faceOnAutoRecording && this.dtlAutoRecording;
+    text.textContent = `Auto: ${bothAuto ? 'ON' : 'OFF'}`;
+    
+    if (bothAuto) {
+      btn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+      btn.classList.add('bg-green-600', 'text-white', 'hover:bg-green-700');
+    } else {
+      btn.classList.remove('bg-green-600', 'text-white', 'hover:bg-green-700');
+      btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+    }
+  }
+
+  updateDualPoseButton() {
+    const btn = document.getElementById('dualPoseBtn');
+    const text = document.getElementById('dualPoseBtnText');
+    
+    const bothPose = this.faceOnPoseDetection && this.dtlPoseDetection;
+    text.textContent = `Pose: ${bothPose ? 'ON' : 'PARTIAL'}`;
+    
+    if (bothPose) {
+      btn.classList.remove('bg-yellow-600', 'text-white', 'hover:bg-yellow-700');
+      btn.classList.add('bg-green-600', 'text-white', 'hover:bg-green-700');
+    } else if (this.faceOnPoseDetection || this.dtlPoseDetection) {
+      btn.classList.remove('bg-green-600', 'text-white', 'hover:bg-green-700');
+      btn.classList.add('bg-yellow-600', 'text-white', 'hover:bg-yellow-700');
+      text.textContent = 'Pose: PARTIAL';
+    } else {
+      btn.classList.remove('bg-green-600', 'bg-yellow-600', 'text-white', 'hover:bg-green-700', 'hover:bg-yellow-700');
+      btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
+      text.textContent = 'Pose: OFF';
+    }
+  }
+
+  updateDualRecordButton() {
+    const btn = document.getElementById('dualRecordBtn');
+    const text = document.getElementById('dualRecordBtnText');
+    const duration = document.getElementById('dualRecordingDuration').value;
+    
+    const bothConnected = this.faceOnConnectionStatus === 'connected' && this.dtlConnectionStatus === 'connected';
+    const anyRecording = this.faceOnRecording || this.dtlRecording;
+    
+    if (bothConnected && !anyRecording) {
+      btn.disabled = false;
+      text.textContent = `Record Both (${duration}s)`;
+    } else {
+      btn.disabled = true;
+      text.textContent = anyRecording ? 'Recording...' : 'Record Both';
+    }
+  }
+
+  getStageColor(stage) {
+    switch (stage) {
+      case 'ready': return 'text-yellow-600';
+      case 'recording': return 'text-red-600';
+      case 'cooldown': return 'text-blue-600';
+      default: return 'text-gray-600';
+    }
+  }
+}
+
+// Initialize when dual camera tab is active
+document.addEventListener('DOMContentLoaded', () => {
+  const dualTab = document.getElementById('dualCameraTab');
+  if (dualTab) {
+    dualTab.addEventListener('click', () => {
+      setTimeout(() => {
+        if (!window.dualCameraController) {
+          window.dualCameraController = new DualCameraController();
+        }
+      }, 100);
+    });
+  }
+});
+</script>

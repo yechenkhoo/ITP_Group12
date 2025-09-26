@@ -44,6 +44,7 @@ def fetch_all_students(coach_id):
 # Define the Raspberry Pi URLs
 RASPBERRY_PI_URL = 'http://172.20.10.5:5000'  # Old camera system
 GOLF_CAMERA_URL = 'http://172.20.10.5:5000'     # New golf camera system
+DTL_CAMERA_URL = 'http://172.20.10.10:5001'      # Down-the-line golf camera system
 
 # =============================================================================
 # 📱 MAIN DASHBOARD VIEWS
@@ -1158,6 +1159,217 @@ def golf_health(request):
             'status': 'disconnected',
             'golf_camera_ip': '172.20.10.5',
             'golf_camera_url': GOLF_CAMERA_URL,
+            'error': str(e),
+            'timestamp': timezone.now().isoformat()
+        })
+    
+    # =============================================================================
+# 🏌️ DOWN-THE-LINE GOLF CAMERA SYSTEM (Additional Angle)
+# =============================================================================
+
+def dtl_video_feed(request):
+    """Proxy the live video feed from down-the-line golf camera"""
+    try:
+        response = requests.get(f'{DTL_CAMERA_URL}/video_feed', stream=True)
+        if response.status_code == 200:
+            return StreamingHttpResponse(
+                response.iter_content(chunk_size=1024),
+                content_type='multipart/x-mixed-replace; boundary=frame'
+            )
+        else:
+            return HttpResponse("Down-the-line camera feed unavailable", status=503)
+    except requests.exceptions.RequestException as e:
+        return HttpResponse(f"Down-the-line camera connection error: {e}", status=503)
+
+def dtl_status(request):
+    """Get down-the-line camera status"""
+    try:
+        response = requests.get(f'{DTL_CAMERA_URL}/recording_status', timeout=5)
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({
+                'error': 'Down-the-line camera offline',
+                'is_recording': False,
+                'auto_recording_enabled': False,
+                'pose_detection_enabled': False,
+                'predicted_class': 'Unknown',
+                'pose_stage': 'disconnected',
+                'p1_confidence': 0,
+                'p10_confidence': 0
+            }, status=503)
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({
+            'error': f'Down-the-line camera connection error: {str(e)}',
+            'is_recording': False,
+            'auto_recording_enabled': False,
+            'pose_detection_enabled': False,
+            'predicted_class': 'Unknown',
+            'pose_stage': 'disconnected',
+            'p1_confidence': 0,
+            'p10_confidence': 0
+        }, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_start_recording(request):
+    """Enhanced recording with assignee support for down-the-line camera"""
+    try:
+        data_from_browser = json.loads(request.body)
+        
+        # Get current user info
+        user = User.find_user_by_id(ObjectId(request.session['Id']))
+        user_id_str = str(user['_id'])
+        
+        # Prepare payload with enhanced data
+        payload = {
+            'user_id': user_id_str,
+            'role': user['Role'],
+            'duration': data_from_browser.get('duration', 10),
+            'angle': 'down-the-line'  # Specify angle for this camera
+        }
+        
+        # If assignee_id provided, include it
+        assignee_id = data_from_browser.get('assignee_id')
+        if assignee_id:
+            payload['assignee_id'] = assignee_id
+        
+        # Forward to RPi
+        response = requests.post(
+            f'{DTL_CAMERA_URL}/start_recording',
+            json=payload,
+            timeout=5
+        )
+        
+        if response.ok:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to start down-the-line recording on RPi'}, status=response.status_code)
+            
+    except Exception as e:
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_toggle_auto_recording(request):
+    """Toggle auto recording on down-the-line camera"""
+    try:
+        response = requests.post(f'{DTL_CAMERA_URL}/toggle_auto_recording', timeout=5)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to toggle auto recording'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Down-the-line camera error: {str(e)}'}, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_toggle_pose_detection(request):
+    """Toggle pose detection on down-the-line camera"""
+    try:
+        response = requests.post(f'{DTL_CAMERA_URL}/toggle_pose_detection', timeout=5)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to toggle pose detection'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Down-the-line camera error: {str(e)}'}, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_reload_models(request):
+    """Reload AI models on down-the-line camera"""
+    try:
+        response = requests.post(f'{DTL_CAMERA_URL}/reload_models', timeout=30)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to reload models'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Down-the-line camera error: {str(e)}'}, status=503)
+    
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_set_user_context(request):
+    """Enhanced user context setting with assignee support for down-the-line camera"""
+    try:
+        # Get user from session
+        user = User.find_user_by_id(ObjectId(request.session['Id']))
+        user_id_str = str(user['_id'])
+        user_role = user['Role']
+        
+        # Get request data
+        data = json.loads(request.body) if request.body else {}
+        assignee_id = data.get('assignee_id')  # Optional: who the video is for
+        
+        # Prepare payload for RPi
+        payload = {
+            'user_id': user_id_str,
+            'role': user_role,
+            'angle': 'down-the-line'  # Specify angle
+        }
+        
+        # If assignee_id provided, include it
+        if assignee_id:
+            payload['assignee_id'] = assignee_id
+        
+        # Send to RPi
+        response = requests.post(
+            f'{DTL_CAMERA_URL}/set_user_context',
+            json=payload,
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            return JsonResponse({
+                'status': 'success', 
+                'operator_id': user_id_str,
+                'assignee_id': response_data.get('assignee_id', user_id_str),
+                'role': user_role,
+                'angle': 'down-the-line'
+            })
+        else:
+            return JsonResponse({'error': 'Failed to set user context on down-the-line RPi'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Down-the-line RPi connection error: {str(e)}'}, status=503)
+    except Exception as e:
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+
+def dtl_health(request):
+    """Check down-the-line camera health"""
+    try:
+        response = requests.get(f'{DTL_CAMERA_URL}/recording_status', timeout=3)
+        
+        if response.status_code == 200:
+            return JsonResponse({
+                'status': 'connected',
+                'dtl_camera_ip': '172.20.10.5',
+                'dtl_camera_url': DTL_CAMERA_URL,
+                'timestamp': timezone.now().isoformat(),
+                'camera_data': response.json()
+            })
+        else:
+            return JsonResponse({
+                'status': 'error',
+                'dtl_camera_ip': '172.20.10.5',
+                'dtl_camera_url': DTL_CAMERA_URL,
+                'error': f'HTTP {response.status_code}',
+                'timestamp': timezone.now().isoformat()
+            })
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({
+            'status': 'disconnected',
+            'dtl_camera_ip': '172.20.10.5',
+            'dtl_camera_url': DTL_CAMERA_URL,
             'error': str(e),
             'timestamp': timezone.now().isoformat()
         })

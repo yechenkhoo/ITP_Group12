@@ -15,54 +15,36 @@
     <div class="mb-6">
       <ul class="flex border-b border-gray-200">
         <li class="mr-2">
-          <button id="oldCameraTab" class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300">
-            Old Camera System
+          <button id="golfCameraTab" class="inline-block p-4 rounded-t-lg border-b-2 border-blue-500 text-blue-500">
+            Golf Camera (Face-On)
           </button>
         </li>
         <li class="mr-2">
-          <button id="golfCameraTab" class="inline-block p-4 rounded-t-lg border-b-2 border-blue-500 text-blue-500">
-            Golf Camera (New)
+          <button id="dtlCameraTab" class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300">
+            Golf Camera (Down-the-Line)
+          </button>
+        </li>
+        <li class="mr-2">
+          <button id="dualCameraTab" class="inline-block p-4 rounded-t-lg border-b-2 border-transparent hover:text-gray-600 hover:border-gray-300">
+            Dual Camera View
           </button>
         </li>
       </ul>
     </div>
 
-    <!-- Old Camera Tab Content -->
-    <div id="oldCameraContent" class="hidden">
-      <div class="flex flex-col gap-2 md:flex-row md:gap-4 mb-6">
-        <button class="bg-green-600 hover:bg-green-500 py-2 px-4 rounded-lg text-white w-full md:h-auto font-semibold shadow-lg border-2 border-green-700" id="live-button">
-          <p class="whitespace-nowrap text-white font-poppins">Start Video Feed</p> 
-        </button>
-    
-        <button class="bg-red-600 hover:bg-red-500 py-2 px-4 rounded-lg text-white w-full md:h-auto font-semibold shadow-lg border-2 border-red-700" id="start-recording-button">
-          <p class="whitespace-nowrap text-white font-poppins">Start Recording</p> 
-        </button>
-      </div>
-
-      <div class="w-full py-2 overflow-hidden">
-        <img 
-          id="video-feed" 
-          class="w-full h-100 bg-gray-200 flex items-center justify-center border-2 border-gray-300 rounded-lg" 
-          src="" 
-          alt="Live View Feed"
-          onerror="this.style.display='none'; document.getElementById('error-placeholder').style.display='flex';"
-        />
-        <!-- Placeholder for Error -->
-        <div 
-          id="error-placeholder" 
-          class="hidden w-full h-64 bg-gray-100 text-center text-gray-500 flex items-center justify-center border-2 border-gray-300 rounded-lg">
-            <div class="text-center">
-              <i class="fas fa-video-slash text-4xl mb-2"></i>
-              <p class="font-semibold">Live view feed is not available</p>
-              <p class="text-sm">Please check the camera connection</p>
-            </div>
-        </div>
-      </div>
+    <!-- Golf Camera Tab Content (Face-On) -->
+    <div id="golfCameraContent">
+      {% include 'golf_camera_component.html' with camera_type='face-on' %}
     </div>
 
-    <!-- Golf Camera Tab Content -->
-    <div id="golfCameraContent">
-      {% include 'golf_camera_component.html' %}
+    <!-- Down-the-Line Camera Tab Content -->
+    <div id="dtlCameraContent" class="hidden">
+      {% include 'dtl_camera_component.html' with camera_type='down-the-line' %}
+    </div>
+
+    <!-- Dual Camera Tab Content -->
+    <div id="dualCameraContent" class="hidden">
+      {% include 'dual_camera_component.html' %}
     </div>
 
   </div>
@@ -76,89 +58,60 @@
 <script>
 // Tab switching functionality
 document.addEventListener('DOMContentLoaded', function() {
-  const oldTab = document.getElementById('oldCameraTab');
   const golfTab = document.getElementById('golfCameraTab');
-  const oldContent = document.getElementById('oldCameraContent');
+  const dtlTab = document.getElementById('dtlCameraTab');
   const golfContent = document.getElementById('golfCameraContent');
+  const dtlContent = document.getElementById('dtlCameraContent');
+  const dualTab = document.getElementById('dualCameraTab');
+  const dualContent = document.getElementById('dualCameraContent');
 
-  function switchToOldCamera() {
-    // Update tabs
-    oldTab.classList.remove('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
-    oldTab.classList.add('border-blue-500', 'text-blue-500');
-    golfTab.classList.remove('border-blue-500', 'text-blue-500');
-    golfTab.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
-
-    // Update content
-    oldContent.classList.remove('hidden');
-    golfContent.classList.add('hidden');
-  }
 
   function switchToGolfCamera() {
     // Update tabs
     golfTab.classList.remove('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
     golfTab.classList.add('border-blue-500', 'text-blue-500');
-    oldTab.classList.remove('border-blue-500', 'text-blue-500');
-    oldTab.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+    dtlTab.classList.remove('border-blue-500', 'text-blue-500');
+    dtlTab.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+    dualTab.classList.remove('border-blue-500', 'text-blue-500');
+    dualTab.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
 
     // Update content
     golfContent.classList.remove('hidden');
-    oldContent.classList.add('hidden');
+    dtlContent.classList.add('hidden');
+    dualContent.classList.add('hidden');
   }
 
-  oldTab.addEventListener('click', switchToOldCamera);
+  function switchToDtlCamera() {
+    // Update tabs
+    dtlTab.classList.remove('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+    dtlTab.classList.add('border-blue-500', 'text-blue-500');
+    golfTab.classList.remove('border-blue-500', 'text-blue-500');
+    golfTab.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+    dualTab.classList.remove('border-blue-500', 'text-blue-500');
+    dualTab.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+
+    // Update content
+    dtlContent.classList.remove('hidden');
+    golfContent.classList.add('hidden');
+    dualContent.classList.add('hidden');
+  }
+
+  function switchToDualCamera() {
+    dualTab.classList.add('border-blue-500', 'text-blue-500');
+    dualTab.classList.remove('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+    golfTab.classList.remove('border-blue-500', 'text-blue-500');
+    golfTab.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+    dtlTab.classList.remove('border-blue-500', 'text-blue-500');
+    dtlTab.classList.add('border-transparent', 'hover:text-gray-600', 'hover:border-gray-300');
+
+    dualContent.classList.remove('hidden');
+    golfContent.classList.add('hidden');
+    dtlContent.classList.add('hidden');
+  }
+
   golfTab.addEventListener('click', switchToGolfCamera);
-
-  // Old camera functionality with enhanced visual feedback
-  document.getElementById('live-button').addEventListener('click', function() {
-    const videoFeed = document.getElementById('video-feed');
-    const liveStreamURL = '/home/live_stream/';
-    const button = this;
-
-    // Update button to show loading state
-    button.innerHTML = '<p class="whitespace-nowrap text-white font-poppins">Connecting...</p>';
-    button.className = 'bg-yellow-600 hover:bg-yellow-500 py-2 px-4 rounded-lg text-white w-full md:h-auto font-semibold shadow-lg border-2 border-yellow-700';
-
-    videoFeed.src = liveStreamURL;
-    document.getElementById('error-placeholder').style.display = 'none';
-    videoFeed.style.display = 'block';
-
-    // Update button to show active state after a short delay
-    setTimeout(() => {
-      button.innerHTML = '<p class="whitespace-nowrap text-white font-poppins">Stop Video Feed</p>';
-      button.className = 'bg-orange-600 hover:bg-orange-500 py-2 px-4 rounded-lg text-white w-full md:h-auto font-semibold shadow-lg border-2 border-orange-700';
-    }, 1000);
-  });
-
-  document.getElementById('start-recording-button').addEventListener('click', function() {
-    const button = this;
-    
-    // Update button to show recording state
-    button.innerHTML = '<p class="whitespace-nowrap text-white font-poppins">Recording...</p>';
-    button.className = 'bg-red-800 hover:bg-red-700 py-2 px-4 rounded-lg text-white w-full md:h-auto font-semibold shadow-lg border-2 border-red-900';
-    button.disabled = true;
-
-    fetch('/home/start_recording/', { method: 'POST' })
-      .then(response => {
-            if (!response.ok) {
-              throw new Error(`HTTP error! Status: ${response.status}`);
-            }
-            return response.json();
-        })
-        .then(data => {
-          alert(data.message);
-          // Reset button after recording
-          button.innerHTML = '<p class="whitespace-nowrap text-white font-poppins">Start Recording</p>';
-          button.className = 'bg-red-600 hover:bg-red-500 py-2 px-4 rounded-lg text-white w-full md:h-auto font-semibold shadow-lg border-2 border-red-700';
-          button.disabled = false;
-        })
-        .catch(error => {
-          alert("Error starting recording: " + error.message);
-          // Reset button on error
-          button.innerHTML = '<p class="whitespace-nowrap text-white font-poppins">Start Recording</p>';
-          button.className = 'bg-red-600 hover:bg-red-500 py-2 px-4 rounded-lg text-white w-full md:h-auto font-semibold shadow-lg border-2 border-red-700';
-          button.disabled = false;
-        });
-    });
+  dtlTab.addEventListener('click', switchToDtlCamera);
+  dualTab.addEventListener('click', switchToDualCamera);
 });
 </script>
 
