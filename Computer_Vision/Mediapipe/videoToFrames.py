@@ -38,9 +38,10 @@ def process_all_videos_in_directory(directory_path, output_folder):
             video_path = os.path.join(directory_path, filename)
             process_video(video_path, output_folder)
 
+if __name__ == "__main__":
 # Example usage
-input_directory = 'videos/'             # Directory containing video files
-output_directory = 'output_frames'              # Directory to save extracted frames
-process_all_videos_in_directory(input_directory, output_directory)
+    input_directory = 'videos/'             # Directory containing video files
+    output_directory = 'output_frames'              # Directory to save extracted frames
+    process_all_videos_in_directory(input_directory, output_directory)
 
-print("Converting video to frames is completed.")
+    print("Converting video to frames is completed.")
