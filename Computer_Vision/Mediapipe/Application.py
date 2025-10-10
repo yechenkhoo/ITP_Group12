@@ -62,14 +62,19 @@ output_csv = os.path.splitext(FO_input_csv)[0] + "_predicted.csv"
 output.to_csv(output_csv, index=False)
 print(f" Saved predictions to {output_csv}")
 
-# 4. select top 10 frames per position
+# 4. select top 1 frame from each postition
 top_frames_list = []
+
+body_coords = [c for c in data.columns if c not in ["Frame_Name", "Image_Path", "Pose_Class", "Position", "Confidence"]]
 
 for pos in pose_labels:
     pos_frames = data[data["Position"] == pos]
-    pos_frames_sorted = pos_frames.sort_values(by="Confidence", ascending=False)
-    top_10 = pos_frames_sorted.head(10)
-    top_frames_list.append(top_10)
+    pos_frames = pos_frames.dropna(subset=body_coords)
+    
+    if not pos_frames.empty:
+        pos_frames_sorted = pos_frames.sort_values(by="Confidence", ascending=False)
+        top_1 = pos_frames_sorted.head(1)
+        top_frames_list.append(top_1)
 
 top_frames_df = pd.concat(top_frames_list)
 
