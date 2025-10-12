@@ -1,6 +1,7 @@
 import cv2
 import numpy as np
 import mediapipe as mp
+from math import degrees, atan2
 
 def calculate_angle(a, b, c):
     """Calculates the angle between three points.
@@ -117,8 +118,54 @@ def calculate_and_draw_hip_tilt(img, lm_list, pose_class):
     
     return angle
 
+def calculate_and_draw_shoulder_rotation(img, lm_list, pose_class):
+    """Calculates and draws shoulder rotation (angle in x–z plane) using a reference line."""
+    # Get shoulder landmarks
+    left_shoulder = lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value]
+    right_shoulder = lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value]
 
+    # Project to top-down (x–z) plane
+    L = (left_shoulder.x * img.shape[1], left_shoulder.z * img.shape[1])
+    R = (right_shoulder.x * img.shape[1], right_shoulder.z * img.shape[1])
 
+    # Create a reference horizontal line across x-axis in x–z plane
+    ref = (left_shoulder.x * img.shape[1], right_shoulder.z * img.shape[1])
 
+    # Compute the angle between actual shoulder line and reference
+    angle = calculate_angle(L, R, ref)
 
+    # Draw a simple visual guide near bottom of frame
+    p1 = (int(L[0]), img.shape[0] - 60)
+    p2 = (int(R[0]), img.shape[0] - 60)
+    cv2.line(img, p1, p2, (255, 165, 0), 2)
+    cv2.putText(img, f"Shoulder Rotation: {angle:.1f}",
+                (20, img.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX,
+                0.7, (255, 165, 0), 2)
 
+    return angle
+
+def calculate_and_draw_hip_rotation(img, lm_list, pose_class):
+    """Calculates and draws hip rotation (angle in x–z plane) using a reference line."""
+    # Get hip landmarks
+    left_hip = lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value]
+    right_hip = lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value]
+
+    # Project to top-down (x–z) plane
+    L = (left_hip.x * img.shape[1], left_hip.z * img.shape[1])
+    R = (right_hip.x * img.shape[1], right_hip.z * img.shape[1])
+
+    # Create reference horizontal line across x-axis in x–z plane
+    ref = (left_hip.x * img.shape[1], right_hip.z * img.shape[1])
+
+    # Compute the angle between actual hip line and reference
+    angle = calculate_angle(L, R, ref)
+
+    # Draw a simple visual guide near bottom of frame
+    p1 = (int(L[0]), img.shape[0] - 120)
+    p2 = (int(R[0]), img.shape[0] - 120)
+    cv2.line(img, p1, p2, (0, 165, 255), 2)
+    cv2.putText(img, f"Hip Rotation: {angle:.1f}",
+                (20, img.shape[0] - 90), cv2.FONT_HERSHEY_SIMPLEX,
+                0.7, (0, 165, 255), 2)
+
+    return angle

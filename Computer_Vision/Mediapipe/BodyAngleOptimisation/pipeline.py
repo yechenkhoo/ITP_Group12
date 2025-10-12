@@ -9,33 +9,10 @@ import mediapipe as mp
 import pandas as pd
 from angle_utils import (
     calculate_and_draw_shoulder_tilt,
-    calculate_and_draw_hip_tilt
+    calculate_and_draw_hip_tilt,
+    calculate_and_draw_shoulder_rotation,
+    calculate_and_draw_hip_rotation
 )
-
-import numpy as np
-
-CSV_PATH = "FO/landmarks/FO_landmarks_best_frames.csv"
-UNNORMALISED_PATH = "FO/landmarks/FO_landmarks_unnormalised.csv"
-IMAGES_DIR = "FO/output/Grant_FO"
-OUT_CSV = "BodyAngleOptimisation/Grant_FO_unnormalized_with_angles.csv"
-OUT_IMG_DIR = "BodyAngleOptimisation/output_visuals"
-
-# ---------- SETUP ----------
-os.makedirs(OUT_IMG_DIR, exist_ok=True)
-mp_pose = mp.solutions.pose
-pose_draw = mp.solutions.drawing_utils
-
-# 1) Load meta only from best-frames CSV
-meta_cols = ["Frame_Name", "Person", "Camera_Angle", "Position", "Frame_Number"]
-df_meta = pd.read_csv(CSV_PATH, usecols=[c for c in meta_cols if c in pd.read_csv(CSV_PATH, nrows=0).columns])
-
-# 2) Load UNNORMALISED (pixel) coordinates
-df_unnorm = pd.read_csv(UNNORMALISED_PATH)
-
-# 3) Merge by Frame_Name, keep unnormalized coords
-df = pd.merge(df_meta, df_unnorm, on="Frame_Name", how="inner")
-df["shoulder_tilt_deg"] = np.nan
-df["hip_tilt_deg"] = np.nan
 
 # ---------- PROCESS ----------
 def calculate_rotation_angle(p1, p2):
@@ -49,10 +26,14 @@ def calculate_rotation_angle(p1, p2):
 def process_frame(row):
     frame_name = row["Frame_Name"]
     frame_path = os.path.join(IMAGES_DIR, frame_name)
+    frame_path_alt = os.path.join(IMAGES_DIR, row["Person"], frame_name)
     if not os.path.isfile(frame_path):
-        print(f"[WARN] Missing image: {frame_path}")
-        return row
-
+        if os.path.isfile(frame_path_alt):
+            frame_path = frame_path_alt
+        else:
+            print(f"[WARN] Missing image: {frame_path}")
+            return row
+    
     img = cv2.imread(frame_path)
     if img is None:
         print(f"[WARN] Failed to load {frame_path}")
@@ -77,7 +58,7 @@ def process_frame(row):
             return row
 
     # --- Compute angles ---
-    pose_class = row.get("Position", "P1")
+    pose_class = row.get("Position")
     annotated_img = img.copy()
 
     shoulder_tilt_deg = calculate_and_draw_shoulder_tilt(annotated_img, lm_list, pose_class)
@@ -85,6 +66,13 @@ def process_frame(row):
 
     row["shoulder_tilt_deg"] = shoulder_tilt_deg
     row["hip_tilt_deg"] = hip_tilt_deg
+
+        # --- ADDED: Shoulder and Hip Rotation ---
+    shoulder_rotation_deg = calculate_and_draw_shoulder_rotation(annotated_img, lm_list, pose_class)
+    hip_rotation_deg = calculate_and_draw_hip_rotation(annotated_img, lm_list, pose_class)
+    row["shoulder_rotation_deg"] = shoulder_rotation_deg
+    row["hip_rotation_deg"] = hip_rotation_deg
+        # --- END ADDED ---
 
     # --- Draw pose skeleton (optional; uses only landmark positions) ---
     for connection in mp_pose.POSE_CONNECTIONS:
@@ -104,23 +92,54 @@ def process_frame(row):
         )
 
     # --- Label angles ---
-    cv2.putText(annotated_img, f"Shoulder Tilt: {shoulder_tilt_deg:.1f}°",
+    cv2.putText(annotated_img, f"Shoulder Tilt: {shoulder_tilt_deg:.1f}",
                 (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
-    cv2.putText(annotated_img, f"Hip Tilt: {hip_tilt_deg:.1f}°",
+    cv2.putText(annotated_img, f"Hip Tilt: {hip_tilt_deg:.1f}",
                 (20, 70), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 255, 0), 2)
     cv2.putText(annotated_img, f"{pose_class}",
                 (20, 110), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (255, 0, 255), 2)
 
     out_path = os.path.join(OUT_IMG_DIR, f"{os.path.splitext(frame_name)[0]}_angles.jpg")
     cv2.imwrite(out_path, annotated_img)
-    print(f"[OK] Saved: {out_path} | Shoulder={shoulder_tilt_deg:.2f}°, Hip={hip_tilt_deg:.2f}°")
+    print(f"[OK] Saved: {out_path} | ST={shoulder_tilt_deg:.2f}, HT={hip_tilt_deg:.2f}, SR={shoulder_rotation_deg}, HR={hip_rotation_deg}")
 
     return row
 
+# username = "Grant_"
+angles = ["FO"]
 
-updated_rows = [process_frame(row) for _, row in df.iterrows()]
-df_out = pd.DataFrame(updated_rows)
-df_out.to_csv(OUT_CSV, index=False)
+OUT_IMG_DIR = "FO_videos/output_visuals"
+os.makedirs(OUT_IMG_DIR, exist_ok=True)
+mp_pose = mp.solutions.pose
+pose_draw = mp.solutions.drawing_utils
 
-print(f"Annotated images saved to: {OUT_IMG_DIR}")
-print(f"CSV with angles saved to: {OUT_CSV}")
+for angle in angles:
+    # CSV_PATH = f"{angle}/landmarks/{angle}_landmarks_best_frames.csv"
+    # UNNORMALISED_PATH = f"{angle}/landmarks/{angle}_landmarks_unnormalised.csv"
+    # IMAGES_DIR = f"{angle}/output/{username}{angle}"
+    # OUT_CSV = f"BodyAngleOptimisation/{username}{angle}_unnormalized_with_angles.csv"
+    CSV_PATH = f"FO_videos/landmarks/{angle}_landmarks_best_frames.csv"
+    UNNORMALISED_PATH = f"FO_videos/landmarks/{angle}_landmarks_unnormalised.csv"
+    IMAGES_DIR = f"FO_videos/out"
+    OUT_CSV = f"FO_videos/landmarks_unnormalised_with_angles.csv"
+    
+
+    # 1) Load meta only from best-frames CSV
+    meta_cols = ["Frame_Name", "Person", "Camera_Angle", "Position", "Frame_Number"]
+    df_meta = pd.read_csv(CSV_PATH, usecols=[c for c in meta_cols if c in pd.read_csv(CSV_PATH, nrows=0).columns])
+
+    # 2) Load UNNORMALISED (pixel) coordinates
+    df_unnorm = pd.read_csv(UNNORMALISED_PATH)
+
+    # 3) Merge by Frame_Name, keep unnormalized coords
+    df = pd.merge(df_meta, df_unnorm, on="Frame_Name", how="inner")
+    df["shoulder_tilt_deg"] = np.nan
+    df["hip_tilt_deg"] = np.nan
+
+
+    updated_rows = [process_frame(row) for _, row in df.iterrows()]
+    df_out = pd.DataFrame(updated_rows)
+    df_out.to_csv(OUT_CSV, index=False)
+
+    print(f"Annotated images saved to: {OUT_IMG_DIR}")
+    print(f"CSV with angles saved to: {OUT_CSV}")
