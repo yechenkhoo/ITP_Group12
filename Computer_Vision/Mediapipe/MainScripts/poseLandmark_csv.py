@@ -49,6 +49,7 @@ def extract_landmarks(dataset_path, save_path):
         col_names.append(name_v)
 
     full_lm_list = []
+    full_lm_unnorm_list = []
     target_list = []
     image_path_list = []
     frame_name_list = []
@@ -78,6 +79,12 @@ def extract_landmarks(dataset_path, save_path):
                         # Preprocessing
                         max_distance = 0
                         lm_list.append(landmarks)
+                    pre_lm_unnorm = list(np.array([
+                        [landmark.x * w, landmark.y * h, landmark.z * w, landmark.visibility]
+                        for landmark in lm_list
+                    ]).flatten())
+                    full_lm_unnorm_list.append(pre_lm_unnorm)
+
                     center_x = (lm_list[landmark_names.index('right_hip')].x +
                                 lm_list[landmark_names.index('left_hip')].x)*0.5
                     center_y = (lm_list[landmark_names.index('right_hip')].y +
@@ -117,6 +124,7 @@ def extract_landmarks(dataset_path, save_path):
                     # save failed frames into csv as well
                     empty_lm = [np.nan] * len(col_names)
                     full_lm_list.append(empty_lm)
+                    full_lm_unnorm_list.append(empty_lm)
                     target_list.append(class_name)
 
                     rel_path = os.path.relpath(img, start=dataset_path)
@@ -137,6 +145,13 @@ def extract_landmarks(dataset_path, save_path):
 
     data.to_csv(save_path, encoding='utf-8', index=False)
     print(f'[INFO] Successfully Saved Landmarks data into {save_path}')
+
+    unnorm_df = pd.DataFrame(full_lm_unnorm_list, columns=col_names)
+    unnorm_df.insert(0, "Frame_Name", frame_name_list)
+    base, ext = os.path.splitext(save_path)
+    unnorm_path = f"{base}_unnormalised{ext}"
+    unnorm_df.to_csv(unnorm_path, encoding='utf-8', index=False)
+    print(f"[INFO] Also saved unnormalized landmarks → {unnorm_path}")
 
 if __name__ == "__main__":
     ap = argparse.ArgumentParser()
