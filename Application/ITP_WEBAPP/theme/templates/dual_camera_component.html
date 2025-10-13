@@ -507,23 +507,16 @@ class DualCameraController {
 
   async toggleDualAutoRecording() {
     try {
-      const [faceOnResponse, dtlResponse] = await Promise.all([
-        fetch('/home/golf/toggle-auto/', { method: 'POST' }),
-        fetch('/home/dtl_toggle_auto_recording/', { method: 'POST' })
-      ]);
+      // Only toggle Face-On camera (master camera)
+      const faceOnResponse = await fetch('/home/golf/toggle-auto/', { method: 'POST' });
 
-      if (faceOnResponse.ok && dtlResponse.ok) {
-        const [faceOnData, dtlData] = await Promise.all([
-          faceOnResponse.json(),
-          dtlResponse.json()
-        ]);
-        
+      if (faceOnResponse.ok) {
+        const faceOnData = await faceOnResponse.json();
         this.faceOnAutoRecording = faceOnData.auto_recording_enabled;
-        this.dtlAutoRecording = dtlData.auto_recording_enabled;
         this.updateDualAutoButton();
       }
     } catch (error) {
-      console.error('Toggle dual auto recording error:', error);
+      console.error('Toggle auto recording error:', error);
     }
   }
 

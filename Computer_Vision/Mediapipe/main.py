@@ -15,6 +15,7 @@ from angle_utils import calculate_and_draw_shoulder_tilt, calculate_and_draw_hip
 from db_connection import Videos_Collection
 from bson import ObjectId
 import ffmpeg
+import traceback
 
 
 
@@ -23,7 +24,6 @@ app = Flask(__name__)
 
 # Mediapipe setup
 mp_pose = mp.solutions.pose
-pose = mp_pose.Pose()
 
 # Class names
 class_names = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
@@ -178,6 +178,15 @@ def is_next_class_valid(current_class_index, previous_class_index):
 def process_video():
     print("DEBUG: /process-video route accessed")
     try:
+        # ✅ CREATE NEW POSE INSTANCE FOR THIS REQUEST
+        pose = mp_pose.Pose(
+            static_image_mode=False,
+            model_complexity=1,  # 0=Lite, 1=Full, 2=Heavy
+            smooth_landmarks=True,
+            min_detection_confidence=0.5,
+            min_tracking_confidence=0.5
+        )
+        
         # Get the request data
         data = request.json
         print(f"Received request: {data}")
@@ -191,15 +200,15 @@ def process_video():
         first_instance_added = {pose: False for pose in class_names}
         previous_class_index = -1
 
-         # Extract MongoDB update fields from the request
+        # Extract MongoDB update fields from the request
         video_id = data['video_id']  # MongoDB document ID for the video
         video_path = data['video_path']  # Path in Google Cloud Storage
         classification_model = data['classification_model']
         output_video_path_gcs = data.get('output_video_path', None)
         output_csv_path_gcs = data.get('output_csv_path', None)
         output_angle_csv_path_gcs = data.get('output_angle_csv_path', None)
-        # Bucket name where the models and video are stored
-        bucket_name = 'golf-swing-models'
+        bucket_name = data.get('bucket_name', 'golf-swing-models')
+        print(f"Using bucket: {bucket_name}")
 
         # Download the required files from GCS to /tmp/
         download_blob(bucket_name, classification_model, '/tmp/' + os.path.basename(classification_model))
@@ -247,6 +256,11 @@ def process_video():
                 success, img = cap.read()
                 if not success:
                     break  # End of video
+                
+                # ✅ VALIDATE FRAME
+                if img is None or img.size == 0:
+                    print(f"Warning: Invalid frame at {frame_count}")
+                    continue
                 status_list = []
                 frame_count += 1
                 video_time = frame_count / 30
@@ -444,9 +458,15 @@ def process_video():
 
     except Exception as e:
         print(f"Error: {e}")
-        # Print the full traceback to Google Cloud Logging
         traceback.print_exc()
-        return jsonify({'error': str(e)}), 500 
+        return jsonify({'error': str(e)}), 500
+    finally:
+        # ✅ CLEANUP: Always close the pose instance
+        try:
+            pose.close()
+            print("Pose instance closed successfully")
+        except Exception as cleanup_error:
+            print(f"Error closing pose instance: {cleanup_error}")
 
 @app.route('/health', methods=['GET'])
 def health():

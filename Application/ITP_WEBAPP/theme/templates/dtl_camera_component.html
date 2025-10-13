@@ -1,4 +1,4 @@
-<!-- Down-the-Line Golf Camera Live Feed Component -->
+<!-- Down-the-Line Golf Camera Live Feed Component (Manual Recording Only) -->
 <div class="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
@@ -46,31 +46,13 @@
       RECORDING
     </div>
 
-    <!-- Auto Mode Indicator -->
-    <div id="dtlAutoModeIndicator" class="absolute top-4 right-4 bg-blue-600 text-white px-3 py-1 rounded-full hidden">
-      AUTO MODE
+    <!-- 🆕 MANUAL MODE INDICATOR (Slave Camera) -->
+    <div class="absolute top-4 right-4 bg-purple-600 text-white px-3 py-1 rounded-full text-xs">
+      MANUAL MODE (SLAVE)
     </div>
   </div>
 
-  <!-- Pose Detection Status -->
-  <div id="dtlPoseStatus" class="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6 hidden">
-    <div class="bg-gray-50 p-4 rounded-lg text-center">
-      <div class="text-sm text-gray-600">Current Pose</div>
-      <div id="dtlCurrentPose" class="text-lg font-bold text-blue-600">Unknown</div>
-    </div>
-    <div class="bg-gray-50 p-4 rounded-lg text-center">
-      <div class="text-sm text-gray-600">Stage</div>
-      <div id="dtlPoseStage" class="text-lg font-bold text-gray-600">waiting</div>
-    </div>
-    <div class="bg-gray-50 p-4 rounded-lg text-center">
-      <div class="text-sm text-gray-600">P1 Confidence</div>
-      <div id="dtlP1Confidence" class="text-lg font-bold text-green-600">0.0%</div>
-    </div>
-    <div class="bg-gray-50 p-4 rounded-lg text-center">
-      <div class="text-sm text-gray-600">P10 Confidence</div>
-      <div id="dtlP10Confidence" class="text-lg font-bold text-purple-600">0.0%</div>
-    </div>
-  </div>
+  <!-- 🔧 REMOVED: Pose Detection Status (not needed for slave) -->
 
   <!-- Controls -->
   <div class="space-y-4">
@@ -97,20 +79,9 @@
         <span id="dtlRecordBtnText">Record</span>
       </button>
 
-      <button id="dtlAutoBtn" class="flex items-center gap-2 px-6 py-3 bg-gray-200 text-gray-700 rounded-lg hover:bg-gray-300 transition-colors">
-        <i class="fas fa-robot"></i>
-        <span id="dtlAutoBtnText">Auto: OFF</span>
-      </button>
-
-      <button id="dtlPoseBtn" class="flex items-center gap-2 px-6 py-3 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors">
-        <i class="fas fa-eye"></i>
-        <span id="dtlPoseBtnText">Pose: ON</span>
-      </button>
-
-      <button id="dtlReloadBtn" class="flex items-center gap-2 px-6 py-3 bg-orange-600 text-white rounded-lg hover:bg-orange-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors">
-        <i class="fas fa-refresh"></i>
-        Reload AI
-      </button>
+      <!-- 🔧 REMOVED: Auto Recording Button (slave camera doesn't support it) -->
+      <!-- 🔧 REMOVED: Pose Detection Button (not needed for slave) -->
+      <!-- 🔧 REMOVED: Reload AI Button (not needed for slave) -->
     </div>
   </div>
 
@@ -120,20 +91,18 @@
     <ul class="text-sm text-purple-800 space-y-1">
       <li>• <strong>Start Live Feed:</strong> Click to begin video streaming</li>
       <li>• <strong>Manual Record:</strong> Choose duration and click "Record"</li>
-      <li>• <strong>Auto Mode:</strong> Stand in P1 address position to auto-start recording</li>
-      <li>• <strong>Auto Stop:</strong> Recording stops when P10 (follow-through) is detected</li>
+      <li>• <strong>Slave Camera:</strong> This camera is controlled by Face-On camera for auto-recording</li>
       <li>• <strong>Camera Angle:</strong> Down-the-line view provides side perspective of swing</li>
+      <li>• <strong>For Auto Recording:</strong> Use the Dual Camera view where Face-On controls both cameras</li>
     </ul>
   </div>
 </div>
 
 <script>
-// Down-the-Line Golf Camera Controller
+// Down-the-Line Golf Camera Controller (Manual Recording Only)
 class DTLCameraController {
   constructor() {
     this.isRecording = false;
-    this.autoRecordingEnabled = false;
-    this.poseDetectionEnabled = true;
     this.connectionStatus = 'disconnected';
     this.streamActive = false;
     this.currentAssigneeId = null;
@@ -165,21 +134,6 @@ class DTLCameraController {
     // Manual recording
     document.getElementById('dtlRecordBtn').addEventListener('click', () => {
       this.startRecording();
-    });
-
-    // Toggle auto recording
-    document.getElementById('dtlAutoBtn').addEventListener('click', () => {
-      this.toggleAutoRecording();
-    });
-
-    // Toggle pose detection
-    document.getElementById('dtlPoseBtn').addEventListener('click', () => {
-      this.togglePoseDetection();
-    });
-
-    // Reload models
-    document.getElementById('dtlReloadBtn').addEventListener('click', () => {
-      this.reloadModels();
     });
   }
 
@@ -232,7 +186,7 @@ class DTLCameraController {
     
     switch (status) {
       case 'connected':
-        statusEl.textContent = 'Connected (Port 5001)';
+        statusEl.textContent = 'Connected (Slave Mode - Port 5001)';
         iconEl.setAttribute('class', 'fas fa-wifi text-green-500');
         break;
       case 'connecting':
@@ -266,14 +220,9 @@ class DTLCameraController {
         btn.classList.add('bg-gray-600', 'hover:bg-gray-700');
         
         this.streamActive = true;
-        
-        // Show pose status when stream starts
-        if (this.poseDetectionEnabled) {
-          document.getElementById('dtlPoseStatus').classList.remove('hidden');
-        }
       }).catch(error => {
         console.error('Failed to set DTL user context:', error);
-        alert('Failed to initialize DTL camera with user context. Auto recording may not work properly.');
+        alert('Failed to initialize DTL camera with user context. Recording may not work properly.');
       });
     } else {
       // Stop stream
@@ -286,7 +235,6 @@ class DTLCameraController {
       btn.classList.add('bg-purple-600', 'hover:bg-purple-700');
       
       this.streamActive = false;
-      document.getElementById('dtlPoseStatus').classList.add('hidden');
     }
   }
 
@@ -377,62 +325,6 @@ class DTLCameraController {
     }
   }
 
-  async toggleAutoRecording() {
-    try {
-      const response = await fetch('/home/dtl_toggle_auto_recording/', { method: 'POST' });
-      
-      if (response.ok) {
-        const data = await response.json();
-        this.autoRecordingEnabled = data.auto_recording_enabled;
-        this.updateAutoButton();
-      }
-    } catch (error) {
-      console.error('Toggle DTL auto recording error:', error);
-    }
-  }
-
-  async togglePoseDetection() {
-    try {
-      const response = await fetch('/home/dtl_toggle_pose_detection/', { method: 'POST' });
-      
-      if (response.ok) {
-        const data = await response.json();
-        this.poseDetectionEnabled = data.pose_detection_enabled;
-        this.updatePoseButton();
-        
-        // Show/hide pose status based on detection state
-        if (this.streamActive) {
-          if (this.poseDetectionEnabled) {
-            document.getElementById('dtlPoseStatus').classList.remove('hidden');
-          } else {
-            document.getElementById('dtlPoseStatus').classList.add('hidden');
-          }
-        }
-      }
-    } catch (error) {
-      console.error('Toggle DTL pose detection error:', error);
-    }
-  }
-
-  async reloadModels() {
-    const btn = document.getElementById('dtlReloadBtn');
-    btn.disabled = true;
-    btn.innerHTML = '<i class="fas fa-spinner fa-spin"></i> Loading...';
-
-    try {
-      const response = await fetch('/home/dtl_reload_models/', { method: 'POST' });
-      
-      if (response.ok) {
-        console.log('DTL Models reloaded');
-      }
-    } catch (error) {
-      console.error('Reload DTL models error:', error);
-    } finally {
-      btn.disabled = false;
-      btn.innerHTML = '<i class="fas fa-refresh"></i> Reload AI';
-    }
-  }
-
   startStatusPolling() {
     setInterval(() => {
       this.fetchStatus();
@@ -455,8 +347,6 @@ class DTLCameraController {
   updateUI(data) {
     // Update recording state
     this.isRecording = data.is_recording;
-    this.autoRecordingEnabled = data.auto_recording_enabled;
-    this.poseDetectionEnabled = data.pose_detection_enabled;
 
     // Update recording indicator
     if (this.isRecording) {
@@ -465,57 +355,8 @@ class DTLCameraController {
       document.getElementById('dtlRecordingIndicator').classList.add('hidden');
     }
 
-    // Update auto mode indicator
-    if (this.autoRecordingEnabled && !this.isRecording) {
-      document.getElementById('dtlAutoModeIndicator').classList.remove('hidden');
-    } else {
-      document.getElementById('dtlAutoModeIndicator').classList.add('hidden');
-    }
-
-    // Update pose data
-    document.getElementById('dtlCurrentPose').textContent = data.predicted_class || 'Unknown';
-    document.getElementById('dtlPoseStage').textContent = data.pose_stage || 'waiting';
-    document.getElementById('dtlP1Confidence').textContent = `${(data.p1_confidence * 100).toFixed(1)}%`;
-    document.getElementById('dtlP10Confidence').textContent = `${(data.p10_confidence * 100).toFixed(1)}%`;
-
-    // Update stage color
-    const stageEl = document.getElementById('dtlPoseStage');
-    stageEl.className = 'text-lg font-bold ' + this.getStageColor(data.pose_stage);
-
-    // Update buttons
-    this.updateAutoButton();
-    this.updatePoseButton();
+    // Update record button
     this.updateRecordButton();
-  }
-
-  updateAutoButton() {
-    const btn = document.getElementById('dtlAutoBtn');
-    const text = document.getElementById('dtlAutoBtnText');
-    
-    text.textContent = `Auto: ${this.autoRecordingEnabled ? 'ON' : 'OFF'}`;
-    
-    if (this.autoRecordingEnabled) {
-      btn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-      btn.classList.add('bg-green-600', 'text-white', 'hover:bg-green-700');
-    } else {
-      btn.classList.remove('bg-green-600', 'text-white', 'hover:bg-green-700');
-      btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-    }
-  }
-
-  updatePoseButton() {
-    const btn = document.getElementById('dtlPoseBtn');
-    const text = document.getElementById('dtlPoseBtnText');
-    
-    text.textContent = `Pose: ${this.poseDetectionEnabled ? 'ON' : 'OFF'}`;
-    
-    if (this.poseDetectionEnabled) {
-      btn.classList.remove('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-      btn.classList.add('bg-green-600', 'text-white', 'hover:bg-green-700');
-    } else {
-      btn.classList.remove('bg-green-600', 'text-white', 'hover:bg-green-700');
-      btn.classList.add('bg-gray-200', 'text-gray-700', 'hover:bg-gray-300');
-    }
   }
 
   updateRecordButton() {
@@ -531,26 +372,15 @@ class DTLCameraController {
       text.textContent = this.isRecording ? 'Recording...' : 'Record';
     }
   }
-
-  getStageColor(stage) {
-    switch (stage) {
-      case 'ready': return 'text-yellow-600';
-      case 'recording': return 'text-red-600';
-      case 'cooldown': return 'text-blue-600';
-      default: return 'text-gray-600';
-    }
-  }
 }
 
 // Initialize when DTL camera tab is active
 document.addEventListener('DOMContentLoaded', () => {
-  // Initialize DTL camera controller only when the DTL tab is visible
   const dtlContent = document.getElementById('dtlCameraContent');
   if (dtlContent && !dtlContent.classList.contains('hidden')) {
     new DTLCameraController();
   }
   
-  // Listen for tab switches to initialize controller when DTL tab becomes active
   const dtlTab = document.getElementById('dtlCameraTab');
   if (dtlTab) {
     dtlTab.addEventListener('click', () => {
