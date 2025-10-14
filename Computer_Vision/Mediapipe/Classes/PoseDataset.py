@@ -45,7 +45,6 @@ class PoseDataset():
 
         Parameters:
         - test_size: determines the split ratio of dataset between training and test.
-
         - reshape: reshapes the data into 33x4 instead of 132x1
         """
         x = self.df.copy()

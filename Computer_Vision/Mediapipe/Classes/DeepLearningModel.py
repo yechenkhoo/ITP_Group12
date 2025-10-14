@@ -30,12 +30,8 @@ class DeepLearningModel:
 
     def build_model(self, model_fn=None):
         if not model_fn:
-            print("[INFO] Using default model")
-            self.model = Sequential([
-                layers.Dense(512, activation='relu', input_shape=self.inputShape),
-                layers.Dense(256, activation='relu'),
-                layers.Dense(self.classCount, activation='softmax')
-            ])
+            print("[ERROR] Please provide model type")
+            raise ValueError("[ERROR] no model_fn")
         else:
             print("[INFO] Using custom model")
             if callable(model_fn):
@@ -368,6 +364,82 @@ class DeepLearningModel:
             "best_cv_score": best_trial.score,
             "cv_folds": cv_folds,
             "all_trials": all_trials
+        }
+    
+    def cross_validate(self, data, k_folds=5, epochs=200, batch_size=16, log_dir=None, model_fn=None):
+        """
+        Perform k-fold cross-validation on the given data.
+        model_fn: function to build the model (input_shape, class_count)
+        Returns a dictionary with fold_accuracies, fold_losses, fold_f1_scores, fold_precisions, fold_recalls.
+        """
+        # Prepare data
+        X = data.x_train
+        y = data.y_train
+        if len(y.shape) > 1 and y.shape[1] > 1:
+            y_sparse = np.argmax(y, axis=1)
+        else:
+            y_sparse = y
+
+        skf = StratifiedKFold(n_splits=k_folds, shuffle=True, random_state=42)
+        fold_accuracies = []
+        fold_losses = []
+        fold_f1_scores = []
+        fold_precisions = []
+        fold_recalls = []
+
+        for fold, (train_idx, val_idx) in enumerate(skf.split(X, y_sparse)):
+            print(f"[CV] Fold {fold+1}/{k_folds}")
+            # Use iloc for pandas DataFrame, else numpy indexing
+            if hasattr(X, 'iloc'):
+                X_train, X_val = X.iloc[train_idx], X.iloc[val_idx]
+            else:
+                X_train, X_val = X[train_idx], X[val_idx]
+            if hasattr(y, 'iloc'):
+                y_train, y_val = y.iloc[train_idx], y.iloc[val_idx]
+            else:
+                y_train, y_val = y[train_idx], y[val_idx]
+
+            # Build a fresh model for each fold, using model_fn if provided
+            print("Before build")
+            self.build_model(model_fn)
+            self.compile_model()
+            print("After compile")
+            early_stopping = tf.keras.callbacks.EarlyStopping(monitor='val_loss', patience=10, restore_best_weights=True, verbose=0)
+            callbacks = [early_stopping]
+            if log_dir:
+                callbacks.append(tf.keras.callbacks.TensorBoard(log_dir=f"{log_dir}/fold_{fold+1}"))
+
+            print(f"[CV] Fold {fold+1}: Training on {len(X_train)} samples, validating on {len(X_val)} samples")
+            history = self.model.fit(
+                X_train, y_train,
+                epochs=epochs,
+                batch_size=batch_size,
+                validation_data=(X_val, y_val),
+                callbacks=callbacks,
+                verbose=2
+            )
+            print(f"[CV] Fold {fold+1}: Epochs run: {len(history.epoch)}")
+            val_loss, val_acc = self.model.evaluate(X_val, y_val, verbose=0)
+            y_pred = self.model.predict(X_val)
+            y_pred_labels = np.argmax(y_pred, axis=1)
+            y_val_labels = np.argmax(y_val, axis=1) if len(y_val.shape) > 1 and y_val.shape[1] > 1 else y_val
+            f1 = f1_score(y_val_labels, y_pred_labels, average='macro', zero_division=0)
+            prec = precision_score(y_val_labels, y_pred_labels, average='macro', zero_division=0)
+            rec = recall_score(y_val_labels, y_pred_labels, average='macro', zero_division=0)
+            fold_accuracies.append(val_acc)
+            fold_losses.append(val_loss)
+            fold_f1_scores.append(f1)
+            fold_precisions.append(prec)
+            fold_recalls.append(rec)
+            print(f"[CV] Fold {fold+1} - acc: {val_acc:.4f}, f1: {f1:.4f}, prec: {prec:.4f}, rec: {rec:.4f}")
+            tf.keras.backend.clear_session()
+
+        return {
+            'fold_accuracies': fold_accuracies,
+            'fold_losses': fold_losses,
+            'fold_f1_scores': fold_f1_scores,
+            'fold_precisions': fold_precisions,
+            'fold_recalls': fold_recalls
         }
 
 def convert_numpy(obj):
