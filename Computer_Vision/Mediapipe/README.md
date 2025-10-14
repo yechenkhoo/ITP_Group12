@@ -84,7 +84,10 @@ Example:
 ```
 python3 poseLandmark_csv.py -i data/ -o data.csv
 ```
-
+#### Creating Existing Dataset Path (pose.csv):
+```
+python poseLandmark_csv.py -i Dataset -o output/pose.csv
+```
 CSV file will be saved in **<path_to_save_csv>**
 
 ### 3.Create DeepLearinng Model to predict Human Pose
@@ -98,7 +101,10 @@ Example:
 ```
 python3 poseModel.py -i data.csv -o model.h5
 ```
-
+#### Using Existing Dataset Path (pose.csv):
+```
+python poseModel.py -i output/pose.csv -o posecsv.h5
+```
 Model will saved in **<path_to_save_model>** and Model Metrics saved in **metrics.png**
 
 ### 4.Inference
