@@ -1,4 +1,4 @@
-<!-- Down-the-Line Golf Camera Live Feed Component (Manual Recording Only) -->
+<!-- Down-the-Line Golf Camera Live Feed Component (Manual Recording Only) with Enhanced Recording Indicator -->
 <div class="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
@@ -40,19 +40,38 @@
       </div>
     </div>
     
-    <!-- Recording Indicator -->
-    <div id="dtlRecordingIndicator" class="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full items-center gap-2 hidden animate-pulse">
-      <div class="w-2 h-2 bg-white rounded-full"></div>
-      RECORDING
+    <!-- Enhanced Recording Indicator with Timer -->
+    <div id="dtlRecordingIndicator" class="absolute top-6 left-6 space-y-3 hidden">
+      <!-- Main REC Badge -->
+      <div class="bg-red-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-pulse">
+        <div class="relative">
+          <div class="w-4 h-4 bg-white rounded-full"></div>
+          <div class="absolute inset-0 w-4 h-4 bg-white rounded-full animate-ping"></div>
+        </div>
+        <span class="text-2xl font-black tracking-wider">REC</span>
+      </div>
+
+      <!-- Timer Display -->
+      <div class="bg-black/80 backdrop-blur-sm text-white px-5 py-3 rounded-xl shadow-xl border-2 border-red-500">
+        <div class="text-sm font-semibold text-red-400 mb-1">RECORDING</div>
+        <div id="dtlRecordingTimer" class="text-3xl font-mono font-bold tabular-nums">0:00.0</div>
+        <div id="dtlRecordingTotal" class="text-xs text-gray-400 mt-1">/ 0:10.0</div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="bg-black/60 backdrop-blur-sm p-3 rounded-xl shadow-xl">
+        <div class="w-48 h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div id="dtlRecordingProgress" class="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-100 rounded-full" style="width: 0%"></div>
+        </div>
+        <div id="dtlRecordingPercent" class="text-white text-xs mt-2 text-center font-semibold">0% Complete</div>
+      </div>
     </div>
 
-    <!-- 🆕 MANUAL MODE INDICATOR (Slave Camera) -->
+    <!-- MANUAL MODE INDICATOR (Slave Camera) -->
     <div class="absolute top-4 right-4 bg-purple-600 text-white px-3 py-1 rounded-full text-xs">
       MANUAL MODE (SLAVE)
     </div>
   </div>
-
-  <!-- 🔧 REMOVED: Pose Detection Status (not needed for slave) -->
 
   <!-- Controls -->
   <div class="space-y-4">
@@ -78,10 +97,6 @@
         <i class="fas fa-circle"></i>
         <span id="dtlRecordBtnText">Record</span>
       </button>
-
-      <!-- 🔧 REMOVED: Auto Recording Button (slave camera doesn't support it) -->
-      <!-- 🔧 REMOVED: Pose Detection Button (not needed for slave) -->
-      <!-- 🔧 REMOVED: Reload AI Button (not needed for slave) -->
     </div>
   </div>
 
@@ -99,13 +114,18 @@
 </div>
 
 <script>
-// Down-the-Line Golf Camera Controller (Manual Recording Only)
+// Down-the-Line Golf Camera Controller with Enhanced Recording Timer
 class DTLCameraController {
   constructor() {
     this.isRecording = false;
     this.connectionStatus = 'disconnected';
     this.streamActive = false;
     this.currentAssigneeId = null;
+    
+    // Recording timer properties
+    this.recordingStartTime = null;
+    this.recordingDuration = 10;
+    this.recordingTimerInterval = null;
     
     this.init();
   }
@@ -314,6 +334,9 @@ class DTLCameraController {
       if (response.ok) {
         const data = await response.json();
         console.log('DTL Recording started:', data.message);
+        
+        // Start the timer immediately
+        this.startRecordingTimer(parseInt(duration));
       } else {
         const errorData = await response.json();
         console.error('DTL Recording failed:', errorData.error);
@@ -323,6 +346,52 @@ class DTLCameraController {
       console.error('DTL Recording error:', error);
       alert('An error occurred while trying to start the DTL recording.');
     }
+  }
+
+  // Enhanced timer methods
+  startRecordingTimer(durationSeconds) {
+    this.recordingStartTime = Date.now();
+    this.recordingDuration = durationSeconds;
+    
+    // Update the total duration display
+    document.getElementById('dtlRecordingTotal').textContent = `/ ${this.formatTime(this.recordingDuration)}`;
+    
+    this.recordingTimerInterval = setInterval(() => {
+      const elapsed = (Date.now() - this.recordingStartTime) / 1000;
+      const progress = (elapsed / this.recordingDuration) * 100;
+      
+      // Cap elapsed time at duration to show full time at completion
+      const displayElapsed = Math.min(elapsed, this.recordingDuration);
+      
+      // Update timer display
+      document.getElementById('dtlRecordingTimer').textContent = this.formatTime(displayElapsed);
+      document.getElementById('dtlRecordingProgress').style.width = `${Math.min(progress, 100)}%`;
+      document.getElementById('dtlRecordingPercent').textContent = `${Math.round(Math.min(progress, 100))}% Complete`;
+      
+      // Stop timer after showing full duration
+      if (elapsed >= this.recordingDuration + 0.2) {
+        this.stopRecordingTimer();
+      }
+    }, 100);
+  }
+
+  stopRecordingTimer() {
+    if (this.recordingTimerInterval) {
+      clearInterval(this.recordingTimerInterval);
+      this.recordingTimerInterval = null;
+    }
+    
+    // Reset displays
+    document.getElementById('dtlRecordingTimer').textContent = '0:00.0';
+    document.getElementById('dtlRecordingProgress').style.width = '0%';
+    document.getElementById('dtlRecordingPercent').textContent = '0% Complete';
+  }
+
+  formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 10);
+    return `${mins}:${secs.toString().padStart(2, '0')}.${ms}`;
   }
 
   startStatusPolling() {
@@ -345,14 +414,28 @@ class DTLCameraController {
   }
 
   updateUI(data) {
+    const wasRecording = this.isRecording;
+    
     // Update recording state
     this.isRecording = data.is_recording;
 
-    // Update recording indicator
+    // Update recording indicator visibility
     if (this.isRecording) {
       document.getElementById('dtlRecordingIndicator').classList.remove('hidden');
+      
+      // Start timer if recording just started
+      if (!wasRecording && !this.recordingTimerInterval) {
+        // DTL is slave camera, always use selected manual duration
+        const duration = parseInt(document.getElementById('dtlRecordingDuration').value);
+        this.startRecordingTimer(duration);
+      }
     } else {
       document.getElementById('dtlRecordingIndicator').classList.add('hidden');
+      
+      // Stop timer if recording just stopped
+      if (wasRecording) {
+        this.stopRecordingTimer();
+      }
     }
 
     // Update record button
