@@ -98,6 +98,23 @@ def process_uploaded_video(cloud_event):
         print(f"Parsing filename: {video_filename}")
         print(f"Filename parts: {filename_parts}")
 
+        # Extract session_id from filename
+        # Format: ...swing_{date}_{time}.mp4 -> session_id = {date}_{time}
+        session_id = None
+        try:
+            # Find the index of "swing" in filename_parts
+            if "swing" in filename_parts:
+                swing_index = filename_parts.index("swing")
+                # Session ID is the parts after "swing" (date and time), excluding the file extension
+                if len(filename_parts) > swing_index + 2:
+                    # Get date and time parts, remove .mp4 extension from the last part
+                    date_part = filename_parts[swing_index + 1]
+                    time_part = filename_parts[swing_index + 2].split('.')[0]  # Remove file extension
+                    session_id = f"{date_part}_{time_part}"
+                    print(f"Extracted session_id: {session_id}")
+        except Exception as e:
+            print(f"Could not extract session_id: {e}")
+
         # Determine if this has camera_id in the filename
         if len(filename_parts) >= 5 and filename_parts[3] == "swing":
             # NEW FORMAT with different operator/assignee: 
@@ -169,6 +186,69 @@ def process_uploaded_video(cloud_event):
         output_csv_path = f"processed/{video_id}_output_{timestamp}.csv"
         output_angle_csv_path = f"processed/{video_id}_angles_{timestamp}.csv"
 
+        # Skip API processing for down-the-line videos, but still save to MongoDB
+        if video_type == "down-the-line":
+            print(f"Skipping API processing for down-the-line video: {file_name}")
+            print(f"Saving down-the-line video to MongoDB with raw video link only...")
+            
+            try:
+                # Look for existing video record
+                query_filter = {"Title": video_filename}
+                
+                if uploaded_by is not None:
+                    query_filter["UploadedBy"] = uploaded_by
+                
+                existing = collection.find_one(query_filter)
+                
+                if existing:
+                    print(f"Found existing down-the-line record: {existing['_id']}")
+                    
+                    # Update with raw video link only
+                    update_fields = {
+                        "rawVideoLink": raw_video_link,
+                        "Status": "Completed",
+                        "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
+                        "originalVideoPath": file_name,
+                        "session_id": session_id
+                    }
+                    
+                    if assignee is not None:
+                        update_fields["Assignee"] = assignee
+                    
+                    collection.update_one(
+                        {"_id": existing["_id"]},
+                        {"$set": update_fields}
+                    )
+                    print(f"Updated existing down-the-line record for {video_filename}")
+                    
+                else:
+                    print(f"Creating new down-the-line record")
+                    
+                    # Create new document with raw video link only
+                    new_doc = {
+                        "Title": video_filename,
+                        "Type": video_type,
+                        "DateUploaded": datetime.now().strftime("%H:%M %b %d, %Y"),
+                        "Status": "Completed",
+                        "UploadedBy": uploaded_by,
+                        "Assignee": assignee,
+                        "rawVideoLink": raw_video_link,
+                        "originalVideoPath": file_name,
+                        "session_id": session_id
+                    }
+                    
+                    insert_result = collection.insert_one(new_doc)
+                    print(f"Successfully inserted down-the-line record: {insert_result.inserted_id}")
+                
+                print(f"Down-the-line video saved to MongoDB successfully!")
+                return "OK"
+                
+            except Exception as mongo_error:
+                print(f"MongoDB operation failed for down-the-line video: {str(mongo_error)}")
+                print(f"Traceback:")
+                print(traceback.format_exc())
+                return "OK"
+
         # API payload
         api_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
 
@@ -235,7 +315,8 @@ def process_uploaded_video(cloud_event):
                         "Status": "Completed",
                         "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "originalVideoPath": file_name,
-                        "processedTimestamp": datetime.now().isoformat()
+                        "processedTimestamp": datetime.now().isoformat(),
+                        "session_id": session_id
                     }
                     
                     # Add assignee if we have new info
@@ -272,7 +353,8 @@ def process_uploaded_video(cloud_event):
                         "processedVideoLink": processed_video,
                         "rawVideoLink": raw_video_link,
                         "originalVideoPath": file_name,
-                        "processedTimestamp": datetime.now().isoformat()
+                        "processedTimestamp": datetime.now().isoformat(),
+                        "session_id": session_id
                     }
                     
                     print(f"Inserting new document:")
@@ -313,7 +395,8 @@ def process_uploaded_video(cloud_event):
                         "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "ErrorDetails": response.text[:500] if response.text else "Unknown error",
                         "originalVideoPath": file_name,
-                        "rawVideoLink": raw_video_link
+                        "rawVideoLink": raw_video_link,
+                        "session_id": session_id
                     }
                     
                     collection.update_one(
@@ -333,7 +416,8 @@ def process_uploaded_video(cloud_event):
                         "UploadedBy": uploaded_by,
                         "Assignee": assignee,
                         "originalVideoPath": file_name,
-                        "rawVideoLink": raw_video_link
+                        "rawVideoLink": raw_video_link,
+                        "session_id": session_id
                     }
                     collection.insert_one(new_doc)
                     print(f"Inserted failed record for {video_filename}")
@@ -353,6 +437,19 @@ def process_uploaded_video(cloud_event):
             video_type = "down-the-line" if file_name.startswith('dtl_videos/') else "face-on"
             print(f"Creating network error record for {video_filename}")
             
+            # Extract session_id for network error records
+            network_session_id = None
+            try:
+                filename_parts = video_filename.split("_")
+                if "swing" in filename_parts:
+                    swing_index = filename_parts.index("swing")
+                    if len(filename_parts) > swing_index + 2:
+                        date_part = filename_parts[swing_index + 1]
+                        time_part = filename_parts[swing_index + 2].split('.')[0]
+                        network_session_id = f"{date_part}_{time_part}"
+            except Exception:
+                pass
+            
             existing = collection.find_one({"Title": video_filename})
             if existing:
                 update_fields = {
@@ -360,7 +457,8 @@ def process_uploaded_video(cloud_event):
                     "Error": "Network error calling ML API",
                     "ErrorDetails": str(e),
                     "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
-                    "rawVideoLink": raw_video_link
+                    "rawVideoLink": raw_video_link,
+                    "session_id": network_session_id
                 }
                 collection.update_one(
                     {"_id": existing["_id"]},
@@ -377,7 +475,8 @@ def process_uploaded_video(cloud_event):
                     "Error": "Network error calling ML API",
                     "ErrorDetails": str(e),
                     "originalVideoPath": file_name,
-                    "rawVideoLink": raw_video_link
+                    "rawVideoLink": raw_video_link,
+                    "session_id": network_session_id
                 }
                 collection.insert_one(new_doc)
                 print(f"Inserted network error record for {video_filename}")
