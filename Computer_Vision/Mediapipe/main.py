@@ -17,9 +17,6 @@ from bson import ObjectId
 import ffmpeg
 import traceback
 
-
-
-
 app = Flask(__name__)
 
 # Mediapipe setup
@@ -173,12 +170,52 @@ def is_next_class_valid(current_class_index, previous_class_index):
         return True
     return False
 
+# --- sy new code ---
+# function to save top 10 frames
+def save_best_pose_frames(predictions, output_path):
+    best_frames = {}
+    
+    for prediction in predictions:
+        pose_class = prediction['predicted_class']
+        confidence = prediction['confidence']
+        
+        if pose_class == 'Unknown Pose':
+            continue
+            
+        if pose_class not in best_frames or confidence > best_frames[pose_class]['confidence']:
+            best_frames[pose_class] = prediction
+    
+    # write to csv file
+    with open(output_path, mode='w', newline='') as csv_file:
+        csv_writer = csv.writer(csv_file)
+        csv_writer.writerow(['Frame', 'Predicted Class', 'Confidence', 'Video Time(s)', 
+                           'Shoulder Tilt', 'Hip Tilt', 'Shoulder Tilt Status', 
+                           'Hip Tilt Status', 'Overall Status'])
+        
+        for pose_class in class_names:
+            if pose_class in best_frames:
+                frame_data = best_frames[pose_class]
+                csv_writer.writerow([
+                    frame_data['frame'],
+                    frame_data['predicted_class'],
+                    frame_data['confidence'],
+                    frame_data['video_time'],
+                    frame_data['shoulder_tilt_angle'],
+                    frame_data['hip_tilt_angle'],
+                    frame_data['shoulder_tilt_status'],
+                    frame_data['hip_tilt_status'],
+                    frame_data['overall_status']
+                ])
+    
+    return best_frames
+# --- end ---
+
 # Pose processing route
 @app.route('/process-video', methods=['POST'])
 def process_video():
     print("DEBUG: /process-video route accessed")
     try:
-        # ✅ CREATE NEW POSE INSTANCE FOR THIS REQUEST
+        # CREATE NEW POSE INSTANCE FOR THIS REQUEST
         pose = mp_pose.Pose(
             static_image_mode=False,
             model_complexity=1,  # 0=Lite, 1=Full, 2=Heavy
@@ -250,6 +287,7 @@ def process_video():
 
             predictions = []
             frame_count = 0
+            consecutive_class_buffer = []
 
             # Process video frame by frame
             while True:
@@ -257,7 +295,7 @@ def process_video():
                 if not success:
                     break  # End of video
                 
-                # ✅ VALIDATE FRAME
+                # VALIDATE FRAME
                 if img is None or img.size == 0:
                     print(f"Warning: Invalid frame at {frame_count}")
                     continue
@@ -296,7 +334,7 @@ def process_video():
                     prediction = model.predict(pose_landmarks)
                     current_class_index = np.argmax(prediction)
 
-                    consecutive_class_buffer = []
+                    # consecutive_class_buffer = []
 
                     # --- Stabilisation logic: accept if 3 consecutive predictions ---
                     consecutive_class_buffer.append(current_class_index)
@@ -412,6 +450,11 @@ def process_video():
                 
                 # --- MODIFIED: Write the thumbnail URL to the row ---
                 writer.writerow([pose_class, shoulder_tilt, hip_tilt, time_frame, shoulder_tilt_status, hip_tilt_status, overall_status, thumbnail_url])
+        
+        # # --- sy new code --- 
+        # output_best_frames_csv_path = f'/tmp/best_frames_{video_id}.csv'
+        # best_frames_data = save_best_pose_frames(predictions, output_best_frames_csv_path)
+        # # --- end--- 
 
         # Upload the output video to GCS if a path is specified
         if output_video_path_gcs:
@@ -426,10 +469,16 @@ def process_video():
             print(f"Uploaded predictions CSV to GCS: {output_csv_url}")
             output_angle_csv_url = upload_blob(bucket_name, output_angles_csv_path, output_angle_csv_path_gcs)
             print(f"Uploaded angles CSV to GCS: {output_angle_csv_url}")
+            
+            # # --- sy new code --- 
+            # # save best frames csv
+            # best_frames_gcs_path = output_csv_path_gcs.replace('.csv', '_best_frames.csv')
+            # output_best_frames_csv_url = upload_blob(bucket_name, output_best_frames_csv_path, best_frames_gcs_path)
+            # # --- end --- 
         else:
             output_csv_url = None
-            output_angle_csv_url = None
-
+            output_angle_csv_url = None 
+            # output_best_frames_csv_url = None # sy new code
 
          # Clean up temporary files
         temp_files = [
@@ -439,6 +488,7 @@ def process_video():
             h264_video_path,
             output_csv_path,
             output_angles_csv_path,
+            # output_best_frames_csv_path # sy new code
         ]
         # --- NEW: Add temp thumbnail files to cleanup list ---
         temp_files.extend(temp_thumbnail_files)
@@ -453,6 +503,7 @@ def process_video():
             'output_video': output_video_url,
             'output_csv': output_csv_url,
             'output_angle_csv': output_angle_csv_url,
+            # 'output_best_frames_csv': output_best_frames_csv_url, # sy new code
             'output_pose_images': pose_thumbnails,
         }), 200
 
@@ -461,7 +512,7 @@ def process_video():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
-        # ✅ CLEANUP: Always close the pose instance
+        # CLEANUP: Always close the pose instance
         try:
             pose.close()
             print("Pose instance closed successfully")
