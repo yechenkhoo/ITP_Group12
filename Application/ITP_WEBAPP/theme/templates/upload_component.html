@@ -2,9 +2,9 @@
   <div class="bg-white rounded-lg shadow-lg p-6 relative
               w-11/12 sm:w-3/4 md:w-2/3 lg:w-1/2 xl:w-2/5
               max-h-[90vh] overflow-y-auto
-              mt-0 md:mt-[-5vh] lg:mt-[-10vh]"> {# Adjusted margin-top responsively #}
+              mt-0 md:mt-[-5vh] lg:mt-[-10vh]">
     <div class="flex justify-between items-center mb-4 md:mb-6">
-      <h2 class="text-lg md:text-xl font-semibold">Upload Video</h2> {# Responsive font size #}
+      <h2 class="text-lg md:text-xl font-semibold">Upload Video</h2>
       <button id="closeModalBtn" class="text-gray-500 hover:text-gray-700 focus:outline-none">
         <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5 md:h-6 md:w-6" fill="none" viewBox="0 0 24 24"
           stroke="currentColor">
@@ -17,51 +17,85 @@
     <form action="{% url 'dashboard_dataSpace' studentID %}?view={{ view }}&sort={{ sort }}" method="POST"
       enctype="multipart/form-data">
       {% csrf_token %}
-      <div class="flex-col justify-between mb-4 md:mb-6"> {# Adjusted margin-bottom #}
+      <div class="flex-col justify-between mb-4 md:mb-6">
 
-        <div id="dropZone" class="w-full h-32 sm:h-40 md:h-48 p-4 sm:p-6 md:p-8
-                                  border-2 border-dashed border-gray-300 rounded-lg bg-gray-50
-                                  text-center flex flex-col items-center justify-center
-                                  hover:border-indigo-400 transition-all duration-200">
-          <input id="videoDBFile" name="videoDBFile" type="file" accept="video/*" class="hidden" />
-          <p class="text-sm md:text-base text-gray-600 mb-1 md:mb-2">Drag & Drop video here, or</p>
-          <label for="videoDBFile"
-            class="inline-block bg-indigo-600 text-white text-sm md:text-base font-medium py-2 px-3 md:px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
-            Browse Files
-          </label>
-          <p id="fileDBName" class="text-xs md:text-sm text-gray-600 mt-1 md:mt-2 italic">
-            <span id="fileDBIcon" class="inline-block hidden"> {# Added 'hidden' here #}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                class="w-4 h-4 md:w-5 md:h-5 inline-block align-middle mr-1 text-gray-400">
-                <path fill-rule="evenodd"
-                  d="M4.5 2A2.5 2.5 0 0 0 2 4.5v11A2.5 2.5 0 0 0 4.5 18h11a2.5 2.5 0 0 0 2.5-2.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.121-4.12A1.5 1.5 0 0 0 12.379 2H4.5ZM12.25 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5h-2.5V4.75Z"
-                  clip-rule="evenodd" />
-              </svg>
-            </span>
-            <span id="fileDBNameText">No file selected</span>
+        <!-- Upload Denied alert (DB) - header + message inline -->
+        <div id="diffTimingAlertDB" class="p-3 mb-4 rounded-lg bg-red-100 text-red-800 border border-red-300 hidden">
+          <p class="text-sm md:text-base">
+            <span class="font-medium">❌</span>
+            <span class="diffTimingAlertMsg ml-1">Both videos must have the <strong>same timings</strong> to proceed.</span>
           </p>
         </div>
 
-        <fieldset class="w-fit mx-auto mt-4 md:mt-8"> {# Adjusted margin-top #}
+        <!-- Sync Reminder (DB) - header + message inline -->
+        <div id="syncReminderDB" class="p-3 mb-4 rounded-lg bg-yellow-100 text-yellow-800 border border-yellow-300 hidden">
+          <p class="text-sm md:text-base">
+            <span class="font-medium">⚠️ Reminder:</span>
+            <span class="ml-1">If both videos have the same timings, ensure they are <strong>in sync</strong> (i.e., capturing the same moment) to avoid inaccurate results.</span>
+          </p>
+        </div>
+
+        <div id="dropZoneFaceDB" class="w-full h-32 sm:h-40 md:h-48 p-4 sm:p-6 md:p-8
+                                  border-2 border-dashed border-gray-300 rounded-lg bg-gray-50
+                                  text-center flex flex-col items-center justify-center
+                                  hover:border-indigo-400 transition-all duration-200">
+          <input id="videoDBFile_face" name="videoDBFile_face" type="file" accept="video/*" class="hidden" />
+          <p class="text-sm md:text-base text-gray-600 mb-1 md:mb-2">Drag & Drop Face On video here, or</p>
+          <label for="videoDBFile_face"
+            class="inline-block bg-indigo-600 text-white text-sm md:text-base font-medium py-2 px-3 md:px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            Browse Files
+          </label>
+          <p id="fileDBNameFace" class="text-xs md:text-sm text-gray-600 mt-1 md:mt-2 italic">
+            <span id="fileDBIconFace" class="inline-block"> 
+              <!-- svg omitted for brevity (same as before) -->
+            </span>
+            <span id="fileDBNameTextFace">No file selected</span>
+          </p>
+        </div>
+
+        <div id="dropZoneDTLDB" class="w-full h-32 sm:h-40 md:h-48 p-4 sm:p-6 md:p-8 mt-4
+                                  border-2 border-dashed border-gray-300 rounded-lg bg-gray-50
+                                  text-center flex flex-col items-center justify-center
+                                  hover:border-indigo-400 transition-all duration-200 hidden">
+          <input id="videoDBFile_dtl" name="videoDBFile_dtl" type="file" accept="video/*" class="hidden" />
+          <p class="text-sm md:text-base text-gray-600 mb-1 md:mb-2">Drag & Drop Down The Line video here, or</p>
+          <label for="videoDBFile_dtl"
+            class="inline-block bg-indigo-600 text-white text-sm md:text-base font-medium py-2 px-3 md:px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            Browse Files
+          </label>
+          <p id="fileDBNameDTL" class="text-xs md:text-sm text-gray-600 mt-1 md:mt-2 italic">
+            <span id="fileDBIconDTL" class="inline-block hidden"> 
+              <!-- svg omitted for brevity (same as before) -->
+            </span>
+            <span id="fileDBNameTextDTL">No file selected</span>
+          </p>
+        </div>
+
+        <fieldset class="w-fit mx-auto mt-2 md:mt-4">
           <legend class="text-sm md:text-base font-medium text-gray-700 text-center">Video Type:</legend>
-          <div class="mt-1 flex items-center text-sm md:text-base"> {# Adjusted font size #}
+          <div class="mt-1 flex items-center text-sm md:text-base">
             <label class="inline-flex items-center">
-              <input type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
+              <input id="videoTypeFaceDB" type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
               <span class="ml-2">Face On</span>
             </label>
-            <label class="inline-flex items-center ml-4 md:ml-2 pl-0"> {# Adjusted margin #}
-              <input type="radio" name="videoType" value="down-the-line"
+            <label class="inline-flex items-center ml-4 md:ml-2 pl-0">
+              <input id="videoTypeDTLDB" type="radio" name="videoType" value="down-the-line"
                 class="form-radio h-4 w-4 text-indigo-600">
               <span class="ml-2">Down The Line</span>
+            </label>
+            <label class="inline-flex items-center ml-4 md:ml-2 pl-0">
+              <input id="videoTypeBothDB" type="radio" name="videoType" value="both"
+                class="form-radio h-4 w-4 text-indigo-600">
+              <span class="ml-2">Face On &amp; Down The Line</span>
             </label>
           </div>
         </fieldset>
       </div>
 
-      <div class="flex justify-center mt-4 md:mt-8"> {# Adjusted margin-top #}
+      <div class="flex justify-center mt-2 md:mt-4">
         <button type="submit"
           class="w-full py-2 px-4 md:px-6 bg-indigo-500 text-white rounded-md hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
-                 text-sm md:text-base"> {# Responsive font size and padding #}
+                 text-sm md:text-base">
           Upload
         </button>
       </div>
@@ -79,48 +113,82 @@
 
         <input type="hidden" id="modalStudentId" name="student_id" value="">
 
-        <div id="dropZoneCoach" class="w-full h-32 sm:h-40 md:h-48 p-4 sm:p-6 md:p-8
+        <!-- Upload Denied alert (Coach) - header + message inline -->
+        <div id="diffTimingAlertCoach" class="p-3 mb-4 rounded-lg bg-red-100 text-red-800 border border-red-300 hidden">
+          <p class="text-sm md:text-base">
+            <span class="font-medium">❌</span>
+            <span class="diffTimingAlertMsg ml-1">Both uploaded videos must have the <strong>same timings</strong> to proceed.</span>
+          </p>
+        </div>
+
+        <!-- Sync Reminder (Coach) - header + message inline -->
+        <div id="syncReminderCoach" class="p-3 mb-4 rounded-lg bg-yellow-100 text-yellow-800 border border-yellow-300 hidden">
+          <p class="text-sm md:text-base">
+            <span class="font-medium">⚠️ Reminder:</span>
+            <span class="ml-1">If both videos have the same timings, ensure they are <strong>in sync</strong> (i.e., capturing the same moment) to avoid inaccurate results.</span>
+          </p>
+        </div>
+
+        <div id="dropZoneFaceCoach" class="w-full h-32 sm:h-40 md:h-48 p-4 sm:p-6 md:p-8
                                         border-2 border-dashed border-gray-300 rounded-lg bg-gray-50
                                         text-center flex flex-col items-center justify-center
                                         hover:border-indigo-400 transition-all duration-200">
-          <input id="videoFile" name="videoFile" type="file" accept="video/*" class="hidden">
-          <p class="text-sm md:text-base text-gray-600 mb-1 md:mb-2">Drag & Drop video here, or</p>
-          <label for="videoFile"
+          <input id="videoFile_face" name="videoFile_face" type="file" accept="video/*" class="hidden">
+          <p class="text-sm md:text-base text-gray-600 mb-1 md:mb-2">Drag & Drop Face On video here, or</p>
+          <label for="videoFile_face"
             class="inline-block bg-indigo-600 text-white text-sm md:text-base font-medium py-2 px-3 md:px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
             Browse Files
           </label>
-          <p id="fileName" name="fileName" class="block text-xs md:text-sm font-poppins text-gray-600 mt-1 md:mt-2 italic">
-            <span id="fileIcon" class="inline-block hidden"> {# Added 'hidden' here #}
-              <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-                class="w-4 h-4 md:w-5 md:h-5 inline-block align-middle mr-1 text-gray-400">
-                <path fill-rule="evenodd"
-                  d="M4.5 2A2.5 2.5 0 0 0 2 4.5v11A2.5 2.5 0 0 0 4.5 18h11a2.5 2.5 0 0 0 2.5-2.5V7.621a1.5 1.5 0 0 0-.44-1.06l-4.121-4.12A1.5 1.5 0 0 0 12.379 2H4.5ZM12.25 4.75a.75.75 0 0 0-1.5 0v3.5a.75.75 0 0 0 .75.75h3.5a.75.75 0 0 0 0-1.5h-2.5V4.75Z"
-                  clip-rule="evenodd" />
-              </svg>
+          <p id="fileNameFace" class="block text-xs md:text-sm font-poppins text-gray-600 mt-1 md:mt-2 italic">
+            <span id="fileIconFace" class="inline-block"> 
+              <!-- svg omitted for brevity -->
             </span>
-            <span id="fileNameText">No file selected</span>
+            <span id="fileNameTextFace">No file selected</span>
           </p>
           <input type="hidden" id="fileValue" name="fileValue" value="">
         </div>
 
-        <fieldset class="w-fit mx-auto mt-4 md:mt-8">
+        <div id="dropZoneDTLCoach" class="w-full h-32 sm:h-40 md:h-48 p-4 sm:p-6 md:p-8 mt-4
+                                        border-2 border-dashed border-gray-300 rounded-lg bg-gray-50
+                                        text-center flex flex-col items-center justify-center
+                                        hover:border-indigo-400 transition-all duration-200 hidden">
+          <input id="videoFile_dtl" name="videoFile_dtl" type="file" accept="video/*" class="hidden">
+          <p class="text-sm md:text-base text-gray-600 mb-1 md:mb-2">Drag & Drop Down The Line video here, or</p>
+          <label for="videoFile_dtl"
+            class="inline-block bg-indigo-600 text-white text-sm md:text-base font-medium py-2 px-3 md:px-4 rounded-lg cursor-pointer hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+            Browse Files
+          </label>
+          <p id="fileNameDTL" class="block text-xs md:text-sm font-poppins text-gray-600 mt-1 md:mt-2 italic">
+            <span id="fileIconDTL" class="inline-block hidden"> 
+              <!-- svg omitted for brevity -->
+            </span>
+            <span id="fileNameTextDTL">No file selected</span>
+          </p>
+        </div>
+
+        <fieldset class="w-fit mx-auto mt-2 md:mt-4">
           <legend class="text-sm md:text-base font-medium text-gray-700 text-center">Video Type:</legend>
 
           <div class="mt-1 flex items-center text-sm md:text-base">
             <label class="inline-flex items-center">
-              <input type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
+              <input id="videoTypeFaceCoach" type="radio" name="videoType" value="face-on" class="form-radio h-4 w-4 text-indigo-600" checked>
               <span class="ml-2">Face On</span>
             </label>
             <label class="inline-flex items-center ml-4 md:ml-2 pl-0">
-              <input type="radio" name="videoType" value="down-the-line"
+              <input id="videoTypeDTLCoach" type="radio" name="videoType" value="down-the-line"
                 class="form-radio h-4 w-4 text-indigo-600">
               <span class="ml-2">Down The Line</span>
+            </label>
+            <label class="inline-flex items-center ml-4 md:ml-2 pl-0">
+              <input id="videoTypeBothCoach" type="radio" name="videoType" value="both"
+                class="form-radio h-4 w-4 text-indigo-600">
+              <span class="ml-2">Face On &amp; Down The Line</span>
             </label>
           </div>
         </fieldset>
       </div>
 
-      <div class="flex justify-center mt-4 md:mt-8">
+      <div class="flex justify-center mt-2 md:mt-4">
         <button type="submit"
           class="w-full py-2 px-4 md:px-6 bg-indigo-500 text-white rounded-md hover:bg-indigo-400 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500
                  text-sm md:text-base">

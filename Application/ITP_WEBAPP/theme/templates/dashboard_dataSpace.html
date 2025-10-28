@@ -120,7 +120,7 @@
                             Compare Swings
                         </button>
                     </form>
-                    <form method="get" class="ml-auto flex items-center space-x-2">
+                    <form method="get" class="flex items-center space-x-2">
                         <label for="sortSelect" class="text-sm font-medium text-gray-700">Sort by:</label>
                         <input type="hidden" name="view" value="{{ view }}">
                         <input type="hidden" name="tab" value="{{ tab }}">
@@ -132,7 +132,32 @@
                             <option value="za" {% if sort == 'za' %}selected{% endif %}>Z‑A</option>
                         </select>
                     </form>
-                </div>
+                    <div class="relative inline-block text-left ml-2">
+                        <button id="table-filter-dropdown-btn-data-space"
+                            class="ml-2 flex-shrink-0 rounded-md bg-indigo-600 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-500 inline-flex items-center">
+                            <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
+                                xmlns="http://www.w3.org/2000/svg">
+                                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
+                                    d="M3 4a1 1 0 011-1h16a1 1 0 011 1v2.586a1 1 0 01-.293.707l-6.414 6.414a1 1 0 00-.293.707V19l-4 4v-6.586a1 1 0 00-.293-.707L3.293 7.293A1 1 0 013 6.586V4z">
+                                </path>
+                            </svg>
+                            Filter
+                        </button>
+
+                        <div id="table-filter-panel-data-space"
+                            class="absolute right-0 mt-2 w-56 bg-white rounded-lg shadow-lg p-4 z-20 max-h-96 overflow-y-auto hidden">
+                            <div id="table-filter-options-container-data-space" class="flex flex-wrap -mx-2">
+                                {# Filter options will be injected here by dashboard_filter.js #}
+                            </div>
+                            <div class="flex justify-end mt-4">
+                                <button id="table-apply-filters-btn-data-space"
+                                    class="bg-indigo-600 text-white px-4 py-2 rounded text-sm hover:bg-indigo-500 mr-2">Apply</button>
+                                <button id="table-clear-filters-btn-data-space"
+                                    class="bg-gray-300 text-gray-800 px-4 py-2 rounded text-sm hover:bg-gray-400">Clear</button>
+                            </div>
+                        </div>
+                    </div>
+                    </div>
             </div>
 
             <div id="tab1" class="{% if tab != 'tab1' %}hidden {% endif %}tab-content">
@@ -153,6 +178,9 @@
                                 <th
                                     class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                     Title</th>
+                                <th
+                                    class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+                                    Video Type</th>
                                 <th
                                     class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                                     Date Uploaded</th>
@@ -205,6 +233,19 @@
                                         <p class="md:text-sm text-xs font-medium text-gray-900 video-title">{{ video.Title }}
                                         </p>
                                     </div>
+                                </td>
+                                <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
+                                    <p class="md:text-sm text-xs font-medium text-gray-900 video-type-text">
+                                        {% if video.Type == 'face-on' %}
+                                            Face On
+                                        {% elif video.Type == 'down-the-line' %}
+                                            Down The Line
+                                        {% elif video.Type == 'both' %}
+                                            Face On &amp; Down The Line
+                                        {% else %}
+                                            {{ video.Type }}
+                                        {% endif %}
+                                    </p>
                                 </td>
                                 <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
                                     <p class="md:text-sm text-xs text-gray-500 video-date-uploaded">{{ video.DateUploaded }}
@@ -270,6 +311,17 @@
                             </div>
                             <h3 class="text-sm font-medium text-gray-800 video-title mt-2 leading-tight w-full break-words">
                                 {{ video.Title }}</h3>
+                            <p class="text-xs font-medium text-gray-700 mt-1 video-type-text">
+                                {% if video.Type == 'face-on' %}
+                                    Face On
+                                {% elif video.Type == 'down-the-line' %}
+                                    Down The Line
+                                {% elif video.Type == 'both' %}
+                                    Face On &amp; Down The Line
+                                {% else %}
+                                    {{ video.Type }}
+                                {% endif %}
+                            </p>
                             <p class="text-xs text-gray-500 video-date-uploaded mt-1">{{ video.DateUploaded }}</p>
                             <span class="mt-2 inline-block px-2 py-1 text-xs font-semibold rounded-full 
                             {% if video.Status == 'Completed' %}
@@ -310,6 +362,9 @@
                                 Title</th>
                             <th
                                 class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+                                Video Type</th>
+                            <th
+                                class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                                 Date Uploaded</th>
                             <th
                                 class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
@@ -318,19 +373,17 @@
                     </thead>
                     <tbody>
                         {% for video in completed_video.object_list %}
-                        <tr class="border-b justify-center 
-                            hover:bg-gray-50 cursor-pointer" data-href="{% url 'results' studentID video.id %}"
-                            data-video-id="{{ video.id }}" data-video-status="{{ video.Status }}">
-
+                        <tr class="border-b justify-center hover:bg-gray-50 cursor-pointer"
+                            data-href="{% url 'results' studentID video.id %}" data-video-id="{{ video.id }}"
+                            data-video-status="{{ video.Status }}">
                             <td class="px-4 py-4">
                                 <input type="checkbox" class="compare-checkbox" data-video-id="{{ video.id }}">
                             </td>
-
                             <td
                                 class="md:px-6 px-1 py-4 whitespace-nowrap justify-center hidden md:table-cell video-thumbnail-cell">
                                 {% if video.rawVideoLink %}
-                                <video class="h-28 w-40 md:h-32 md:w-48 object-cover rounded" preload="metadata"
-                                    muted loop onmouseover="this.play()" onmouseout="this.pause(); this.currentTime=0;">
+                                <video class="h-28 w-40 md:h-32 md:w-48 object-cover rounded" preload="metadata" muted
+                                    loop onmouseover="this.play()" onmouseout="this.pause(); this.currentTime=0;">
                                     <source src="{{ video.rawVideoLink }}" type="video/mp4">
                                     Your browser does not support the video tag.
                                 </video>
@@ -339,7 +392,6 @@
                                     class="h-28 w-40 md:h-32 md:w-48 object-cover rounded">
                                 {% endif %}
                             </td>
-
                             <td class="md:px-6 px-1 py-4 whitespace-normal break-words">
                                 <div class="max-w-[15ch]">
                                     <p class="md:text-sm text-xs font-medium text-gray-900 video-title">{{ video.Title }}
@@ -347,18 +399,27 @@
                                 </div>
                             </td>
                             <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
+                                <p class="md:text-sm text-xs font-medium text-gray-900 video-type-text">
+                                    {% if video.Type == 'face-on' %}
+                                        Face On
+                                    {% elif video.Type == 'down-the-line' %}
+                                        Down The Line
+                                    {% elif video.Type == 'both' %}
+                                        Face On &amp; Down The Line
+                                    {% else %}
+                                        {{ video.Type }}
+                                    {% endif %}
+                                </p>
+                            </td>
+                            <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
                                 <p class="md:text-sm text-xs text-gray-500 video-date-uploaded">{{ video.DateUploaded }}
                                 </p>
                             </td>
-
                             <td class="md:px-6 px-1 py-4 whitespace-nowrap video-status-cell">
                                 <span
                                     class="md: px-2 inline-flex md:text-sm text-xs leading-5 font-semibold rounded-full 
-                                    {% if video.Status == 'Completed' %}
-                                        bg-green-100 text-green-800
-                                    {% else %}
-                                        bg-red-100 text-red-800
-                                    {% endif %} video-status-text">
+                                    {% if video.Status == 'Completed' %} bg-green-100 text-green-800 
+                                    {% else %} bg-red-100 text-red-800 {% endif %} video-status-text">
                                     {{ video.Status }}
                                 </span>
                             </td>
@@ -368,7 +429,6 @@
                 </table>
                 {% endif %}
             </div>
-
             <div
                 class="grid-view grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 justify-center p-4 {% if view == 'list' %}hidden{% endif %}">
                 {% if not completed_video %}
@@ -376,8 +436,9 @@
                 {% else %}
                 {% for video in completed_video.object_list %}
                 <a href="{% url 'results' studentID video.id %}" class="relative block bg-white border rounded-lg shadow p-3 flex flex-col items-start 
-                                        hover:shadow-md hover:bg-gray-50 cursor-pointer w-full"
-                    data-video-id="{{ video.id }}" data-video-status="{{ video.Status }}">
+                                hover:shadow-md hover:bg-gray-50 cursor-pointer w-full" data-video-id="{{ video.id }}"
+                    data-video-status="{{ video.Status }}">
+                    {# Checkbox for completed videos #}
                     <input type="checkbox" class="compare-checkbox absolute top-2 right-2 z-10"
                         data-video-id="{{ video.id }}" />
                     <div class="video-thumbnail-cell w-full">
@@ -388,12 +449,23 @@
                             Your browser does not support the video tag.
                         </video>
                         {% else %}
-                        <img src="https://placehold.co/600x400" alt="{{ video.Title }}"
+                        <img src="https://placehold.co/300x180" alt="{{ video.Title }}"
                             class="w-full h-36 object-cover rounded mb-2" />
                         {% endif %}
                     </div>
                     <h3 class="text-sm font-medium text-gray-800 video-title mt-2 leading-tight w-full break-words">
                         {{ video.Title }}</h3>
+                    <p class="text-xs font-medium text-gray-700 mt-1 video-type-text">
+                        {% if video.Type == 'face-on' %}
+                            Face On
+                        {% elif video.Type == 'down-the-line' %}
+                            Down The Line
+                        {% elif video.Type == 'both' %}
+                            Face On &amp; Down The Line
+                        {% else %}
+                            {{ video.Type }}
+                        {% endif %}
+                    </p>
                     <p class="text-xs text-gray-500 video-date-uploaded mt-1">{{ video.DateUploaded }}</p>
                     <span class="mt-2 inline-block px-2 py-1 text-xs font-semibold rounded-full 
                         {% if video.Status == 'Completed' %}
@@ -418,7 +490,6 @@
                     <thead>
                         <tr class="justify-center">
                             <th class="px-4 py-2 flex items-center justify-start">
-                                {# Add checkbox for processing videos in list view #}
                                 <input type="checkbox" id="selectAllCheckboxList3" class="compare-checkbox-all">
                             </th>
                             <th
@@ -427,6 +498,9 @@
                             <th
                                 class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Title</th>
+                            <th
+                                class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+                                Video Type</th>
                             <th
                                 class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                                 Date Uploaded</th>
@@ -440,7 +514,6 @@
                         <tr class="border-b justify-center" data-video-id="{{ video.id }}"
                             data-video-status="{{ video.Status }}">
                             <td class="px-4 py-4">
-                                {# Add checkbox for processing videos #}
                                 <input type="checkbox" class="compare-checkbox" data-video-id="{{ video.id }}">
                             </td>
                             <td
@@ -449,7 +522,6 @@
                                     class="h-28 w-40 md:h-32 md:w-48 object-cover rounded bg-gray-200 flex items-center justify-center text-gray-500 text-center">
                                     Processing...</div>
                             </td>
-
                             <td class="md:px-6 px-1 py-4 whitespace-normal break-words">
                                 <div class="max-w-[15ch]">
                                     <p class="md:text-sm text-xs font-medium text-gray-900 video-title">{{ video.Title }}
@@ -457,7 +529,20 @@
                                 </div>
                             </td>
                             <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
-                                <p class="md:text-sm text-xs text-gray-500 video-date-uploaded">{{ video.DateUploaded}}
+                                <p class="md:text-sm text-xs font-medium text-gray-900 video-type-text">
+                                    {% if video.Type == 'face-on' %}
+                                        Face On
+                                    {% elif video.Type == 'down-the-line' %}
+                                        Down The Line
+                                    {% elif video.Type == 'both' %}
+                                        Face On &amp; Down The Line
+                                    {% else %}
+                                        {{ video.Type }}
+                                    {% endif %}
+                                </p>
+                            </td>
+                            <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
+                                <p class="md:text-sm text-xs text-gray-500 video-date-uploaded">{{ video.DateUploaded }}
                                 </p>
                             </td>
                             <td class="md:px-6 px-1 py-4 whitespace-nowrap video-status-cell">
@@ -466,16 +551,12 @@
                                     {{ video.Status }}
                                 </span>
                             </td>
-                            <td class="px-4 py-3 text-right">
-                                {# no “View” link for processing #}
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
                 {% endif %}
             </div>
-
             <div
                 class="grid-view grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 justify-center p-4 {% if view == 'list' %}hidden{% endif %}">
                 {% if not processing_video %}
@@ -484,7 +565,7 @@
                 {% for video in processing_video.object_list %}
                 <div class="relative block bg-white border rounded-lg shadow p-3 flex flex-col items-start w-full"
                     data-video-id="{{ video.id }}" data-video-status="{{ video.Status }}">
-                    {# Add checkbox for processing videos in grid view #}
+                    {# Checkbox for processing videos #}
                     <input type="checkbox" class="compare-checkbox absolute top-2 right-2 z-10"
                         data-video-id="{{ video.id }}" />
                     <div class="video-thumbnail-cell w-full">
@@ -494,11 +575,22 @@
                     </div>
                     <h3 class="text-sm font-medium text-gray-800 video-title mt-2 leading-tight w-full break-words">
                         {{ video.Title }}</h3>
+                    <p class="text-xs font-medium text-gray-700 mt-1 video-type-text">
+                        {% if video.Type == 'face-on' %}
+                            Face On
+                        {% elif video.Type == 'down-the-line' %}
+                            Down The Line
+                        {% elif video.Type == 'both' %}
+                            Face On &amp; Down The Line
+                        {% else %}
+                            {{ video.Type }}
+                        {% endif %}
+                    </p>
                     <p class="text-xs text-gray-500 video-date-uploaded mt-1">{{ video.DateUploaded }}</p>
-                    <span class="mt-2 inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 video-status-text">
+                    <span
+                        class="mt-2 inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 video-status-text">
                         {{ video.Status }}
                     </span>
-                    {# no “View” link for processing #}
                 </div>
                 {% endfor %}
                 {% endif %}
@@ -522,6 +614,9 @@
                             <th
                                 class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">
                                 Title</th>
+                            <th
+                                class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
+                                Video Type</th>
                             <th
                                 class="md:px-6 px-1 py-2 text-left text-xs font-medium text-gray-500 uppercase tracking-wider hidden md:table-cell">
                                 Date Uploaded</th>
@@ -550,7 +645,20 @@
                                 </div>
                             </td>
                             <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
-                                <p class="md:text-sm text-xs text-gray-500 video-date-uploaded">{{ video.DateUploaded}}
+                                <p class="md:text-sm text-xs font-medium text-gray-900 video-type-text">
+                                    {% if video.Type == 'face-on' %}
+                                        Face On
+                                    {% elif video.Type == 'down-the-line' %}
+                                        Down The Line
+                                    {% elif video.Type == 'both' %}
+                                        Face On &amp; Down The Line
+                                    {% else %}
+                                        {{ video.Type }}
+                                    {% endif %}
+                                </p>
+                            </td>
+                            <td class="md:px-6 px-1 py-4 whitespace-nowrap hidden md:table-cell">
+                                <p class="md:text-sm text-xs text-gray-500 video-date-uploaded">{{ video.DateUploaded }}
                                 </p>
                             </td>
                             <td class="md:px-6 px-1 py-4 whitespace-nowrap video-status-cell">
@@ -559,16 +667,12 @@
                                     {{ video.Status }}
                                 </span>
                             </td>
-                            <td class="px-4 py-3 text-right">
-                                {# no “View” link for failed videos #}
-                            </td>
                         </tr>
                         {% endfor %}
                     </tbody>
                 </table>
                 {% endif %}
             </div>
-
             <div
                 class="grid-view grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-5 gap-6 justify-center p-4 {% if view == 'list' %}hidden{% endif %}">
                 {% if not failed_video %}
@@ -577,6 +681,7 @@
                 {% for video in failed_video.object_list %}
                 <div class="relative block bg-white border rounded-lg shadow p-3 flex flex-col items-start w-full"
                     data-video-id="{{ video.id }}" data-video-status="{{ video.Status }}">
+                    {# Checkbox for failed videos #}
                     <input type="checkbox" class="compare-checkbox absolute top-2 right-2 z-10"
                         data-video-id="{{ video.id }}" />
                     <div class="video-thumbnail-cell w-full">
@@ -586,39 +691,76 @@
                     </div>
                     <h3 class="text-sm font-medium text-gray-800 video-title mt-2 leading-tight w-full break-words">
                         {{ video.Title }}</h3>
+                    <p class="text-xs font-medium text-gray-700 mt-1 video-type-text">
+                        {% if video.Type == 'face-on' %}
+                            Face On
+                        {% elif video.Type == 'down-the-line' %}
+                            Down The Line
+                        {% elif video.Type == 'both' %}
+                            Face On &amp; Down The Line
+                        {% else %}
+                            {{ video.Type }}
+                        {% endif %}
+                    </p>
                     <p class="text-xs text-gray-500 video-date-uploaded mt-1">{{ video.DateUploaded }}</p>
-                    <span class="mt-2 inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 video-status-text">
+                    <span
+                        class="mt-2 inline-block px-2 py-1 text-xs font-semibold rounded-full bg-red-100 text-red-800 video-status-text">
                         {{ video.Status }}
                     </span>
-                    {# no “View” link for failed videos #}
                 </div>
                 {% endfor %}
                 {% endif %}
             </div>
         </div>
+
+
+        {% if videos and videos.paginator.num_pages > 1 %}
+        <nav id="pagination-container" class="flex justify-center items-center space-x-2 mt-4">
+            {% if videos.has_previous %}
+            <a href="?tab={{ tab }}&view={{ view }}&page={{ videos.previous_page_number }}{% if sort %}&sort={{ sort }}{% endif %}"
+                class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-lg" aria-label="Previous">‹</a>
+            {% else %}
+            <span class="px-3 py-1 text-gray-400 text-lg">‹</span>
+            {% endif %}
+
+            {% with current=videos.number num_pages=videos.paginator.num_pages %}
+                {% for page_num in videos.paginator.page_range %}
+                    {% comment %}
+                    Show page numbers with truncation.
+                    Display rules:
+                    1. Always show the first page.
+                    2. Always show the last page.
+                    3. Show a window of 5 pages around the current page (2 before, current, 2 after).
+                    4. Show '...' for gaps between these sections.
+                    {% endcomment %}
+                    {% if page_num == 1 or page_num == num_pages or page_num >= current|add:"-2" and page_num <= current|add:"2" %}
+                        {# This is a page link we should display #}
+                        <a href="?tab={{ tab }}&view={{ view }}&page={{ page_num }}{% if sort %}&sort={{ sort }}{% endif %}"
+                           class="px-3 py-1 rounded 
+                                {% if page_num == current %}
+                                    bg-blue-500 text-white
+                                {% else %}
+                                    bg-gray-200 text-gray-700 hover:bg-gray-300
+                                {% endif %} text-lg">
+                            {{ page_num }}
+                        </a>
+                    {% elif page_num == current|add:"-3" or page_num == current|add:"3" %}
+                        {# This is where a gap occurs, so show an ellipsis #}
+                        <span class="px-3 py-1 text-gray-400 text-lg">...</span>
+                    {% endif %}
+                {% endfor %}
+            {% endwith %}
+
+            {% if videos.has_next %}
+            <a href="?tab={{ tab }}&view={{ view }}&page={{ videos.next_page_number }}{% if sort %}&sort={{ sort }}{% endif %}"
+                class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-lg" aria-label="Next">›</a>
+            {% else %}
+            <span class="px-3 py-1 text-gray-400 text-lg">›</span>
+            {% endif %}
+        </nav>
+        {% endif %}
+
     </div>
-
-    <nav class="mt-4 flex items-center justify-center space-x-4 text-base w-full">
-        {% if page_obj.has_previous %}
-        <a href="?tab={{ tab }}&view={{ view }}&page={{ page_obj.previous_page_number }}{% if sort %}&sort={{ sort }}{% endif %}"
-            class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-lg" aria-label="Previous">‹</a>
-        {% else %}
-        <span class="px-3 py-1 text-gray-400 text-lg">‹</span>
-        {% endif %}
-
-        <span class="px-2">
-            {{ page_obj.number }} of {{ page_obj.paginator.num_pages }}
-        </span>
-
-        {% if page_obj.has_next %}
-        <a href="?tab={{ tab }}&view={{ view }}&page={{ page_obj.next_page_number }}{% if sort %}&sort={{ sort }}{% endif %}"
-            class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-lg" aria-label="Next">›</a>
-        {% else %}
-        <span class="px-3 py-1 text-gray-400 text-lg">‹</span>
-        {% endif %}
-    </nav>
-
-</div>
 </div>
 
 <div id="delete-confirm-modal"
@@ -643,5 +785,6 @@
 
 <script src="{% static 'js/dashboard_datasSpace.js' %}"></script>
 <script src="{% static 'js/dashboard_popupUploadModal.js' %}"></script>
+<script src="{% static 'js/dashboard_filter.js' %}"></script>
 
 {% endblock dashboard_content %}

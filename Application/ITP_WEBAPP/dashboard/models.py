@@ -114,10 +114,94 @@ class Video:
     executor = ThreadPoolExecutor(max_workers=5)
 
     @staticmethod
+    def upload_dual_videos(current_user_id, assignee_id, face_on_file, dtl_file):
+        """
+        Triggers asynchronous upload for both Face On and Down The Line videos.
+        This creates two separate video documents linked by a common session_id.
+        """
+        try:
+            # Prepare file data by reading into memory
+            face_on_data = face_on_file.read()
+            dtl_data = dtl_file.read()
+
+            # --- [MODIFIED] Generate a common session_id for both files ---
+            timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+            session_id = timestamp 
+            formatted_date = datetime.now().strftime("%H:%M %b %d, %Y")
+
+            # --- 1. Handle Face On Video ---
+            # For Face On, use the primary 'golf-swing-models' bucket and 'golf_videos' folder
+            face_on_bucket_name = 'golf-swing-models'
+            face_on_blob_name = f'golf_videos/{face_on_file.name}'
+            
+            face_on_doc = {
+                'UploadedBy': ObjectId(current_user_id),
+                'Assignee': ObjectId(assignee_id),
+                'Title': face_on_file.name,
+                'Type': 'face-on',
+                'DateUploaded': formatted_date,
+                'Status': 'Processing',
+                'session_id': session_id  # <-- [ADDED]
+            }
+            face_on_result = Videos_Collection.insert_one(face_on_doc)
+            
+            # Submit Face On video for async upload
+            face_on_future = Video.executor.submit(
+                Video._async_upload_single_file_task,
+                current_user_id,
+                assignee_id,
+                face_on_file.name,
+                'face-on',
+                face_on_data,
+                face_on_file.content_type,
+                face_on_result,
+                face_on_bucket_name,
+                face_on_blob_name
+            )
+            face_on_future.add_done_callback(Video._upload_callback)
+
+            # --- 2. Handle Down The Line Video ---
+            # For DTL, use the 'golf-swing-dtl' bucket and 'dtl_videos' folder
+            dtl_bucket_name = 'golf-swing-dtl'
+            dtl_blob_name = f'dtl_videos/{dtl_file.name}'
+
+            dtl_doc = {
+                'UploadedBy': ObjectId(current_user_id),
+                'Assignee': ObjectId(assignee_id),
+                'Title': dtl_file.name,
+                'Type': 'down-the-line',
+                'DateUploaded': formatted_date,
+                'Status': 'Processing',
+                'session_id': session_id  # <-- [ADDED]
+            }
+            dtl_result = Videos_Collection.insert_one(dtl_doc)
+
+            # Submit Down The Line video for async upload
+            dtl_future = Video.executor.submit(
+                Video._async_upload_single_file_task,
+                current_user_id,
+                assignee_id,
+                dtl_file.name,
+                'down-the-line',
+                dtl_data,
+                dtl_file.content_type,
+                dtl_result,
+                dtl_bucket_name,
+                dtl_blob_name
+            )
+            dtl_future.add_done_callback(Video._upload_callback)
+
+            return {"message": "Dual video upload started in the background."}
+
+        except Exception as e:
+            print(f"Error starting dual async upload: {e}")
+            traceback.print_exc()
+            return {"error": "Failed to start the dual upload process."}
+
+    @staticmethod
     def upload_video(current_user_id, assignee_id, title, video_type, file, upload_source="manual"):
         """
-        Trigger asynchronous video upload to GCP.
-        upload_source: "manual" for user uploads, "rpi" for RPi recordings
+        Trigger asynchronous video upload to GCP for a single file.
         """
         formatted_date = datetime.now().strftime("%H:%M %b %d, %Y")
         
@@ -128,112 +212,117 @@ class Video:
             'Type': video_type,
             'DateUploaded': formatted_date,
             'Status': 'Processing',
+            'session_id': None # <-- [ADDED] Set session_id to None for single uploads
         }
 
         result = Videos_Collection.insert_one(video_document)
         
         try:
-            # Read file into memory
-            file_data = file.read()   # Read file data as bytes
-            file_name = file.name   # Preserve the file name
-            content_type = file.content_type   # Preserve the content type
+            file_data = file.read()
+            file_name = file.name
+            content_type = file.content_type
 
+            # --- Determine bucket_name and blob_name based on video_type and upload_source ---
+            bucket_name = 'golf-swing-models' # Default bucket
+            folder = 'golf_videos'             # Default folder
+
+            if upload_source == "rpi":
+                # RPi uploads: Enhanced filename with user context (all to golf_videos/)
+                unique_id = uuid.uuid4().hex
+                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+                # Keeping timestamp for RPi uploads to ensure uniqueness from an external source
+                blob_name = f'{folder}/{current_user_id}_{assignee_id}_swing_{timestamp}_{unique_id}.mp4'
+                print(f"RPi upload: {blob_name}")
+            else: # Manual single uploads
+                if video_type == 'down-the-line':
+                    bucket_name = 'golf-swing-dtl'
+                    folder = 'dtl_videos'
+                # For 'face-on' or other types, default bucket and folder apply
+                blob_name = f'{folder}/{file_name}'
+                print(f"Manual single upload: {blob_name} to bucket {bucket_name}")
+            # --- END MODIFIED SECTION ---
+            
             # Submit the task to the executor
             future = Video.executor.submit(
-                Video._async_upload_video_task,
+                Video._async_upload_single_file_task,
                 current_user_id,
                 assignee_id,
                 title,
                 video_type,
                 file_data,
-                file_name,
                 content_type,
                 result,
-                upload_source  # Pass upload source
+                bucket_name,  # Pass the determined bucket name
+                blob_name     # Pass the determined blob name
             )
-
-            # Optional: Add a callback to handle post-upload logic
             future.add_done_callback(Video._upload_callback)
-
             return {"message": "Upload started in the background."}
         except Exception as e:
             print(f"Error starting async upload: {e}")
+            traceback.print_exc()
             return {"error": "Failed to start the upload process."}
 
+    # --- REFACTORED: Core upload logic now takes bucket_name and blob_name ---
     @staticmethod
-    def _async_upload_video_task(current_user_id, assignee_id, title, video_type, file_data, file_name, content_type, result, upload_source="manual"):
+    def _async_upload_single_file_task(current_user_id, assignee_id, title, video_type, file_data, content_type, result, bucket_name, blob_name):
         """
-        Perform the actual upload to GCP in the background.
-        upload_source: "manual" for user uploads, "rpi" for RPi recordings
+        Performs the actual upload of a single file to a specified GCS bucket and blob_name.
+        This is called by both single and dual upload methods.
         """
         try:
-            print("uploading")
-            bucket_name = 'golf-swing-models'
-
-            # Initialize GCP storage client
+            # This print statement will now show the name derived from the original file (plus timestamp or not)
+            print(f"Uploading to GCS bucket: {bucket_name}, blob: {blob_name}")
             storage_client = get_google_cloud_storage_client()
-
-            # Get the bucket
             bucket = storage_client.bucket(bucket_name)
-
             video_id = str(result.inserted_id)
 
-            # FIXED: Generate blob name based on upload source - all go to golf_videos/
-            if upload_source == "rpi":
-                # RPi uploads: Enhanced filename with user context
-                unique_id = uuid.uuid4().hex
-                timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-                blob_name = f'golf_videos/{current_user_id}_{assignee_id}_swing_{timestamp}_{unique_id}.mp4'
-                print(f"RPi upload: {blob_name}")
-            else:
-                # Manual uploads: Use original filename
-                blob_name = f'golf_videos/{file_name}'
-                print(f"Manual upload: {blob_name}")
-
-            # Create a file-like object from the in-memory data
             file_stream = io.BytesIO(file_data)
-
-            # Upload file to GCP Storage with metadata
             blob = bucket.blob(blob_name)
             
-            # Add metadata to the blob for additional context
+            # Retrieve session_id from the doc we just created
+            video_doc = Videos_Collection.find_one({'_id': result.inserted_id})
+            session_id = video_doc.get('session_id') if video_doc else None
+
             blob.metadata = {
                 'uploaded_by': current_user_id,
                 'assignee': assignee_id,
                 'video_id': video_id,
                 'video_type': video_type,
                 'title': title,
-                'upload_source': upload_source,
-                'upload_timestamp': datetime.now().isoformat()
+                'upload_timestamp': datetime.now().isoformat(),
+                'session_id': str(session_id) # <-- [ADDED] Pass session_id in metadata
             }
             
             blob.upload_from_file(file_stream, content_type=content_type)
 
-            # --- NEW: Construct the public URL for the raw video ---
+            # Construct the raw video URL from the correct bucket and blob name
             raw_video_url = f"https://storage.googleapis.com/{bucket_name}/{blob_name}"
 
             if not blob.exists():
-                print("Error: File does not exist in GCS.")
+                print("Error: File does not exist in GCS after upload attempt.")
                 time.sleep(2)
             
-            # --- NEW: Update the document with the raw video URL ---
             Videos_Collection.update_one(
                 {'_id': result.inserted_id},
                 {'$set': {'rawVideoLink': raw_video_url}}
             )
 
-            response = Video.process_video(blob_name, video_id, current_user_id, assignee_id)
+            # Pass the full path to Video.process_video
+            # [MODIFIED] Pass session_id to process_video
+            response = Video.process_video(f"{bucket_name}/{blob_name}", video_id, current_user_id, assignee_id, session_id)
 
             if response.get("status") == "Processing complete":
-                print(f"Processing succeeded; keeping raw upload at {blob_name}")
+                print(f"Processing succeeded for blob: {blob_name}")
             else:
-                print(f"Processing error, raw upload kept: {response.get('error')}")
+                print(f"Processing error for blob {blob_name}: {response.get('error')}")
 
             return response
 
         except Exception as e:
-            print(f"Error uploading video: {e}")
+            print(f"Error uploading video to blob {blob_name} in bucket {bucket_name}: {e}")
+            traceback.print_exc()
             return {"error": "An error occurred during video upload."}
+
 
     @staticmethod
     def _upload_callback(future):
@@ -241,28 +330,29 @@ class Video:
         Handle post-upload completion logic.
         """
         try:
-            result = future.result()   # Retrieve the result of the background task
-            print("Upload task completed")
+            result = future.result()
+            print("Upload task completed with result:", result)
         except Exception as e:
             print("Error in upload callback:", e)
-        
+            traceback.print_exc()
+
     @staticmethod
     def get_video_url(video_id):
-        """Fetches the URL of a video from Google Cloud Storage."""
-        video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
-        return video['processedVideoLink'] 
+        """Fetches the processed video URL from the stored link."""
+        video = Videos_Collection.find_one({'_id': ObjectId(video_id)}, {'processedVideoLink': 1})
+        return video.get('processedVideoLink')
         
     @staticmethod
     def get_csv_url(video_id):
-        """Fetches the URL of a video from Google Cloud Storage."""
-        video = Videos_Collection.find_one({'_id': ObjectId(video_id)})
-        return video['angleCsvLink']
+        """Fetches the angle CSV URL from the stored link."""
+        video = Videos_Collection.find_one({'_id': ObjectId(video_id)}, {'angleCsvLink': 1})
+        return video.get('angleCsvLink')
 
     @staticmethod
     def delete_videos(video_ids):
         """
         Deletes videos and all associated data from MongoDB and Google Cloud Storage.
-        Handles raw video, processed video, CSVs, and comments.
+        Handles raw video, processed video, CSVs, and comments across both buckets.
 
         :param video_ids: A list of video ID strings to be deleted.
         """
@@ -270,27 +360,42 @@ class Video:
             video_ids = [video_ids]  # Ensure it's a list
 
         storage_client = get_google_cloud_storage_client()
-        bucket_name = 'golf-swing-models'  # Your GCS bucket name
-        bucket = storage_client.bucket(bucket_name)
         object_ids = [ObjectId(vid) for vid in video_ids if vid]
 
-        # Find all video documents to gather their associated file URLs and comment lists
         videos_to_delete = list(Videos_Collection.find({'_id': {'$in': object_ids}}))
+        
+        # --- [NEW] Find and add paired videos via session_id ---
+        all_video_ids_to_delete = set(object_ids)
+        session_ids_to_check = set()
+        for video in videos_to_delete:
+            if video.get('session_id'):
+                session_ids_to_check.add(video.get('session_id'))
+
+        if session_ids_to_check:
+            paired_videos = list(Videos_Collection.find(
+                {'session_id': {'$in': list(session_ids_to_check)}, '_id': {'$nin': list(all_video_ids_to_delete)}}
+            ))
+            for pv in paired_videos:
+                all_video_ids_to_delete.add(pv['_id'])
+                videos_to_delete.append(pv)
+        # --- [END NEW] ---
 
         if not videos_to_delete:
             print("No videos found for the given IDs.")
             return {'status': 'error', 'message': 'No videos found.'}
 
         all_comment_ids_to_delete = []
-        blobs_to_delete = []
+        blobs_to_delete_from_bucket = {} # {bucket_name: [blob_name, ...]}
 
-        def get_blob_name_from_url(url):
-            """Helper function to extract the GCS blob name from a public URL."""
-            if not url or not url.startswith(f'https://storage.googleapis.com/{bucket_name}/'):
-                return None
+        def get_bucket_and_blob_name_from_url(url):
+            """Helper function to extract bucket and blob name from a GCS public URL."""
+            if not url or not url.startswith('https://storage.googleapis.com/'):
+                return None, None
             parsed_url = urlparse(url)
-            # The path is /bucket-name/blob/path/file.ext, so we strip the bucket name
-            return parsed_url.path.replace(f'/{bucket_name}/', '', 1)
+            path_parts = parsed_url.path.split('/')
+            if len(path_parts) >= 3: # Expecting ['', 'bucket-name', 'blob-path', ...]
+                return path_parts[1], '/'.join(path_parts[2:])
+            return None, None
 
         for video in videos_to_delete:
             # 1. Gather all associated GCS blobs to delete
@@ -302,9 +407,11 @@ class Video:
                 video.get('poseClassImagesLink')
             ]
             for url in urls:
-                blob_name = get_blob_name_from_url(url)
-                if blob_name:
-                    blobs_to_delete.append(blob_name)
+                bucket_name, blob_name = get_bucket_and_blob_name_from_url(url)
+                if bucket_name and blob_name:
+                    if bucket_name not in blobs_to_delete_from_bucket:
+                        blobs_to_delete_from_bucket[bucket_name] = []
+                    blobs_to_delete_from_bucket[bucket_name].append(blob_name)
 
             # 2. Gather all associated comment IDs to delete
             video_id = video['_id']
@@ -314,20 +421,29 @@ class Video:
 
         # --- Perform Deletions ---
 
-        # A. Delete GCS blobs in parallel for efficiency
-        def delete_blob(blob_name):
+        # A. Delete GCS blobs in parallel for efficiency, across different buckets
+        def delete_blob_from_gcs(bucket_name, blob_name):
             try:
+                bucket = storage_client.bucket(bucket_name)
                 blob = bucket.blob(blob_name)
                 if blob.exists():
                     blob.delete()
-                    print(f"Successfully deleted GCS blob: {blob_name}")
+                    print(f"Successfully deleted GCS blob: {blob_name} from bucket {bucket_name}")
                     return True
             except Exception as e:
-                print(f"Error deleting GCS blob {blob_name}: {e}")
+                print(f"Error deleting GCS blob {blob_name} from bucket {bucket_name}: {e}")
             return False
 
         with ThreadPoolExecutor(max_workers=10) as executor:
-            executor.map(delete_blob, blobs_to_delete)
+            delete_tasks = []
+            for bucket_name, blob_names in blobs_to_delete_from_bucket.items():
+                for blob_name in blob_names:
+                    delete_tasks.append(executor.submit(delete_blob_from_gcs, bucket_name, blob_name))
+            
+            # Wait for all deletion tasks to complete
+            for task in delete_tasks:
+                task.result()
+
 
         # B. Delete all associated comments from MongoDB in a single operation
         if all_comment_ids_to_delete:
@@ -335,37 +451,77 @@ class Video:
             print(f"Deleted {len(all_comment_ids_to_delete)} comments from MongoDB.")
 
         # C. Delete video documents from MongoDB in a single operation
-        result_videos = Videos_Collection.delete_many({'_id': {'$in': object_ids}})
+        # [MODIFIED] Use all_video_ids_to_delete set
+        result_videos = Videos_Collection.delete_many({'_id': {'$in': list(all_video_ids_to_delete)}})
         deleted_videos_count = result_videos.deleted_count
         print(f"Deleted {deleted_videos_count} video documents from MongoDB.")
 
         return {'status': 'success', 'deleted_videos': deleted_videos_count}
         
     @staticmethod
-    def process_video(file_path, video_id, uploader_id, assignee_id):
+    def process_video(file_path, video_id, uploader_id, assignee_id, session_id=None): # <-- [ADDED] session_id
         """Process video with user context included in paths"""
         print(f"Processing video: {file_path}")
         try:
             # Define the URL for the GCP function
             gcp_function_url = "https://ml-model-api-1067172605110.asia-southeast1.run.app/process-video"
 
-            # Extract filename from path for output naming
-            filename = file_path.split('/')[-1]
+            # Parse the full GCS path (e.g., 'golf-swing-models/golf_videos/tom_1.mp4')
+            path_parts = file_path.split('/')
+            if len(path_parts) < 2:
+                raise ValueError("Invalid file_path format. Expected 'bucket-name/blob-name'.")
             
-            # Create organized output paths that maintain user context
-            base_output_path = f"processed/{uploader_id}/{assignee_id}"
+            source_bucket_name = path_parts[0]
+            # This is the full blob path within the source bucket (e.g., 'golf_videos/tom_1.mp4')
+            source_blob_name = '/'.join(path_parts[1:]) 
             
+            # Extract filename from blob name for output naming
+            filename_with_ext = source_blob_name.split('/')[-1]
+            filename_base, _ = os.path.splitext(filename_with_ext)
+            
+            # Determine output bucket and base path based on the source bucket
+            if source_bucket_name == 'golf-swing-dtl':
+                # --- [NEW] DTL videos do not get processed by ML API ---
+                # This logic is triggered by _async_upload_single_file_task
+                # We can just update the status to Completed here.
+                # The GCS-triggered 'main.py' also has this logic,
+                # but this handles the web app's async flow.
+                print(f"Skipping ML API call for DTL video: {file_path}")
+                Videos_Collection.update_one(
+                    {'_id': ObjectId(video_id)},
+                    {
+                        '$set': {
+                            'Status': 'Completed',
+                            'originalVideoPath': file_path,
+                            'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
+                        }
+                    }
+                )
+                return {"status": "Processing complete", "message": "DTL video saved, no ML processing."}
+                # --- [END NEW] ---
+            else: # Default for golf-swing-models or any other source
+                output_bucket_for_processed = 'golf-swing-models'
+                base_output_path = f"processed/{uploader_id}/{assignee_id}"
+
             # Prepare the request payload with user context
             payload = {
                 "classification_model": "best_model.keras",
                 "video_id": video_id,
                 "uploader_id": str(uploader_id),
                 "assignee_id": str(assignee_id),
-                "video_path": file_path,
-                "output_video_path": f"{base_output_path}/{filename}",
-                "output_csv_path": f"{base_output_path}/{filename}.csv",
-                "output_angle_csv_path": f"{base_output_path}/{filename}_angles.csv"
+                "video_path": source_blob_name,
+                "source_bucket": source_bucket_name,
+                "source_blob_name": source_blob_name,
+                "output_bucket": output_bucket_for_processed,
+                "output_video_path": f"{base_output_path}/{filename_base}_processed.mp4",
+                "output_csv_path": f"{base_output_path}/{filename_base}.csv",
+                "output_angle_csv_path": f"{base_output_path}/{filename_base}_angles.csv",
+                "full_gcs_path": file_path,
+                "session_id": session_id # <-- [ADDED] Pass session_id
             }
+
+            # Print the payload to confirm correct bucket is passed
+            print(f"Video processing payload: {payload}")
 
             # Send the POST request to the GCP function
             headers = {"Content-Type": "application/json"}
@@ -387,19 +543,47 @@ class Video:
                             'frameByFrameCsvLink': output_csv_url,
                             'angleCsvLink': output_angle_csv_url,
                             'processedVideoLink': output_video_url,
-                            'originalVideoPath': file_path,  # Store original path for reference
+                            'originalVideoPath': file_path,
                             'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
                         }
                     }
                 )
                 return response_data
             else:
-                print(f"Error in video processing: {response.text}")
-                return {"error": "An error occurred during video processing."}
+                print(f"Error in video processing for {file_path}: {response.text}")
+                # [MODIFIED] Update status to Failed on API error
+                Videos_Collection.update_one(
+                    {'_id': ObjectId(video_id)},
+                    {
+                        '$set': {
+                            'Status': 'Failed',
+                            'Error': f"API failed with status {response.status_code}",
+                            'ErrorDetails': response.text[:500] if response.text else "Unknown error",
+                            'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
+                        }
+                    }
+                )
+                return {"error": f"An error occurred during video processing. Status: {response.status_code}, Response: {response.text}"}
 
         except Exception as e:
-            print(f"Error during video processing: {e}")
-            return {"error": "An error occurred during video processing."}
+            print(f"Error during video processing for {file_path}: {e}")
+            traceback.print_exc()
+            # [MODIFIED] Update status to Failed on exception
+            try:
+                Videos_Collection.update_one(
+                    {'_id': ObjectId(video_id)},
+                    {
+                        '$set': {
+                            'Status': 'Failed',
+                            'Error': "Exception during processing setup",
+                            'ErrorDetails': str(e),
+                            'LastUpdated': datetime.now().strftime("%H:%M %b %d, %Y")
+                        }
+                    }
+                )
+            except Exception as db_e:
+                print(f"Failed to update error status to DB: {db_e}")
+            return {"error": f"An error occurred during video processing setup: {str(e)}"}
 
     @staticmethod
     def get_all_videos(assignee_id):
@@ -426,10 +610,10 @@ class Video:
     def get_random_pro_video_blob_name():
         """
         Retrieves a random pro video blob name (e.g., 'videoModels/pro_swing_1.mp4')
-        from Google Cloud Storage under the 'videoModels/' prefix.
+        from Google Cloud Storage under the 'modelVideos/' prefix in 'golf-swing-models' bucket.
         """
         try:
-            bucket_name = 'golf-swing-models'
+            bucket_name = 'golf-swing-models' # Pro videos are always in this bucket
             storage_client = get_google_cloud_storage_client()
             bucket = storage_client.get_bucket(bucket_name)
             blobs = list(bucket.list_blobs(prefix='modelVideos/'))
@@ -446,11 +630,11 @@ class Video:
     def get_pro_video_url_from_blob(blob_name):
         """
         Given a pro video blob name under 'modelVideos/', returns its public URL
-        if the blob exists, else None.
+        if the blob exists, else None. Assumes 'golf-swing-models' bucket.
         """
         if not blob_name:
             return None
-        bucket_name = 'golf-swing-models'
+        bucket_name = 'golf-swing-models' # Pro videos are always in this bucket
         storage_client = get_google_cloud_storage_client()
         bucket = storage_client.get_bucket(bucket_name)
         blob = bucket.blob(blob_name)
@@ -463,13 +647,13 @@ class Video:
     def get_pro_csv_url_from_blob(blob_name):
         """
         Given a pro video blob name (e.g., 'modelVideos/pro_swing_1.mp4'),
-        derives the CSV blob name (e.g., 'modelVideos/pro_swing_1.csv')
-        and returns its public URL if it exists.
+        derives the CSV blob name (e.g., 'modelVideos/pro_swing_1_angles.csv')
+        and returns its public URL if it exists. Assumes 'golf-swing-models' bucket.
         """
         if not blob_name:
             return None
-        bucket_name = 'golf-swing-models'
-        # Replace extension with .csv
+        bucket_name = 'golf-swing-models' # Pro videos are always in this bucket
+        # Replace extension with _angles.csv
         base, _ = blob_name.rsplit('.', 1)
         csv_blob_name = f"{base}_angles.csv"
         storage_client = get_google_cloud_storage_client()
@@ -552,8 +736,6 @@ class Video:
         return structured_comments
 
         
-
-
 class Comment:
     """Handles operations related to comments."""
 

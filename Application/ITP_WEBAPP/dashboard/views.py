@@ -20,6 +20,7 @@ import pandas as pd
 from io import StringIO
 from django.core.paginator import Paginator
 import traceback
+import re
 
 # Helper Functions
 def isCoach(request):
@@ -37,6 +38,36 @@ def isAdmin(request):
 def fetch_all_students(coach_id):
     """Fetches all students associated with a coach."""
     return Coach.fetch_all_students(coach_id)
+
+def upload_single_video_helper(request, current_user_id, assignee_id):
+    """
+    Handles a single-file video upload and initiates asynchronous processing.
+    """
+    # Check for all possible file field names from the different forms
+    file = (request.FILES.get('videoDBFile_face') or
+            request.FILES.get('videoDBFile_dtl') or
+            request.FILES.get('videoFile_face') or
+            request.FILES.get('videoFile_dtl'))
+
+    if request.method == 'POST' and file:
+        title = file.name
+        video_type = request.POST.get('videoType', 'face-on') # Default to face-on
+
+        try:
+            Video.upload_video(
+                current_user_id=current_user_id,
+                assignee_id=str(assignee_id),
+                title=title,
+                video_type=video_type,
+                file=file,
+                upload_source="manual"
+            )
+            return True, "Video upload initiated successfully."
+        except Exception as e:
+            traceback.print_exc()
+            return False, f"Upload error: {str(e)}"
+    
+    return False, "No file or invalid request."
 
 # =============================================================================
 # 🏌️ CAMERA CONFIGURATION
@@ -84,7 +115,6 @@ def dashboard_dataSpace(request, id):
     if not is_logged_in(request):
         return redirect('login')
 
-    # Verify coach-student relationship if role is coach
     if isCoach(request) and not Coach.verify_coach_student_relationship(request.session['Id'], id):
         return redirect('home')
 
@@ -92,49 +122,154 @@ def dashboard_dataSpace(request, id):
     sort = request.GET.get('sort', 'earliest')
     tab = request.GET.get('tab', 'tab1')
 
-    # --- HANDLE POST REQUESTS (Deletion or Upload) ---
+    # --- MODIFIED: HANDLE POST REQUESTS (Deletion or Upload) ---
     if request.method == 'POST':
-        # Check if it's a delete request by looking for the 'video_ids' parameter
         if 'video_ids' in request.POST:
-            video_ids_to_delete = request.POST.get("video_ids", "").split(",")
-            # Filter out any empty strings that might result from splitting
-            video_ids_to_delete = [vid for vid in video_ids_to_delete if vid]
-
+            video_ids_to_delete = [vid for vid in request.POST.get("video_ids", "").split(",") if vid]
             if video_ids_to_delete:
-                # Call the model method to handle deletion from DB and GCS
-                deletion_result = Video.delete_videos(video_ids_to_delete)
-                print(f"Deletion result: {deletion_result}")
-                # You can add a success message here using Django's messaging framework if desired
-
-            # Redirect to the same page, preserving the user's view, sort, and tab settings
+                Video.delete_videos(video_ids_to_delete)
             query_params = request.GET.urlencode()
             redirect_url = reverse('dashboard_dataSpace', args=[id])
             return HttpResponseRedirect(f'{redirect_url}?{query_params if query_params else ""}')
 
-        # Otherwise, handle it as a video upload request
+        # --- Handle video uploads (single or dual) ---
         else:
-            student_id = User.find_user_by_id(ObjectId(id))['_id']
-            upload_video(request, student_id)
-            # Redirect after upload, preserving settings
+            video_type = request.POST.get('videoType')
+            current_user_id = request.session.get('Id')
+            student_doc = User.find_user_by_id(ObjectId(id))
+            assignee_id = str(student_doc['_id'])
+
+            if video_type == 'both':
+                # [MODIFIED] Use the correct names from dashboard_popupUploadModal.js
+                face_on_file = request.FILES.get('face_on_file')
+                dtl_file = request.FILES.get('dtl_file')
+                
+                if face_on_file and dtl_file:
+                    Video.upload_dual_videos(
+                        current_user_id=current_user_id,
+                        assignee_id=assignee_id,
+                        face_on_file=face_on_file,
+                        dtl_file=dtl_file
+                    )
+                    print("Dual video upload initiated successfully.")
+                else:
+                    print("Dual upload error: one or both files were missing.")
+            else:
+                success, message = upload_single_video_helper(request, current_user_id, assignee_id)
+                print(f"Single upload status: {message}")
+
             base = reverse('dashboard_dataSpace', args=[id])
             query = f'?tab={tab}&view={view}&sort={sort}'
             return HttpResponseRedirect(base + query)
 
     # --- HANDLE GET REQUESTS (Page Load) ---
     page_num = request.GET.get('page', 1)
-    
-    # Fetch user and student details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     student = user if not isCoach(request) else User.find_user_by_id(ObjectId(id))
-
-    # Fetch and sort videos
     student_id = student['_id']
-    video_list = Video.get_all_videos(student_id)
-    video_list = convert_objectids_to_str(video_list)
-
+    video_list = convert_objectids_to_str(Video.get_all_videos(student_id))
+    
     def parse_date(s):
         return datetime.strptime(s, "%H:%M %b %d, %Y")
 
+    def clean_title(title):
+        """Removes file extension and common type identifiers from a title string."""
+        if not isinstance(title, str):
+            return ""
+        # 1. Remove file extension (e.g., .mp4, .mov)
+        title_no_ext = re.sub(r'\.[a-z0-9]+$', '', title, flags=re.IGNORECASE)
+        # 2. Remove common type identifiers
+        title_cleaned = title_no_ext.replace('_face-on', '').replace('_down-the-line', '').replace('face-on', '').replace('down-the-line', '')
+        # 3. Strip leading/trailing spaces
+        return title_cleaned.strip()
+    
+    # --- [NEW] Group videos by session_id ---
+    grouped_video_list = []
+    processed_session_ids = set()
+
+    # Pass 1: Find all videos with session_ids and group them
+    session_videos = {} # {session_id: [video_doc, ...]}
+    for video in video_list:
+        session_id = video.get('session_id')
+        if session_id:
+            if session_id not in session_videos:
+                session_videos[session_id] = []
+            session_videos[session_id].append(video)
+
+    # Pass 2: Create combined entries for groups
+    for session_id, videos_in_group in session_videos.items():
+        if session_id in processed_session_ids:
+            continue
+        
+        # We only group if there's a pair (face-on and dtl)
+        if len(videos_in_group) >= 2:
+            face_on_video = next((v for v in videos_in_group if v.get('Type') == 'face-on'), None)
+            dtl_video = next((v for v in videos_in_group if v.get('Type') == 'down-the-line'), None)
+
+            # If we have both, create a combined entry
+            if face_on_video and dtl_video:
+                # Determine combined status
+                status = "Completed"
+                if face_on_video.get('Status') == 'Processing' or dtl_video.get('Status') == 'Processing':
+                    status = "Processing"
+                elif face_on_video.get('Status') == 'Failed' or dtl_video.get('Status') == 'Failed':
+                    status = "Failed"
+
+                # Use face-on video as the primary
+                combined_video = face_on_video.copy() # Start with face-on video's data
+                combined_video['Type'] = 'both'
+                combined_video['Status'] = status
+                # Use the *earlier* date
+                try:
+                    face_on_date = parse_date(face_on_video['DateUploaded'])
+                    dtl_date = parse_date(dtl_video['DateUploaded'])
+                    combined_video['DateUploaded'] = min(face_on_date, dtl_date).strftime("%H:%M %b %d, %Y")
+                except Exception:
+                    pass # Keep face-on date if parsing fails
+                
+                # Store the DTL video's ID for the results page
+                combined_video['dtl_video_id'] = dtl_video.get('id')
+                combined_video['dtl_rawVideoLink'] = dtl_video.get('rawVideoLink')
+                
+                # Use the face-on video's ID as the main 'id'
+                combined_video['id'] = face_on_video.get('id')
+                
+                # --- START MODIFIED TITLE LOGIC ---
+                fo_name = face_on_video.get('Title', 'FaceOn')
+                dtl_name = dtl_video.get('Title', 'DTL')
+                
+                # Apply the cleaning helper
+                fo_name_cleaned = clean_title(fo_name)
+                dtl_name_cleaned = clean_title(dtl_name)
+                
+                # Format the new title: "face on name & down the line name_session_id"
+                custom_title = f"{fo_name_cleaned} & {dtl_name_cleaned}_{session_id}"
+                combined_video['Title'] = custom_title
+                # --- END MODIFIED TITLE LOGIC ---
+                
+                grouped_video_list.append(combined_video)
+                processed_session_ids.add(session_id)
+            else:
+                # Not a valid pair, add them individually
+                for v in videos_in_group:
+                    grouped_video_list.append(v)
+                    processed_session_ids.add(session_id) # Mark as 'processed' to avoid re-adding
+        else:
+            # Only one video with this session_id, treat as individual
+            for v in videos_in_group:
+                grouped_video_list.append(v)
+                processed_session_ids.add(session_id)
+
+    # Pass 3: Add all non-session videos (session_id is None or "")
+    for video in video_list:
+        if not video.get('session_id'):
+            grouped_video_list.append(video)
+            
+    # Now, `grouped_video_list` replaces `video_list` for sorting and pagination
+    video_list = grouped_video_list # Overwrite video_list with our new grouped list
+    # --- [END NEW] ---
+
+    # ... (Sorting and filtering logic now operates on the grouped list) ...
     if sort == 'az':
         video_list.sort(key=lambda v: v['Title'].lower())
     elif sort == 'za':
@@ -144,36 +279,26 @@ def dashboard_dataSpace(request, id):
     else:
         video_list.sort(key=lambda v: parse_date(v['DateUploaded']))
 
-    # Separate videos by status for different tabs
     video_processing = [video for video in video_list if video.get('Status') == 'Processing']
     video_completed = [video for video in video_list if video.get('Status') == 'Completed']
-    video_failed = [video for video in video_list if video.get('Status') == 'Failed'] # NEW: Filter for failed videos
+    video_failed = [video for video in video_list if video.get('Status') == 'Failed']
 
-    # Paginate each list
     per_page = 4 if view == 'list' else 10
-    videos_page = Paginator(video_list, per_page).get_page(page_num)
-    completed_page = Paginator(video_completed, per_page).get_page(page_num)
-    processing_page = Paginator(video_processing, per_page).get_page(page_num)
-    failed_page = Paginator(video_failed, per_page).get_page(page_num) # NEW: Paginate failed videos
+    paginator_map = {
+        'tab1': Paginator(video_list, per_page),
+        'tab2': Paginator(video_completed, per_page),
+        'tab3': Paginator(video_processing, per_page),
+        'tab4': Paginator(video_failed, per_page)
+    }
+    page_obj = paginator_map.get(tab, Paginator(video_list, per_page)).get_page(page_num)
 
-    page_map = {'tab1': videos_page, 'tab2': completed_page, 'tab3': processing_page, 'tab4': failed_page} # NEW: Add 'tab4' for failed videos
-    page_obj = page_map.get(tab, videos_page)
-
-    # Render template
     return render(request, 'dashboard_dataSpace.html', {
-        'Role': user['Role'],
-        'Name': user['Name'],
-        'user_id': str(user['_id']),
-        'studentID': student_id,
-        'studentName': student['Name'],
-        'videos': videos_page,
-        'processing_video': processing_page,
-        'completed_video': completed_page,
-        'failed_video': failed_page, # NEW: Pass failed videos to the template
-        'sort': sort,
-        'view': view,
-        'tab': tab,
-        "page_obj": page_obj,
+        'Role': user['Role'], 'Name': user['Name'], 'user_id': str(user['_id']),
+        'studentID': student_id, 'studentName': student['Name'], 'videos': page_obj,
+        'processing_video': paginator_map['tab3'].get_page(page_num),
+        'completed_video': paginator_map['tab2'].get_page(page_num),
+        'failed_video': paginator_map['tab4'].get_page(page_num),
+        'sort': sort, 'view': view, 'tab': tab, "page_obj": page_obj,
     })
 
 def dashboard_videoFeed(request):
@@ -212,8 +337,36 @@ def dashboard_results(request, id, VideoId):
     # Fetch title of the raw video
     all_videos = Video.get_all_videos(student['_id'])
     video_item = next((v for v in all_videos if v['id'] == VideoId), None)
+    
+    if not video_item:
+        # Handle video not found, perhaps redirect or show error
+        return redirect('home') # Or render an error page
+
     video_title = video_item.get('Title', 'Untitled Video') if video_item else 'Untitled Video'
     
+    # --- [NEW] Check for DTL pair ---
+    dtl_video_url = None
+    dtl_video_title = None
+    session_id = video_item.get('session_id')
+    video_type_for_template = video_item.get('Type') # Default to original type
+    
+    if session_id and (video_item.get('Type') == 'face-on' or video_item.get('Type') == 'both'):
+        # Find the DTL partner
+        dtl_video_item = next((
+            v for v in all_videos 
+            if v['id'] != VideoId 
+            and v.get('session_id') == session_id 
+            and v.get('Type') == 'down-the-line'
+        ), None)
+        
+        if dtl_video_item:
+            # We found the pair. Get its raw video link.
+            dtl_video_url = dtl_video_item.get('rawVideoLink')
+            dtl_video_title = dtl_video_item.get('Title', 'Down The Line Video')
+            # Set the main video type to 'both' for the template
+            video_type_for_template = 'both'
+    # --- [END NEW] ---
+
     video_url = Video.get_video_url(VideoId)
     csv_url = Video.get_csv_url(VideoId)
     
@@ -222,10 +375,10 @@ def dashboard_results(request, id, VideoId):
     pose_class_images_url = video_status_info.get('poseClassImagesLink') if video_status_info else None
 
     # Fetch and process the CSV
-    response = requests.get(csv_url)
+    response = requests.get(csv_url) if csv_url else None # [MODIFIED] Check if csv_url exists
     column_status_mapping = {}
 
-    if response.status_code == 200:
+    if response and response.status_code == 200:
         csv_data = response.content.decode('utf-8')
         df = pd.read_csv(StringIO(csv_data))
         
@@ -247,8 +400,6 @@ def dashboard_results(request, id, VideoId):
         full_data = []
 
     # Fetch video comments with hierarchical structure using the updated Video.get_all_video_comments
-    # This method now returns a list of top-level comments, each with a 'replies' list,
-    # and all necessary formatting (id conversion, date formatting, user name, and x_pos/y_pos for top-level)
     comments_data = Video.get_all_video_comments(VideoId, request.session['Id'])
     
     # --- IMPORTANT FIX: Convert all ObjectIds in comments_data to strings ---
@@ -264,14 +415,17 @@ def dashboard_results(request, id, VideoId):
         'Name': user['Name'],
         'studentID': id,
         'videoId': VideoId,
-        'comments': processed_comments_data, # Pass the processed data to the template
+        'comments': processed_comments_data,
         'video_title': video_title,
         'video_url': video_url,
         'columns': display_columns,
         'full_data': full_data,
         'column_status_mapping': column_status_mapping,
-        'current_user_name': current_user_name, # ADDED THIS LINE
-        'pose_class_images_url': pose_class_images_url, # NEW: Pass the pose class images URL
+        'current_user_name': current_user_name,
+        'pose_class_images_url': pose_class_images_url,
+        'video_type': video_type_for_template, # This will now be 'both' if a pair was found
+        'dtl_video_url': dtl_video_url,
+        'dtl_video_title': dtl_video_title
     })
 
 # Add these new AJAX views to handle comments
@@ -715,30 +869,44 @@ def dashboard_compareSwings(request, id):
 
 def dashboard_Coach(request):
     """Displays the Coach dashboard with associated students."""
-    if not is_logged_in(request):
-        return redirect('login')
-
-    if not isCoach(request):
+    if not is_logged_in(request) or not isCoach(request):
         return redirect('home')
 
     view = request.GET.get('view', 'list')
-    user = User.find_user_by_id(ObjectId(request.session['Id']))
-    students = fetch_all_students(request.session['Id'])
+    user = convert_objectids_to_str(User.find_user_by_id(ObjectId(request.session['Id'])))
+    students = convert_objectids_to_str(fetch_all_students(request.session['Id']))
 
-    # Convert ObjectIds in user and students data
-    processed_user = convert_objectids_to_str(user)
-    processed_students = convert_objectids_to_str(students)
-
-
+    # --- MODIFIED: Handle POST requests for uploads from the coach dashboard ---
     if request.method == 'POST':
-        upload_video(request)
+        video_type = request.POST.get('videoType')
+        current_user_id = request.session.get('Id')
+        assignee_id = request.POST.get('student_id')
+
+        if not assignee_id:
+            print("Coach upload error: No student was selected.")
+            return HttpResponseRedirect(reverse('home'))
+
+        if video_type == 'both':
+            face_on_file = request.FILES.get('face_on_file')
+            dtl_file = request.FILES.get('dtl_file')
+            if face_on_file and dtl_file:
+                Video.upload_dual_videos(
+                    current_user_id=current_user_id,
+                    assignee_id=assignee_id,
+                    face_on_file=face_on_file,
+                    dtl_file=dtl_file
+                )
+                print(f"Dual video upload initiated by coach {current_user_id} for student {assignee_id}.")
+            else:
+                print("Coach dual upload error: one or both files were missing.")
+        else:
+            success, message = upload_single_video_helper(request, current_user_id, assignee_id)
+            print(f"Coach single upload status: {message}")
+
         return HttpResponseRedirect(reverse('home'))
 
     return render(request, 'dashboard_coach.html', {
-        'Role': processed_user['Role'],
-        'Name': processed_user['Name'],
-        'students': processed_students,
-        'view': view,
+        'Role': user['Role'], 'Name': user['Name'], 'students': students, 'view': view,
     })
 
 def dashboard_admin(request):
