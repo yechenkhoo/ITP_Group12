@@ -482,10 +482,6 @@ class Video:
             # Determine output bucket and base path based on the source bucket
             if source_bucket_name == 'golf-swing-dtl':
                 # --- [NEW] DTL videos do not get processed by ML API ---
-                # This logic is triggered by _async_upload_single_file_task
-                # We can just update the status to Completed here.
-                # The GCS-triggered 'main.py' also has this logic,
-                # but this handles the web app's async flow.
                 print(f"Skipping ML API call for DTL video: {file_path}")
                 Videos_Collection.update_one(
                     {'_id': ObjectId(video_id)},
