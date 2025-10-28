@@ -35,6 +35,42 @@ def isAdmin(request):
     """Checks if the user is an admin."""
     return request.session.get('Role') in ['admin']
 
+# --- [FIX] ADDED THE MISSING process_csv_data FUNCTION ---
+def process_csv_data(csv_url):
+    """
+    Fetches CSV data from a URL, processes it into a list of dictionaries,
+    and returns the data and column names.
+    """
+    if not csv_url:
+        return [], []
+    
+    try:
+        response = requests.get(csv_url)
+        if response.status_code == 200:
+            # Use StringIO to treat the string content as a file
+            csv_data = StringIO(response.content.decode('utf-8'))
+            df = pd.read_csv(csv_data)
+            
+            # Handle empty CSV
+            if df.empty:
+                return [], []
+                
+            # Get column names
+            display_columns = list(df.columns)
+            
+            # Convert DataFrame to list of dictionaries
+            full_data = df.to_dict('records')
+            
+            return full_data, display_columns
+        else:
+            print(f"Failed to fetch CSV data from {csv_url}. Status code: {response.status_code}")
+            return [], []
+    except Exception as e:
+        print(f"Error processing CSV data from {csv_url}: {e}")
+        traceback.print_exc()
+        return [], []
+# --- [END FIX] ---
+
 def fetch_all_students(coach_id):
     """Fetches all students associated with a coach."""
     return Coach.fetch_all_students(coach_id)
@@ -318,7 +354,10 @@ def dashboard_videoFeed(request):
     })
 
 def dashboard_results(request, id, VideoId):
-    """Displays the results dashboard."""
+    """
+    Displays the results dashboard. Modified to handle conditional single/dual video display
+    and combined data tables for dual uploads.
+    """
     if not is_logged_in(request):
         return redirect('login')
 
@@ -329,103 +368,112 @@ def dashboard_results(request, id, VideoId):
     # Fetch user and student details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     student = user if not isCoach(request) else User.find_user_by_id(ObjectId(id))
-
-    # Determine current_user_name to pass to the template
-    # Prioritize username from session, fallback to user's 'Name' field
     current_user_name = request.session.get('Username', user.get('Name', ''))
 
-    # Fetch title of the raw video
     all_videos = Video.get_all_videos(student['_id'])
     video_item = next((v for v in all_videos if v['id'] == VideoId), None)
     
     if not video_item:
-        # Handle video not found, perhaps redirect or show error
-        return redirect('home') # Or render an error page
+        return redirect('home')
 
-    video_title = video_item.get('Title', 'Untitled Video') if video_item else 'Untitled Video'
+    # --- Video 1: Primary Video (Face On or Single) ---
+    video1_id = VideoId
+    video1_title = video_item.get('Title', 'Face On Video')
     
-    # --- [NEW] Check for DTL pair ---
-    dtl_video_url = None
-    dtl_video_title = None
+    # --- FIX 1: Use rawVideoLink as fallback for video1_url (Face On) ---
+    video1_processed_url = Video.get_video_url(video1_id)
+    video1_raw_url = video_item.get('rawVideoLink') # Get raw link directly from the document
+    video1_url = video1_processed_url if video1_processed_url else video1_raw_url
+    
+    video1_csv_url = Video.get_csv_url(video1_id)
+    
+    # --- Video 2: Secondary Video (DTL) ---
+    video2_title = None
+    video2_url = None
+    video2_csv_url = None
+    is_dual_upload = False
+    
+    # Check for DTL pair
     session_id = video_item.get('session_id')
-    video_type_for_template = video_item.get('Type') # Default to original type
     
+    # We check if it's part of a session and if the primary video is Face On or the consolidated 'both' type
     if session_id and (video_item.get('Type') == 'face-on' or video_item.get('Type') == 'both'):
-        # Find the DTL partner
         dtl_video_item = next((
             v for v in all_videos 
-            if v['id'] != VideoId 
+            if v['id'] != video1_id
             and v.get('session_id') == session_id 
             and v.get('Type') == 'down-the-line'
         ), None)
         
         if dtl_video_item:
-            # We found the pair. Get its raw video link.
-            dtl_video_url = dtl_video_item.get('rawVideoLink')
-            dtl_video_title = dtl_video_item.get('Title', 'Down The Line Video')
-            # Set the main video type to 'both' for the template
-            video_type_for_template = 'both'
-    # --- [END NEW] ---
+            is_dual_upload = True
+            video2_id = dtl_video_item['id']
+            video2_csv_url = Video.get_csv_url(video2_id)
+            video2_title = dtl_video_item.get('Title', 'Down The Line Video')
 
-    video_url = Video.get_video_url(VideoId)
-    csv_url = Video.get_csv_url(VideoId)
+            # --- FIX 2: Retrieve rawVideoLink directly from the DTL document as fallback ---
+            processed_url = Video.get_video_url(video2_id) # Get the processed URL for DTL
+            raw_url = dtl_video_item.get('rawVideoLink') # Get raw link directly from the DTL document
+            video2_url = processed_url if processed_url else raw_url
+            # -----------------------------------------------------------------------------
+
+    # --- Process CSV Data ---
+    video1_full_data, display_columns = process_csv_data(video1_csv_url)
+    video2_full_data, _ = process_csv_data(video2_csv_url) if is_dual_upload else ([], [])
     
-    # NEW: Fetch the pose class images URL
-    video_status_info = Video.get_video_status(VideoId)
+    # --- [NEW] Combine data for the table if it's a dual upload ---
+    if is_dual_upload:
+        combined_table_data = video1_full_data + video2_full_data
+    else:
+        combined_table_data = video1_full_data
+    
+    # Determine column status mapping from Video 1 (primary data source)
+    column_status_mapping = {}
+    for column in display_columns:
+        if "Status" in column:
+            corresponding_column = column.replace(" Status", "")
+            column_status_mapping[corresponding_column] = column
+    
+    # Fetch pose classification image URL (from primary video)
+    video_status_info = Video.get_video_status(video1_id)
     pose_class_images_url = video_status_info.get('poseClassImagesLink') if video_status_info else None
 
-    # Fetch and process the CSV
-    response = requests.get(csv_url) if csv_url else None # [MODIFIED] Check if csv_url exists
-    column_status_mapping = {}
-
-    if response and response.status_code == 200:
-        csv_data = response.content.decode('utf-8')
-        df = pd.read_csv(StringIO(csv_data))
-        
-        # Get all column names
-        all_columns = df.columns.tolist()
-        
-        # Display all columns from CSV
-        display_columns = all_columns
-        
-        # All the csv data (converted to list of dicts for JSON serialization)
-        full_data = df.to_dict('records')
-        
-        for column in all_columns:
-            if "Status" in column:
-                corresponding_column = column.replace(" Status", "")
-                column_status_mapping[corresponding_column] = column
-    else:
-        display_columns = []
-        full_data = []
-
-    # Fetch video comments with hierarchical structure using the updated Video.get_all_video_comments
-    comments_data = Video.get_all_video_comments(VideoId, request.session['Id'])
-    
-    # --- IMPORTANT FIX: Convert all ObjectIds in comments_data to strings ---
+    # Fetch and process comments
+    comments_data = Video.get_all_video_comments(video1_id, request.session['Id'])
     processed_comments_data = convert_objectids_to_str(comments_data)
 
-    print(f"DEBUG: comments_data (from model, structured): {comments_data}")
-    print(f"DEBUG: Type of comments_data: {type(comments_data)}")
-    print(f"DEBUG: processed_comments_data (after conversion): {processed_comments_data}")
 
-
+    # Final Context
     return render(request, 'dashboard_results.html', {
         'Role': user['Role'],
         'Name': user['Name'],
         'studentID': id,
-        'videoId': VideoId,
+        'videoId': video1_id,
         'comments': processed_comments_data,
-        'video_title': video_title,
-        'video_url': video_url,
-        'columns': display_columns,
-        'full_data': full_data,
-        'column_status_mapping': column_status_mapping,
         'current_user_name': current_user_name,
+        
+        # --- Conditional View Data ---
+        'is_dual_upload': is_dual_upload, # Flag for template switch
+        
+        # Video 1 Data (Primary Source / Left Video)
+        'video1_title': video1_title,
+        'video1_url': video1_url,
+        'video1_full_data': json.dumps(video1_full_data), # JSON for JS (if needed)
+        
+        # Video 2 Data (DTL / Right Video)
+        'video2_title': video2_title,
+        'video2_url': video2_url,
+        'video2_full_data': json.dumps(video2_full_data), # JSON for JS (if needed)
+        
+        # Table/Chart Data
+        'columns': display_columns, # From Video 1, assumed same for Video 2
+        'column_status_mapping': column_status_mapping, # From Video 1
+        'full_data': combined_table_data, # <-- **THE KEY CHANGE** (used by table)
+        
+        # Single Video Fallback Data (for the 'else' branch)
+        'video_title': video1_title, # (Used by 'else' and PDF)
+        'video_url': video1_url, # (Used by 'else')
         'pose_class_images_url': pose_class_images_url,
-        'video_type': video_type_for_template, # This will now be 'both' if a pair was found
-        'dtl_video_url': dtl_video_url,
-        'dtl_video_title': dtl_video_title
     })
 
 # Add these new AJAX views to handle comments
