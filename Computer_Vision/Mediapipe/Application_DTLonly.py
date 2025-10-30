@@ -15,20 +15,20 @@ output_FO_directory = 'DTL_frames/out'
 def parse_frame_name(frame_name):
     base = os.path.splitext(frame_name)[0]  # remove .jpg
     parts = base.split("_")
-    camera_angle = "FO"
+    camera_angle = "DTL"
     frame_number = parts[-1]
     person = base.replace(frame_number, "")[:-1]
     
-    frame_path, position = find_frame_path_and_position(frame_name, output_FO_directory)
-    return person, camera_angle, frame_number, position
+    # frame_path, position = find_frame_path_and_position(frame_name, output_FO_directory)
+    return person, camera_angle, frame_number
 
-def find_frame_path_and_position(frame_name, base_dir):
-    for pos in [f"P{i}" for i in range(1, 11)]:
-        folder = os.path.join(base_dir, pos)
-        frame_path = os.path.join(folder, frame_name)
-        if os.path.isfile(frame_path):
-            return frame_path, pos
-    return None, None 
+# def find_frame_path_and_position(frame_name, base_dir):
+#     for pos in [f"P{i}" for i in range(1, 11)]:
+#         folder = os.path.join(base_dir, pos)
+#         frame_path = os.path.join(folder, frame_name)
+#         if os.path.isfile(frame_path):
+#             return frame_path, pos
+#     return None, None 
 
 os.makedirs('DTL_frames/landmarks', exist_ok=True)
 extract_landmarks(output_FO_directory, 'DTL_frames/landmarks/DTL_landmarks.csv')
@@ -41,9 +41,16 @@ X = data.drop(columns=["Frame_Name", "Image_Path", "Pose_Class"], errors="ignore
 pose_labels = ["P1", "P2", "P3", "P4", "P5", "P6", "P7", "P8", "P9", "P10"]
 
 top_frames_list = []
-data[["Person", "Camera_Angle", "Frame_Number", "Position"]] = data["Frame_Name"].apply(
+data[["Person", "Camera_Angle", "Frame_Number"]] = data["Frame_Name"].apply(
     lambda x: pd.Series(parse_frame_name(x))
 )
+
+# MERGE WITH PRIOR LABELS
+map_csv = "DTL_frames/_map_to_labels.csv"
+mapping = pd.read_csv(map_csv)
+label_map = dict(zip(mapping["filename"], mapping["label"]))
+data["Position"] = data["Frame_Name"].map(label_map)
+##################### 
 
 if "NOSE_X" in data.columns:
     before_count = len(data)

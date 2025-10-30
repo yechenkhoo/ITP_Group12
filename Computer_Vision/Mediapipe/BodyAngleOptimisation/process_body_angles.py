@@ -11,7 +11,11 @@ from angle_utils import (
     calculate_and_draw_shoulder_tilt,
     calculate_and_draw_hip_tilt,
     calculate_and_draw_shoulder_rotation,
-    calculate_and_draw_hip_rotation
+    calculate_and_draw_hip_rotation,
+    calculate_and_draw_forward_tilt_dtl,
+    calculate_and_draw_forward_tilt_faceon,
+    calculate_and_draw_lead_arm_angle,
+    calculate_and_draw_knee_bend
 )
 
 def calculate_rotation_angle(p1, p2):
@@ -60,22 +64,12 @@ def process_frame(row):
             print(f"[WARN] Missing landmark {name} for {frame_name}")
             return row
 
+
     # --- Compute angles ---
     pose_class = row.get("Position")
+
+    # --- Draw pose skeleton ---
     annotated_img = img.copy()
-
-    shoulder_tilt_deg = calculate_and_draw_shoulder_tilt(annotated_img, lm_list, pose_class)
-    hip_tilt_deg = calculate_and_draw_hip_tilt(annotated_img, lm_list, pose_class)
-
-    row["shoulder_tilt_deg"] = shoulder_tilt_deg
-    row["hip_tilt_deg"] = hip_tilt_deg
-
-    shoulder_rotation_deg = calculate_and_draw_shoulder_rotation(annotated_img, lm_list, pose_class)
-    hip_rotation_deg = calculate_and_draw_hip_rotation(annotated_img, lm_list, pose_class)
-    row["shoulder_rotation_deg"] = shoulder_rotation_deg
-    row["hip_rotation_deg"] = hip_rotation_deg
-
-    # --- Draw pose skeleton (optional; uses only landmark positions) ---
     for connection in mp_pose.POSE_CONNECTIONS:
         start_idx, end_idx = connection
         if start_idx < len(lm_list) and end_idx < len(lm_list):
@@ -92,6 +86,32 @@ def process_frame(row):
             -1
         )
 
+    # SHOULDER AND HIP TILT
+    shoulder_tilt_deg = calculate_and_draw_shoulder_tilt(annotated_img, lm_list, pose_class)
+    hip_tilt_deg = calculate_and_draw_hip_tilt(annotated_img, lm_list, pose_class)
+    row["shoulder_tilt_deg"] = shoulder_tilt_deg
+    row["hip_tilt_deg"] = hip_tilt_deg
+
+    # SHOULDER AND HIP ROTATION
+    shoulder_rotation_deg = calculate_and_draw_shoulder_rotation(annotated_img, lm_list, pose_class)
+    hip_rotation_deg = calculate_and_draw_hip_rotation(annotated_img, lm_list, pose_class)
+    row["shoulder_rotation_deg"] = shoulder_rotation_deg
+    row["hip_rotation_deg"] = hip_rotation_deg
+
+    # OTHER MEASUREMENTS
+    lead_arm_deg = calculate_and_draw_lead_arm_angle(annotated_img, lm_list, pose_class)
+    row["lead_arm_deg"] = lead_arm_deg
+
+    knee_bend_deg = calculate_and_draw_knee_bend(annotated_img, lm_list, pose_class)
+    row["knee_bend_deg"] = knee_bend_deg
+
+
+    if row["Camera_Angle"] == "DTL":
+        forward_tilt_deg = calculate_and_draw_forward_tilt_dtl(annotated_img, lm_list, pose_class)
+    elif row["Camera_Angle"] == "FO":
+        forward_tilt_deg = calculate_and_draw_forward_tilt_faceon(annotated_img, lm_list, pose_class)
+    row["forward_tilt_deg"] = forward_tilt_deg
+
     # --- Label angles ---
     cv2.putText(annotated_img, f"Shoulder Tilt: {shoulder_tilt_deg:.1f}",
                 (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8, (0, 0, 255), 2)
@@ -107,11 +127,8 @@ def process_frame(row):
     return row
 
 # username = "Grant_"
-angles = ["DTL"]
-ROOT_FOLDER = "DTL_frames"
+angles = ["FO", "DTL"]
 
-OUT_IMG_DIR = f"{ROOT_FOLDER}/output_visuals"
-os.makedirs(OUT_IMG_DIR, exist_ok=True)
 mp_pose = mp.solutions.pose
 pose_draw = mp.solutions.drawing_utils
 
@@ -121,6 +138,13 @@ for angle in angles:
     # IMAGES_DIR = f"{angle}/output/{username}{angle}"
     # OUT_CSV = f"BodyAngleOptimisation/{username}{angle}_unnormalized_with_angles.csv"
 
+    if angle == "FO":
+        ROOT_FOLDER = "FO_Videos"
+    elif angle == "DTL":
+        ROOT_FOLDER = "DTL_Frames"
+
+    OUT_IMG_DIR = f"{ROOT_FOLDER}/output_visuals"
+    os.makedirs(OUT_IMG_DIR, exist_ok=True)
     CSV_PATH = f"{ROOT_FOLDER}/landmarks/{angle}_landmarks_best_frames.csv"
     UNNORMALISED_PATH = f"{ROOT_FOLDER}/landmarks/{angle}_landmarks_unnormalised.csv"
     IMAGES_DIR = f"{ROOT_FOLDER}/out"
@@ -146,7 +170,7 @@ for angle in angles:
 
     keep_cols = [
     "Frame_Name", "Person", "Camera_Angle", "Frame_Number", "Position",
-    "shoulder_tilt_deg", "hip_tilt_deg", "shoulder_rotation_deg", "hip_rotation_deg"
+    "shoulder_tilt_deg", "hip_tilt_deg", "shoulder_rotation_deg", "hip_rotation_deg", "forward_tilt_deg", "lead_arm_deg", "knee_bend_deg"
     ]
     df_clean_out = df_out[keep_cols]
     df_clean_out.to_csv(OUT_CSV.replace(".csv", "_clean.csv"))
