@@ -1,4 +1,4 @@
-# YC modified Code 25/10/2025
+# Seeleng Modified Code 28/10/2025
 
 import functions_framework
 import requests
@@ -195,13 +195,17 @@ def process_uploaded_video(cloud_event):
             
             try:
                 # Look for existing video record
+                # [MODIFIED] Query by title first, as UploadedBy might not be found
+                # from manual upload filenames
                 query_filter = {"Title": video_filename}
-                
-                if uploaded_by is not None:
-                    query_filter["UploadedBy"] = uploaded_by
                 
                 existing = collection.find_one(query_filter)
                 
+                # If not found by Title, try with UploadedBy if available
+                if not existing and uploaded_by is not None:
+                    query_filter["UploadedBy"] = uploaded_by
+                    existing = collection.find_one(query_filter)
+
                 if existing:
                     print(f"Found existing down-the-line record: {existing['_id']}")
                     
@@ -211,9 +215,13 @@ def process_uploaded_video(cloud_event):
                         "Status": "Completed",
                         "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "originalVideoPath": file_name,
-                        "session_id": session_id
+                        # "session_id": session_id  <-- [REMOVED]
                     }
                     
+                    # [NEW] Only update session_id if it was found in the filename
+                    if session_id is not None:
+                        update_fields["session_id"] = session_id
+
                     if assignee is not None:
                         update_fields["Assignee"] = assignee
                     
@@ -236,7 +244,7 @@ def process_uploaded_video(cloud_event):
                         "Assignee": assignee,
                         "rawVideoLink": raw_video_link,
                         "originalVideoPath": file_name,
-                        "session_id": session_id
+                        "session_id": session_id # This is fine (will be None for manual uploads)
                     }
                     
                     insert_result = collection.insert_one(new_doc)
@@ -288,21 +296,21 @@ def process_uploaded_video(cloud_event):
             try:
                 print(f"Starting MongoDB operations...")
                 
-                # Look for existing video record
+                # [MODIFIED] Query by title first
                 query_filter = {"Title": video_filename}
+                existing = collection.find_one(query_filter)
                 
-                # Add UploadedBy to query only if we have a valid user
-                if uploaded_by is not None:
+                if not existing and uploaded_by is not None:
                     query_filter["UploadedBy"] = uploaded_by
                     print(f"Searching for existing video:")
                     print(f"   Title: {video_filename}")
                     print(f"   UploadedBy: {uploaded_by}")
-                else:
+                    existing = collection.find_one(query_filter)
+                elif not existing:
                     print(f"Searching for existing video:")
                     print(f"   Title: {video_filename}")
                     print(f"   No UploadedBy filter (user not found)")
                 
-                existing = collection.find_one(query_filter)
 
                 if existing:
                     print(f"Found existing record: {existing['_id']}")
@@ -318,9 +326,13 @@ def process_uploaded_video(cloud_event):
                         "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "originalVideoPath": file_name,
                         "processedTimestamp": datetime.now().isoformat(),
-                        "session_id": session_id
+                        # "session_id": session_id <-- [REMOVED]
                     }
                     
+                    # [NEW] Only update session_id if it was found in the filename
+                    if session_id is not None:
+                        update_fields["session_id"] = session_id
+
                     # Add assignee if we have new info
                     if assignee is not None:
                         update_fields["Assignee"] = assignee
@@ -356,7 +368,7 @@ def process_uploaded_video(cloud_event):
                         "rawVideoLink": raw_video_link,
                         "originalVideoPath": file_name,
                         "processedTimestamp": datetime.now().isoformat(),
-                        "session_id": session_id
+                        "session_id": session_id # This is fine (will be None)
                     }
                     
                     print(f"Inserting new document:")
@@ -382,12 +394,13 @@ def process_uploaded_video(cloud_event):
             try:
                 print(f"Handling failed API call...")
                 
-                # Look for existing record to update with error
+                # [MODIFIED] Query by title first
                 query_filter = {"Title": video_filename}
-                if uploaded_by is not None:
-                    query_filter["UploadedBy"] = uploaded_by
-
                 existing = collection.find_one(query_filter)
+                if not existing and uploaded_by is not None:
+                    query_filter["UploadedBy"] = uploaded_by
+                    existing = collection.find_one(query_filter)
+
                 
                 if existing:
                     # Include raw video link even in failed records
@@ -398,9 +411,13 @@ def process_uploaded_video(cloud_event):
                         "ErrorDetails": response.text[:500] if response.text else "Unknown error",
                         "originalVideoPath": file_name,
                         "rawVideoLink": raw_video_link,
-                        "session_id": session_id
+                        # "session_id": session_id <-- [REMOVED]
                     }
                     
+                    # [NEW] Only update session_id if it was found in the filename
+                    if session_id is not None:
+                        update_fields["session_id"] = session_id
+                        
                     collection.update_one(
                         {"_id": existing["_id"]},
                         {"$set": update_fields}
@@ -419,7 +436,7 @@ def process_uploaded_video(cloud_event):
                         "Assignee": assignee,
                         "originalVideoPath": file_name,
                         "rawVideoLink": raw_video_link,
-                        "session_id": session_id
+                        "session_id": session_id # This is fine (will be None)
                     }
                     collection.insert_one(new_doc)
                     print(f"Inserted failed record for {video_filename}")
@@ -452,7 +469,9 @@ def process_uploaded_video(cloud_event):
             except Exception:
                 pass
             
+            # [MODIFIED] Query by title first
             existing = collection.find_one({"Title": video_filename})
+            
             if existing:
                 update_fields = {
                     "Status": "Failed",
@@ -460,8 +479,13 @@ def process_uploaded_video(cloud_event):
                     "ErrorDetails": str(e),
                     "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
                     "rawVideoLink": raw_video_link,
-                    "session_id": network_session_id
+                    # "session_id": network_session_id <-- [REMOVED]
                 }
+                
+                # [NEW] Only update session_id if found
+                if network_session_id is not None:
+                    update_fields["session_id"] = network_session_id
+
                 collection.update_one(
                     {"_id": existing["_id"]},
                     {"$set": update_fields}
@@ -478,7 +502,7 @@ def process_uploaded_video(cloud_event):
                     "ErrorDetails": str(e),
                     "originalVideoPath": file_name,
                     "rawVideoLink": raw_video_link,
-                    "session_id": network_session_id
+                    "session_id": network_session_id # This is fine
                 }
                 collection.insert_one(new_doc)
                 print(f"Inserted network error record for {video_filename}")
