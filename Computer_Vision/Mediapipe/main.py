@@ -17,6 +17,9 @@ from bson import ObjectId
 import ffmpeg
 import traceback
 
+
+
+
 app = Flask(__name__)
 
 # Mediapipe setup
@@ -170,46 +173,6 @@ def is_next_class_valid(current_class_index, previous_class_index):
         return True
     return False
 
-# --- sy new code ---
-# function to save top 10 frames
-def save_best_pose_frames(predictions, output_path):
-    best_frames = {}
-    
-    for prediction in predictions:
-        pose_class = prediction['predicted_class']
-        confidence = prediction['confidence']
-        
-        if pose_class == 'Unknown Pose':
-            continue
-            
-        if pose_class not in best_frames or confidence > best_frames[pose_class]['confidence']:
-            best_frames[pose_class] = prediction
-    
-    # write to csv file
-    with open(output_path, mode='w', newline='') as csv_file:
-        csv_writer = csv.writer(csv_file)
-        csv_writer.writerow(['Frame', 'Predicted Class', 'Confidence', 'Video Time(s)', 
-                           'Shoulder Tilt', 'Hip Tilt', 'Shoulder Tilt Status', 
-                           'Hip Tilt Status', 'Overall Status'])
-        
-        for pose_class in class_names:
-            if pose_class in best_frames:
-                frame_data = best_frames[pose_class]
-                csv_writer.writerow([
-                    frame_data['frame'],
-                    frame_data['predicted_class'],
-                    frame_data['confidence'],
-                    frame_data['video_time'],
-                    frame_data['shoulder_tilt_angle'],
-                    frame_data['hip_tilt_angle'],
-                    frame_data['shoulder_tilt_status'],
-                    frame_data['hip_tilt_status'],
-                    frame_data['overall_status']
-                ])
-    
-    return best_frames
-# --- end ---
-
 # Pose processing route
 @app.route('/process-video', methods=['POST'])
 def process_video():
@@ -234,7 +197,12 @@ def process_video():
                 "shoulder_tilt_status": [], "hip_tilt_status": [], "overall_status": []}
             for pose in class_names
         }
-        first_instance_added = {pose: False for pose in class_names}
+
+        # first_instance_added = {pose: False for pose in class_names}
+        best_pose_frames = {
+            pose: {'confidence': 0, 'frame': None} for pose in class_names
+        }
+
         previous_class_index = -1
 
         # Extract MongoDB update fields from the request
@@ -287,6 +255,7 @@ def process_video():
 
             predictions = []
             frame_count = 0
+
             consecutive_class_buffer = []
 
             # Process video frame by frame
@@ -334,8 +303,6 @@ def process_video():
                     prediction = model.predict(pose_landmarks)
                     current_class_index = np.argmax(prediction)
 
-                    # consecutive_class_buffer = []
-
                     # --- Stabilisation logic: accept if 3 consecutive predictions ---
                     consecutive_class_buffer.append(current_class_index)
                     if len(consecutive_class_buffer) > 3:
@@ -362,34 +329,47 @@ def process_video():
                     # Updated logic to handle class index validity
                     # if previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index):
                     if accept_transition:
-                        if not first_instance_added[pose_class]:
-                            # --- NEW: CAPTURE AND UPLOAD THUMBNAIL ---
-                            try:
-                                # Create a unique local path for the thumbnail
-                                local_thumbnail_path = f"/tmp/thumb_{video_id}_{pose_class}.jpg"
-                                # GCS path for the thumbnail
-                                gcs_thumbnail_path = f"poseClassImages/{video_id}/{pose_class}.jpg"
+                        # if not first_instance_added[pose_class]:
+                        #     # --- NEW: CAPTURE AND UPLOAD THUMBNAIL ---
+                        #     try:
+                        #         # Create a unique local path for the thumbnail
+                        #         local_thumbnail_path = f"/tmp/thumb_{video_id}_{pose_class}.jpg"
+                        #         # GCS path for the thumbnail
+                        #         gcs_thumbnail_path = f"poseClassImages/{video_id}/{pose_class}.jpg"
                                 
-                                # Save the frame as a JPEG
-                                cv2.imwrite(local_thumbnail_path, img)
+                        #         # Save the frame as a JPEG
+                        #         cv2.imwrite(local_thumbnail_path, img)
                                 
-                                # Upload to GCS
-                                thumbnail_url = upload_blob(bucket_name, local_thumbnail_path, gcs_thumbnail_path)
+                        #         # Upload to GCS
+                        #         thumbnail_url = upload_blob(bucket_name, local_thumbnail_path, gcs_thumbnail_path)
                                 
-                                # Store the URL
-                                pose_thumbnails[pose_class] = thumbnail_url
-                                temp_thumbnail_files.append(local_thumbnail_path)
-                            except Exception as e:
-                                print(f"Error saving or uploading thumbnail for {pose_class}: {e}")
-                            # --- END NEW ---
+                        #         # Store the URL
+                        #         pose_thumbnails[pose_class] = thumbnail_url
+                        #         temp_thumbnail_files.append(local_thumbnail_path)
+                        #     except Exception as e:
+                        #         print(f"Error saving or uploading thumbnail for {pose_class}: {e}")
+                        #     # --- END NEW ---
 
-                            pose_class_angles[pose_class]["shoulder_tilt"].append(shoulder_tilt_angle)
-                            pose_class_angles[pose_class]["hip_tilt"].append(hip_tilt_angle)
-                            pose_class_angles[pose_class]["time_frame"].append(video_time)
-                            pose_class_angles[pose_class]["shoulder_tilt_status"].append(shoulder_tilt_status)
-                            pose_class_angles[pose_class]["hip_tilt_status"].append(hip_tilt_status)
-                            pose_class_angles[pose_class]['overall_status'].append(overall_status)
-                            first_instance_added[pose_class] = True
+                        #     pose_class_angles[pose_class]["shoulder_tilt"].append(shoulder_tilt_angle)
+                        #     pose_class_angles[pose_class]["hip_tilt"].append(hip_tilt_angle)
+                        #     pose_class_angles[pose_class]["time_frame"].append(video_time)
+                        #     pose_class_angles[pose_class]["shoulder_tilt_status"].append(shoulder_tilt_status)
+                        #     pose_class_angles[pose_class]["hip_tilt_status"].append(hip_tilt_status)
+                        #     pose_class_angles[pose_class]['overall_status'].append(overall_status)
+                        #     first_instance_added[pose_class] = True
+
+                        if confidence > best_pose_frames[pose_class]['confidence']:
+                            best_pose_frames[pose_class]['confidence'] = confidence
+                            best_pose_frames[pose_class]['frame'] = img.copy()
+                            best_pose_frames[pose_class]['data'] = {
+                                "shoulder_tilt": shoulder_tilt_angle,
+                                "hip_tilt": hip_tilt_angle,
+                                "time_frame": video_time,
+                                "shoulder_tilt_status": shoulder_tilt_status,
+                                "hip_tilt_status": hip_tilt_status,
+                                "overall_status": overall_status
+                            }
+
                         previous_class_index = current_class_index
                     else:
                         previous_class = class_names[previous_class_index]
@@ -424,6 +404,28 @@ def process_video():
 
         cap.release()
         out.release()  # Close video writer
+
+        for pose_class, data in best_pose_frames.items():
+            if data['frame'] is not None:
+                try:
+                    os.makedirs('FO/output/thumbnails/', exist_ok=True)
+
+                    local_thumbnail_path = f"FO/output/thumbnails/thumb_{video_id}_{pose_class}.jpg"
+                    gcs_thumbnail_path = f"poseClassImages/{video_id}/{pose_class}.jpg"
+                    cv2.imwrite(local_thumbnail_path, data['frame'])
+                    thumbnail_url = upload_blob(bucket_name, local_thumbnail_path, gcs_thumbnail_path)
+                    pose_thumbnails[pose_class] = thumbnail_url
+                    temp_thumbnail_files.append(local_thumbnail_path)
+
+                    pose_class_angles[pose_class]["shoulder_tilt"].append(data['data']["shoulder_tilt"])
+                    pose_class_angles[pose_class]["hip_tilt"].append(data['data']["hip_tilt"])
+                    pose_class_angles[pose_class]["time_frame"].append(data['data']["time_frame"])
+                    pose_class_angles[pose_class]["shoulder_tilt_status"].append(data['data']["shoulder_tilt_status"])
+                    pose_class_angles[pose_class]["hip_tilt_status"].append(data['data']["hip_tilt_status"])
+                    pose_class_angles[pose_class]["overall_status"].append(data['data']["overall_status"])
+                except Exception as e:
+                    print(f"Error uploading best-confidence thumbnail for {pose_class}: {e}")
+
         
         convert_to_h264(output_video_path, h264_video_path)
         output_angles_csv_path = f'/tmp/angles_{video_id}.csv'
@@ -450,11 +452,6 @@ def process_video():
                 
                 # --- MODIFIED: Write the thumbnail URL to the row ---
                 writer.writerow([pose_class, shoulder_tilt, hip_tilt, time_frame, shoulder_tilt_status, hip_tilt_status, overall_status, thumbnail_url])
-        
-        # # --- sy new code --- 
-        # output_best_frames_csv_path = f'/tmp/best_frames_{video_id}.csv'
-        # best_frames_data = save_best_pose_frames(predictions, output_best_frames_csv_path)
-        # # --- end--- 
 
         # Upload the output video to GCS if a path is specified
         if output_video_path_gcs:
@@ -469,16 +466,10 @@ def process_video():
             print(f"Uploaded predictions CSV to GCS: {output_csv_url}")
             output_angle_csv_url = upload_blob(bucket_name, output_angles_csv_path, output_angle_csv_path_gcs)
             print(f"Uploaded angles CSV to GCS: {output_angle_csv_url}")
-            
-            # # --- sy new code --- 
-            # # save best frames csv
-            # best_frames_gcs_path = output_csv_path_gcs.replace('.csv', '_best_frames.csv')
-            # output_best_frames_csv_url = upload_blob(bucket_name, output_best_frames_csv_path, best_frames_gcs_path)
-            # # --- end --- 
         else:
             output_csv_url = None
-            output_angle_csv_url = None 
-            # output_best_frames_csv_url = None # sy new code
+            output_angle_csv_url = None
+
 
          # Clean up temporary files
         temp_files = [
@@ -488,7 +479,6 @@ def process_video():
             h264_video_path,
             output_csv_path,
             output_angles_csv_path,
-            # output_best_frames_csv_path # sy new code
         ]
         # --- NEW: Add temp thumbnail files to cleanup list ---
         temp_files.extend(temp_thumbnail_files)
@@ -503,7 +493,6 @@ def process_video():
             'output_video': output_video_url,
             'output_csv': output_csv_url,
             'output_angle_csv': output_angle_csv_url,
-            # 'output_best_frames_csv': output_best_frames_csv_url, # sy new code
             'output_pose_images': pose_thumbnails,
         }), 200
 
@@ -512,7 +501,7 @@ def process_video():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
-        # CLEANUP: Always close the pose instance
+        # ✅ CLEANUP: Always close the pose instance
         try:
             pose.close()
             print("Pose instance closed successfully")
