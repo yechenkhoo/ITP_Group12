@@ -34,18 +34,18 @@ from keras.callbacks import EarlyStopping
 
 all_models = [
     ("MLP_Basic", ModelFactory.mlp_basic, True),
-    ("MLP_Deep", ModelFactory.mlp_deep, True),
-    ("MLP_Dropout", ModelFactory.mlp_with_dropout, True),
-    ("MLP_Attention", ModelFactory.mlp_attention, False),
-    ("CNN_Basic", ModelFactory.cnn_basic, False),
-    ("CNN_Attention", ModelFactory.cnn_attention, False),
-    ("CNN_2D", ModelFactory.cnn_2d, False),
-    ("CNN_3_block", ModelFactory.cnn_3_block, False) # architecture from paper
+    # ("MLP_Deep", ModelFactory.mlp_deep, True),
+    # ("MLP_Dropout", ModelFactory.mlp_with_dropout, True),
+    # ("MLP_Attention", ModelFactory.mlp_attention, False),
+    # ("CNN_Basic", ModelFactory.cnn_basic, False),
+    # ("CNN_Attention", ModelFactory.cnn_attention, False),
+    # ("CNN_2D", ModelFactory.cnn_2d, False),
+    # ("CNN_3_block", ModelFactory.cnn_3_block, False) # architecture from paper
 ]
 
 results = {}
-path_csv = "dataset4.csv"
-test_run_name = "D4_tomtest"
+path_csv = "dtl_data.csv"
+test_run_name = "DTL_prelim"
 folder = f"output/{test_run_name}"
 os.makedirs(folder, exist_ok=True)
 
@@ -60,12 +60,32 @@ for m in all_models:
     data.load_csv_data()
     # default: test_size=0.2, random_state=0
     # data.split_dataset_manual(test_size=0.2, reshape=(not flatten), random_state=42)
-    data.split_dataset_manual(reshape=(not flatten), test_size=0.2)
+    data.split_dataset(reshape=(not flatten), test_size=0.2)
 
     print(data.x_train.shape)
     print(data.x_val.shape)
     print(data.x_test.shape)
-    
+
+    # Calculate class distributions
+    train_dist = np.bincount(np.argmax(data.y_train, axis=1) if len(data.y_train.shape) > 1 else data.y_train)
+    val_dist = np.bincount(np.argmax(data.y_val, axis=1) if len(data.y_val.shape) > 1 else data.y_val)
+    test_dist = np.bincount(np.argmax(data.y_test, axis=1) if len(data.y_test.shape) > 1 else data.y_test)
+
+    print('Train class distribution:', train_dist)
+    print('Val class distribution:', val_dist)
+    print('Test class distribution:', test_dist)
+
+    # Export class distributions as CSV
+    class_labels = [f"class_{i}" for i in range(max(len(train_dist), len(val_dist), len(test_dist)))]
+    dist_df = pd.DataFrame({
+        "class": class_labels,
+        "train": np.pad(train_dist, (0, len(class_labels) - len(train_dist))),
+        "val": np.pad(val_dist, (0, len(class_labels) - len(val_dist))),
+        "test": np.pad(test_dist, (0, len(class_labels) - len(test_dist))),
+    })
+    dist_df.to_csv(f"{folder}/{model_name}_class_distribution.csv", index=False)
+    print(f"[INFO] Saved class distribution to {folder}/{model_name}_class_distribution.csv")
+
     # initialise model
     model = DeepLearningModel(
         input_shape = data.x_train.shape[1] if flatten else data.x_train.shape[1:],
@@ -84,7 +104,6 @@ for m in all_models:
     model.compile_model()
 
     #todo: could possibly add customisation to automatically add type of callbacks
-
     early_stopping = EarlyStopping(
         monitor='val_loss',
         patience=10,
@@ -95,37 +114,37 @@ for m in all_models:
         early_stopping
     ])
 
-    # # Perform cross-validation to understand training data quality
-    # print(f"\n[INFO] Running cross-validation for {model_name}...")
-    # cv_results = model.cross_validate(data, k_folds=5, epochs=200, batch_size=16, log_dir=f"{path_to_save_diagrams}/cv_logs")
+    # Perform cross-validation to understand training data quality
+    print(f"\n[INFO] Running cross-validation for {model_name}...")
+    cv_results = model.cross_validate(data, k_folds=5, epochs=200, batch_size=16, log_dir=f"{path_to_save_diagrams}/cv_logs", model_fn=model_chosen)
     
-    # # Save CV results
-    # cv_df = pd.DataFrame({
-    #     'fold': range(1, len(cv_results['fold_accuracies']) + 1),
-    #     'accuracy': cv_results['fold_accuracies'],
-    #     'loss': cv_results['fold_losses'],
-    #     'f1_score': cv_results['fold_f1_scores'],
-    #     'precision': cv_results['fold_precisions'],
-    #     'recall': cv_results['fold_recalls']
-    # })
-    # cv_df.to_csv(f"{path_to_save_diagrams}_cv_results.csv", index=False)
-    # print(f"[INFO] Cross-validation results saved to {path_to_save_diagrams}_cv_results.csv")
+    # Save CV results
+    cv_df = pd.DataFrame({
+        'fold': range(1, len(cv_results['fold_accuracies']) + 1),
+        'accuracy': cv_results['fold_accuracies'],
+        'loss': cv_results['fold_losses'],
+        'f1_score': cv_results['fold_f1_scores'],
+        'precision': cv_results['fold_precisions'],
+        'recall': cv_results['fold_recalls']
+    })
+    cv_df.to_csv(f"{path_to_save_diagrams}_cv_results.csv", index=False)
+    print(f"[INFO] Cross-validation results saved to {path_to_save_diagrams}_cv_results.csv")
 
 
-    # other params: epoch (default 200), batch_size (default 16)
-    model.train(data, epochs=200)
+    # # other params: epoch (default 200), batch_size (default 16)
+    # model.train(data, epochs=200)
 
-    model.plot_training_metrics(path_to_save_diagrams)
+    # model.plot_training_metrics(path_to_save_diagrams)
 
-    model.plot_confusion_matrix(data, path_to_save_diagrams, "val")
-    model.plot_confusion_matrix(data, path_to_save_diagrams, "test")
+    # model.plot_confusion_matrix(data, path_to_save_diagrams, "val")
+    # model.plot_confusion_matrix(data, path_to_save_diagrams, "test")
 
-    results[model_name] = model.valResults + model.testResults
-    print(results[model_name])
+    # results[model_name] = model.valResults + model.testResults
+    # print(results[model_name])
 
-    columns = ["val_acc", "val_prec", "val_rec", "test_acc", "test_prec", "test_rec"]
-    print(results)
-    df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
-    df_rounded = df.round(3)
-    df_rounded.to_csv(f"{folder}/Results.csv")
-    print(f"[INFO] Saved in {folder}/Results.csv")
+    # columns = ["val_acc", "val_prec", "val_rec", "test_acc", "test_prec", "test_rec"]
+    # print(results)
+    # df = pd.DataFrame.from_dict(results, orient='index', columns=columns)
+    # df_rounded = df.round(3)
+    # df_rounded.to_csv(f"{folder}/Results.csv")
+    # print(f"[INFO] Saved in {folder}/Results.csv")

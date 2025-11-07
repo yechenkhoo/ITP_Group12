@@ -1,0 +1,11 @@
+﻿Position,shoulder_tilt_standard,hip_tilt_standard,LR,shoulder_rotation_standard,hip_rotation_standard,OC,tilt_ca
+P1,8,1,R,8,4,O,FO
+P2,24,4,L,42,18,C,FO
+P3,35,8,L,77,36,C,DTL
+P4,37,9,L,88,44,C,DTL
+P5,33,7,L,65,7,C,DTL
+P6,12,8,R,1,32,O,FO
+P7,30,11,R,31,43,O,FO
+P8,38,12,R,51,53,O,FO
+P9,45,14,R,71,63,O,DTL
+P10,6,5,R,138,109,O,DTL
