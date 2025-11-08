@@ -35,44 +35,63 @@ ideal_hip_tilt = {'P1': 1, 'P2': 4, 'P3': 8, 'P4': 9, 'P5': 7, 'P6': 8, 'P7': 11
 previous_class_index = -1
 
 
-# Function to calculate custom standard deviation bounds
-def calculate_custom_bounds(ideal_angle):
-    stddev = ideal_angle  # Use the ideal angle as the standard deviation
-    lower_bound = max(0, ideal_angle - stddev)  # Ensure the lower bound is not negative
-    upper_bound = ideal_angle + stddev
-    return lower_bound, upper_bound
-def calculate_stddev(angles, ideal_angle):
-    if len(angles) < 2:
-        return float('inf')  # Return a large value to ensure no angle is marked as "Good" when there's insufficient data
-    squared_diff = [(angle - ideal_angle) ** 2 for angle in angles]
-    variance = sum(squared_diff) / len(angles)
-    return math.sqrt(variance)
 
 # Function to determine the status of tilt angles using the custom bounds
 def get_tilt_status(current_angle, ideal_angle):
-    lower_bound, upper_bound = calculate_custom_bounds(ideal_angle)
-
-    if lower_bound <= current_angle <= upper_bound:
+    """
+    Evaluate angle deviation from ideal using 5-point scale.
+    
+    Thresholds:
+    - Very Good (Excellent): ≤5° deviation - Professional level
+    - Good: ≤10° deviation - Strong recreational player
+    - Average (OK): ≤15° deviation - Developing player
+    - Bad (Needs Work): ≤20° deviation - Significant issues
+    - Very Bad (Critical): >20° deviation - Major form problems
+    """
+    deviation = abs(current_angle - ideal_angle)
+    
+    if deviation <= 5:
+        return 'Very Good'
+    elif deviation <= 10:
         return 'Good'
-    elif abs(current_angle - ideal_angle) <= 2 * ideal_angle:  # Within two standard deviations
+    elif deviation <= 15:
+        return 'Average'
+    elif deviation <= 20:
         return 'Bad'
     else:
         return 'Very Bad'
+    
 
 def evaluate_overall_status(statuses):
-    overall = 0
-    for status in statuses:
-        if status == 'Good':
-            overall += 2
-        elif status == 'Bad':
-            overall +=1
-        else:
-            overall +=0
+    """
+    Calculate overall status from individual angle statuses.
     
-    avg = overall/len(statuses)
-    if(avg ==2):
+    Scoring (5-point scale):
+    - Very Good: 4 points
+    - Good: 3 points
+    - Average: 2 points
+    - Bad: 1 point
+    - Very Bad: 0 points
+    """
+    score_map = {
+        'Very Good': 4,
+        'Good': 3,
+        'Average': 2,
+        'Bad': 1,
+        'Very Bad': 0
+    }
+    
+    total = sum(score_map.get(status, 0) for status in statuses)
+    avg = total / len(statuses)
+    
+    # Thresholds for overall status
+    if avg >= 3.5:
+        return 'Very Good'
+    elif avg >= 2.5:
         return 'Good'
-    elif(avg >=1):
+    elif avg >= 1.5:
+        return 'Average'
+    elif avg >= 0.5:
         return 'Bad'
     else:
         return 'Very Bad'
