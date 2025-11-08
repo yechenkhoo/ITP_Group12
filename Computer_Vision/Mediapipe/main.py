@@ -354,6 +354,14 @@ def process_video():
                 video_time = frame_count / 30
                 # Convert the frame to RGB
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
+
+                # Image processing for better detection
+                img_rgb = cv2.convertScaleAbs(img_rgb, alpha=1.2, beta=15)  # enhance contrast
+                img_rgb = cv2.GaussianBlur(img_rgb, (3,3), 0)               # smooth noise
+                gamma = 1.3  # >1 brightens image
+                img_rgb = np.power(img_rgb / 255.0, 1.0 / gamma)
+                img_rgb = np.uint8(img_rgb * 255)
+
                 result = pose.process(img_rgb)
 
                 if result.pose_landmarks:
@@ -411,7 +419,6 @@ def process_video():
                     if camera_is_face_on:
                         shoulder_rotation_angle = calculate_and_draw_shoulder_rotation(img, lm_list, pose_class)
                         hip_rotation_angle = calculate_and_draw_hip_rotation(img, lm_list, pose_class)
-                        lead_arm_angle = calculate_and_draw_lead_arm_angle(img, lm_list, pose_class)
                         forward_tilt_angle = None
                         knee_bend_angle = None
                         
@@ -423,9 +430,11 @@ def process_video():
 
                         # Lead arm angle status only for P1-P9 (exclude P10)
                         if pose_class != 'P10':
+                            lead_arm_angle = calculate_and_draw_lead_arm_angle(img, lm_list, pose_class)
                             lead_arm_angle_status = get_lead_arm_status(lead_arm_angle)
                             status_list.append(lead_arm_angle_status)
                         else:
+                            lead_arm_angle = None
                             lead_arm_angle_status = '-' # (Not applicable for P10)
 
                     else:
