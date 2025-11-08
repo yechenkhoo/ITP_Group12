@@ -282,6 +282,9 @@ def process_video():
         # Extract MongoDB update fields from the request
         video_id = data['video_id']  # MongoDB document ID for the video
         video_path = data['video_path']  # Path in Google Cloud Storage
+        camera_is_face_on = True
+        if "dtl" in video_path.lower():
+            camera_is_face_on = False
         classification_model = data['classification_model']
         output_video_path_gcs = data.get('output_video_path', None)
         output_csv_path_gcs = data.get('output_csv_path', None)
@@ -405,24 +408,36 @@ def process_video():
                     status_list.append(hip_tilt_status)
 
                     # New body angles (Rotations, forward tilt, lead arm, knee bend)
-                    shoulder_rotation_angle = calculate_and_draw_shoulder_rotation(img, lm_list, pose_class)
-                    hip_rotation_angle = calculate_and_draw_hip_rotation(img, lm_list, pose_class)
-                    forward_tilt_angle = calculate_and_draw_forward_tilt_dtl(img, lm_list, pose_class)
-                    lead_arm_angle = calculate_and_draw_lead_arm_angle(img, lm_list, pose_class)
-                    knee_bend_angle = calculate_and_draw_knee_bend(img, lm_list, pose_class)
-                    
-                    # Lead arm angle status only for P1-P9 (exclude P10)
-                    if pose_class != 'P10':
-                        lead_arm_angle_status = get_lead_arm_status(lead_arm_angle)
-                        status_list.append(lead_arm_angle_status)
-                    else:
-                        lead_arm_angle_status = '-' # (Not applicable for P10)
+                    if camera_is_face_on:
+                        shoulder_rotation_angle = calculate_and_draw_shoulder_rotation(img, lm_list, pose_class)
+                        hip_rotation_angle = calculate_and_draw_hip_rotation(img, lm_list, pose_class)
+                        lead_arm_angle = calculate_and_draw_lead_arm_angle(img, lm_list, pose_class)
+                        forward_tilt_angle = None
+                        knee_bend_angle = None
+                        
+                        # Calculate statuses for new angles
+                        shoulder_rotation_status = get_tilt_status(shoulder_rotation_angle, ideal_shoulder_rotation[pose_class])
+                        status_list.append(shoulder_rotation_status)
+                        hip_rotation_status = get_tilt_status(hip_rotation_angle, ideal_hip_rotation[pose_class])
+                        status_list.append(hip_rotation_status)
 
-                    # Calculate statuses for new angles
-                    shoulder_rotation_status = get_tilt_status(shoulder_rotation_angle, ideal_shoulder_rotation[pose_class])
-                    status_list.append(shoulder_rotation_status)
-                    hip_rotation_status = get_tilt_status(hip_rotation_angle, ideal_hip_rotation[pose_class])
-                    status_list.append(hip_rotation_status)
+                        # Lead arm angle status only for P1-P9 (exclude P10)
+                        if pose_class != 'P10':
+                            lead_arm_angle_status = get_lead_arm_status(lead_arm_angle)
+                            status_list.append(lead_arm_angle_status)
+                        else:
+                            lead_arm_angle_status = '-' # (Not applicable for P10)
+
+                    else:
+                        shoulder_rotation_angle = None
+                        shoulder_rotation_status = None
+                        hip_rotation_angle = None
+                        hip_rotation_status = None
+                        lead_arm_angle = None
+                        lead_arm_angle_status = None
+                        forward_tilt_angle = calculate_and_draw_forward_tilt_dtl(img, lm_list, pose_class)
+                        knee_bend_angle = calculate_and_draw_knee_bend(img, lm_list, pose_class)
+                    
 
                     overall_status = evaluate_overall_status(status_list)
                     # Updated logic to handle class index validity
@@ -487,8 +502,9 @@ def process_video():
                     pose_class_text = class_names[current_class_index] if current_class_index != -1 else 'Unknown Pose'
                     
                     # Annotate the frame with the prediction
-                    cv2.putText(img, f"{pose_class} ({confidence:.2f})", (50, 50),
-                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+                    if camera_is_face_on:
+                        cv2.putText(img, f"{pose_class} ({confidence:.2f})", (50, 50),
+                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
                     # Append prediction to CSV
                     csv_writer.writerow([
