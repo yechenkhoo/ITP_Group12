@@ -135,9 +135,9 @@ def calculate_and_draw_shoulder_rotation(img, lm_list, pose_class):
     angle = calculate_angle(L, R, ref)
 
 
-    cv2.putText(img, f"Shoulder Rotation: {angle:.1f}",
-                (20, img.shape[0] - 30), cv2.FONT_HERSHEY_SIMPLEX,
-                0.7, (0, 255, 165), 2)
+    # cv2.putText(img, f"Shoulder Rotation: {angle:.1f}",
+    #             (20, img.shape[0] - 150), cv2.FONT_HERSHEY_SIMPLEX,
+    #             0.7, (0, 255, 165), 2)
 
     return angle
 
@@ -158,9 +158,9 @@ def calculate_and_draw_hip_rotation(img, lm_list, pose_class):
     angle = calculate_angle(L, R, ref)
 
 
-    cv2.putText(img, f"Hip Rotation: {angle:.1f}",
-                (20, img.shape[0] - 90), cv2.FONT_HERSHEY_SIMPLEX,
-                0.7, (0, 165, 255), 2)
+    # cv2.putText(img, f"Hip Rotation: {angle:.1f}",
+    #             (20, img.shape[0] - 120), cv2.FONT_HERSHEY_SIMPLEX,
+    #             0.7, (255, 255, 255), 2)
 
     return angle
 
@@ -242,7 +242,7 @@ def calculate_and_draw_lead_arm_angle(img, lm_list, pose_class):
         img,
         (int(shoulder_coord[0]), int(shoulder_coord[1])),
         (int(elbow_coord[0]), int(elbow_coord[1])),
-        (255, 255, 0),
+        (0, 255, 255),
         2,
         lineType=cv2.LINE_AA
     )
@@ -252,23 +252,23 @@ def calculate_and_draw_lead_arm_angle(img, lm_list, pose_class):
         img,
         (int(elbow_coord[0]), int(elbow_coord[1])),
         (int(wrist_coord[0]), int(wrist_coord[1])),
-        (255, 255, 0),
+        (0, 255, 255),
         2,
         lineType=cv2.LINE_AA
     )
 
     # Mark joints
-    cv2.circle(img, (int(shoulder_coord[0]), int(shoulder_coord[1])), 5, (255, 255, 0), -1)
-    cv2.circle(img, (int(elbow_coord[0]), int(elbow_coord[1])), 5, (255, 255, 0), -1)
-    cv2.circle(img, (int(wrist_coord[0]), int(wrist_coord[1])), 5, (255, 255, 0), -1)
+    cv2.circle(img, (int(shoulder_coord[0]), int(shoulder_coord[1])), 5, (0, 255, 255), -1)
+    cv2.circle(img, (int(elbow_coord[0]), int(elbow_coord[1])), 5, (0, 255, 255), -1)
+    cv2.circle(img, (int(wrist_coord[0]), int(wrist_coord[1])), 5, (0, 255, 255), -1)
 
     cv2.putText(
         img,
         f"Lead Arm Angle: {angle:.1f}",
-        (20, img.shape[0] - 120),
+        (20, img.shape[0] - 90),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
-        (255, 255, 0),
+        (0, 255, 255),
         2
     )
 
@@ -298,7 +298,7 @@ def calculate_and_draw_knee_bend(img, lm_list, pose_class):
         img,
         (int(hip_coord[0]), int(hip_coord[1])),
         (int(knee_coord[0]), int(knee_coord[1])),
-        (255, 194, 132), 
+        (255, 255, 0), 
         2,
         lineType=cv2.LINE_AA
     )
@@ -308,30 +308,31 @@ def calculate_and_draw_knee_bend(img, lm_list, pose_class):
         img,
         (int(knee_coord[0]), int(knee_coord[1])),
         (int(ankle_coord[0]), int(ankle_coord[1])),
-        (255, 194, 132),
+        (255, 255, 0),
         2,
         lineType=cv2.LINE_AA
     )
 
     # Mark joints for clarity
-    cv2.circle(img, (int(hip_coord[0]), int(hip_coord[1])), 5, (255, 194, 132), -1)
-    cv2.circle(img, (int(knee_coord[0]), int(knee_coord[1])), 5, (255, 194, 132), -1)
-    cv2.circle(img, (int(ankle_coord[0]), int(ankle_coord[1])), 5, (255, 194, 132), -1)
+    cv2.circle(img, (int(hip_coord[0]), int(hip_coord[1])), 5, (255, 255, 0), -1)
+    cv2.circle(img, (int(knee_coord[0]), int(knee_coord[1])), 5, (255, 255, 0), -1)
+    cv2.circle(img, (int(ankle_coord[0]), int(ankle_coord[1])), 5, (255, 255, 0), -1)
 
     # Display text
     cv2.putText(
         img,
         f"Knee Bend: {angle:.1f}",
-        (20, img.shape[0] - 150),
+        (20, img.shape[0] - 30),
         cv2.FONT_HERSHEY_SIMPLEX,
         0.7,
-        (255, 194, 132),
+        (255, 255, 0),
         2
     )
 
     return angle
 
 
+## NOT USED
 def calculate_and_draw_forward_tilt_faceon(img, lm_list, pose_class):
     """
     Calculates and draws forward tilt (torso lean) in the Y–Z plane
