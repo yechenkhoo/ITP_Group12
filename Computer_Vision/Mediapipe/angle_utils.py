@@ -63,59 +63,49 @@ def draw_angle(image, point1, point2, point3, angle, label):
 
 
 def calculate_and_draw_shoulder_tilt(img, lm_list, pose_class):
-    """Calculates and draws the shoulder tilt based on the detected pose class."""
-    if pose_class in ['P2', 'P3', 'P4', 'P5']:
-        # Calculate left shoulder tilt
-        left_shoulder_coord = (lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value].x * img.shape[1], lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value].y * img.shape[0])
-        right_shoulder_coord = (lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].x * img.shape[1], lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].y * img.shape[0])
-        line_coord = (lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value].x * img.shape[1], lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].y * img.shape[0])
-        angle = calculate_angle(left_shoulder_coord, right_shoulder_coord, line_coord)
-        draw_angle(img, left_shoulder_coord, right_shoulder_coord, line_coord, angle, 'Left Shoulder Tilt')
+    """Calculates and draws the shoulder tilt automatically based on direction."""
+    left = lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value]
+    right = lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value]
+
+    left_shoulder = (left.x * img.shape[1], left.y * img.shape[0])
+    right_shoulder = (right.x * img.shape[1], right.y * img.shape[0])
+
+    dy = left_shoulder[1] - right_shoulder[1]
+
+    # Choose which side to anchor the vertical reference line (lower shoulder)
+    if dy > 0:
+        # Left shoulder lower — tilt down to right
+        line_coord = (left_shoulder[0], right_shoulder[1])
+        angle = calculate_angle(left_shoulder, right_shoulder, line_coord)
+        draw_angle(img, left_shoulder, right_shoulder, line_coord, angle, "Shoulder Tilt")
     else:
-        # Calculate right shoulder tilt
-        left_shoulder_coord = (lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value].x * img.shape[1], lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value].y * img.shape[0])
-        right_shoulder_coord = (lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].x * img.shape[1], lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].y * img.shape[0])
-        line_coord = (lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value].x * img.shape[1], lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value].y * img.shape[0])
-        angle = calculate_angle(right_shoulder_coord, left_shoulder_coord, line_coord)
-        draw_angle(img, right_shoulder_coord, left_shoulder_coord, line_coord, angle, 'Right Shoulder Tilt')    
+        # Right shoulder lower — tilt down to left
+        line_coord = (right_shoulder[0], left_shoulder[1])
+        angle = calculate_angle(right_shoulder, left_shoulder, line_coord)
+        draw_angle(img, right_shoulder, left_shoulder, line_coord, angle, "Shoulder Tilt")
+
     return angle
 
-
 def calculate_and_draw_hip_tilt(img, lm_list, pose_class):
-    """Calculates and draws the hip tilt based on the detected pose class."""
-    if pose_class in ['P2', 'P3', 'P4', 'P5']:
-        # Calculate left hip tilt
-        left_hip_coord = (
-            lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].x * img.shape[1],
-            lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].y * img.shape[0]
-        )
-        right_hip_coord = (
-            lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value].x * img.shape[1],
-            lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value].y * img.shape[0]
-        )
-        line_coord = (
-            lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].x * img.shape[1],
-            lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value].y * img.shape[0]
-        )
-        angle = calculate_angle(left_hip_coord, right_hip_coord, line_coord)
-        draw_angle(img, left_hip_coord, right_hip_coord, line_coord, angle, 'Left Hip Tilt')
+    left = lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value]
+    right = lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value]
+
+    left_hip = (left.x * img.shape[1], left.y * img.shape[0])
+    right_hip = (right.x * img.shape[1], right.y * img.shape[0])
+
+    dy = left_hip[1] - right_hip[1]
+
+    if dy > 0:
+        # Left hip lower — pelvis tilted down to right
+        line_coord = (left_hip[0], right_hip[1])
+        angle = calculate_angle(left_hip, right_hip, line_coord)
+        draw_angle(img, left_hip, right_hip, line_coord, angle, "Hip Tilt")
     else:
-        # Calculate right hip tilt
-        left_hip_coord = (
-            lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].x * img.shape[1],
-            lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].y * img.shape[0]
-        )
-        right_hip_coord = (
-            lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value].x * img.shape[1],
-            lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value].y * img.shape[0]
-        )
-        line_coord = (
-            lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value].x * img.shape[1],
-            lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value].y * img.shape[0]
-        )
-        angle = calculate_angle(right_hip_coord, left_hip_coord, line_coord)
-        draw_angle(img, right_hip_coord, left_hip_coord, line_coord, angle, 'Right Hip Tilt')
-    
+        # Right hip lower — pelvis tilted down to left
+        line_coord = (right_hip[0], left_hip[1])
+        angle = calculate_angle(right_hip, left_hip, line_coord)
+        draw_angle(img, right_hip, left_hip, line_coord, angle, "Hip Tilt")
+
     return angle
 
 def calculate_and_draw_shoulder_rotation(img, lm_list, pose_class):
