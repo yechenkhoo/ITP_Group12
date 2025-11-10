@@ -34,7 +34,7 @@ class ModelFactory:
     def mlp_deep(input_shape, class_count):
         """
         Deeper MLP with batch normalisation.
-        5 Hidden layers instead of 2.
+        4 Hidden layers instead of 2.
         Batch normalisation can stabilise training by normalising layer inputs.
         """
         return models.Sequential([

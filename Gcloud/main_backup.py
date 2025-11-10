@@ -1,3 +1,5 @@
+# YC modified Code 25/10/2025
+
 import functions_framework
 import requests
 import json
@@ -180,21 +182,6 @@ def process_uploaded_video(cloud_event):
             print(f"     1. {{user_id}}_{{camera_id}}_swing_{{timestamp}}.mp4")
             print(f"     2. {{operator_id}}_{{assignee_id}}_{{camera_id}}_swing_{{timestamp}}.mp4")
             print(f"     3. {{user_id}}_swing_{{timestamp}}.mp4 (old format)")
-
-        # Extract session_id from filename
-        session_id = None
-        try:
-            # Find the index of "swing" in filename_parts
-            if "swing" in filename_parts:
-                swing_index = filename_parts.index("swing")
-                # The timestamp should be right after "swing"
-                if swing_index + 1 < len(filename_parts):
-                    # Get the timestamp part and remove file extension
-                    timestamp_part = filename_parts[swing_index + 1]
-                    session_id = os.path.splitext(timestamp_part)[0]
-                    print(f"Extracted session_id: {session_id}")
-        except Exception as e:
-            print(f"Could not extract session_id: {e}")
 
         # Generate output paths
         output_video_path = f"processed/{video_id}_output_{timestamp}.mp4"
@@ -458,9 +445,10 @@ def process_uploaded_video(cloud_event):
                 filename_parts = video_filename.split("_")
                 if "swing" in filename_parts:
                     swing_index = filename_parts.index("swing")
-                    if swing_index + 1 < len(filename_parts):
-                        timestamp_part = filename_parts[swing_index + 1]
-                        network_session_id = os.path.splitext(timestamp_part)[0]
+                    if len(filename_parts) > swing_index + 2:
+                        date_part = filename_parts[swing_index + 1]
+                        time_part = filename_parts[swing_index + 2].split('.')[0]
+                        network_session_id = f"{date_part}_{time_part}"
             except Exception:
                 pass
             
