@@ -1,0 +1,11 @@
+class,train,val,test
+class_0,68,13,29
+class_1,81,20,29
+class_2,48,8,23
+class_3,47,13,13
+class_4,30,10,5
+class_5,33,7,5
+class_6,37,11,8
+class_7,30,9,11
+class_8,46,12,15
+class_9,28,9,19
