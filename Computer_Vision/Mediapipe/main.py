@@ -11,15 +11,7 @@ import mediapipe as mp
 from google.cloud import storage
 import tempfile
 import csv
-from angle_utils import (
-    calculate_and_draw_shoulder_tilt,
-    calculate_and_draw_hip_tilt,
-    calculate_and_draw_shoulder_rotation,
-    calculate_and_draw_hip_rotation,
-    calculate_and_draw_forward_tilt_dtl,
-    calculate_and_draw_lead_arm_angle,
-    calculate_and_draw_knee_bend
-)
+from angle_utils import calculate_and_draw_shoulder_tilt, calculate_and_draw_hip_tilt
 from db_connection import Videos_Collection
 from bson import ObjectId
 import ffmpeg
@@ -36,111 +28,51 @@ mp_pose = mp.solutions.pose
 # Class names
 class_names = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
 
-# Ideal tilt angles
+# Ideal angles
 ideal_shoulder_tilt = {'P1': 8, 'P2': 24, 'P3': 35, 'P4': 37, 'P5': 33, 'P6': 12, 'P7': 30, 'P8': 38, 'P9': 45, 'P10': 6}
 ideal_hip_tilt = {'P1': 1, 'P2': 4, 'P3': 8, 'P4': 9, 'P5': 7, 'P6': 8, 'P7': 11, 'P8': 12, 'P9': 14, 'P10': 5}
 
-# Ideal rotation angles
-ideal_shoulder_rotation = {'P1': 8, 'P2': 42, 'P3': 77, 'P4': 88, 'P5': 65, 'P6': 1, 'P7': 31, 'P8': 51, 'P9': 71, 'P10': 138}
-ideal_hip_rotation = {'P1': 4, 'P2': 18, 'P3': 36, 'P4': 44, 'P5': 7, 'P6': 32, 'P7': 43, 'P8': 53, 'P9': 63, 'P10': 109}
-
 previous_class_index = -1
 
-csv_field_order = [
-    'shoulder_tilt', 'hip_tilt', 'shoulder_rotation', 'hip_rotation',
-    'forward_tilt', 'lead_arm_angle', 'knee_bend', 'time_frame',
-    'shoulder_tilt_status', 'hip_tilt_status', 'shoulder_rotation_status',
-    'hip_rotation_status', 'lead_arm_angle_status', 'overall_status'
-]
 
-names_order_list = [
-    'Frame', 'Predicted Class', 'Confidence', 'Video Time(s)', 
-    'Shoulder Tilt', 'Hip Tilt', 'Shoulder Rotation', 'Hip Rotation', 
-    'Forward Tilt', 'Lead Arm Angle', 'Knee Bend',
-    'Shoulder Tilt Status', 'Hip Tilt Status', 'Shoulder Rotation Status', 
-    'Hip Rotation Status', 'Lead Arm Angle Status', 'Overall Status'
-]
+# Function to calculate custom standard deviation bounds
+def calculate_custom_bounds(ideal_angle):
+    stddev = ideal_angle  # Use the ideal angle as the standard deviation
+    lower_bound = max(0, ideal_angle - stddev)  # Ensure the lower bound is not negative
+    upper_bound = ideal_angle + stddev
+    return lower_bound, upper_bound
+def calculate_stddev(angles, ideal_angle):
+    if len(angles) < 2:
+        return float('inf')  # Return a large value to ensure no angle is marked as "Good" when there's insufficient data
+    squared_diff = [(angle - ideal_angle) ** 2 for angle in angles]
+    variance = sum(squared_diff) / len(angles)
+    return math.sqrt(variance)
 
 # Function to determine the status of tilt angles using the custom bounds
 def get_tilt_status(current_angle, ideal_angle):
-    """
-    Evaluate angle deviation from ideal using 5-point scale.
-    
-    Thresholds:
-    - Very Good (Excellent): ≤5° deviation
-    - Good: ≤10° deviation
-    - Average (OK): ≤15° deviation
-    - Bad (Needs Work): ≤20° deviation
-    - Very Bad (Critical): >20° deviation
-    """
-    deviation = abs(current_angle - ideal_angle)
-    
-    if deviation <= 5:
-        return 'Very Good'
-    elif deviation <= 10:
+    lower_bound, upper_bound = calculate_custom_bounds(ideal_angle)
+
+    if lower_bound <= current_angle <= upper_bound:
         return 'Good'
-    elif deviation <= 15:
-        return 'Average'
-    elif deviation <= 20:
+    elif abs(current_angle - ideal_angle) <= 2 * ideal_angle:  # Within two standard deviations
         return 'Bad'
     else:
         return 'Very Bad'
-    
-
-def get_lead_arm_status(current_angle):
-    """
-    Evaluate lead arm angle using custom thresholds.
-    Only applicable for P1-P9 (P10 excluded).
-    
-    Thresholds:
-    - Very Good: 170-180°
-    - Good: 160-170°
-    - Average: 150-160°
-    - Bad: 140-150°
-    - Very Bad: <140°
-    """
-    if 170 <= current_angle <= 180:
-        return 'Very Good'
-    elif 160 <= current_angle < 170:
-        return 'Good'
-    elif 150 <= current_angle < 160:
-        return 'Average'
-    elif 140 <= current_angle < 150:
-        return 'Bad'
-    else:  # < 140
-        return 'Very Bad'
-    
 
 def evaluate_overall_status(statuses):
-    """
-    Calculate overall status from individual angle statuses.
+    overall = 0
+    for status in statuses:
+        if status == 'Good':
+            overall += 2
+        elif status == 'Bad':
+            overall +=1
+        else:
+            overall +=0
     
-    Scoring (5-point scale):
-    - Very Good: 4 points
-    - Good: 3 points
-    - Average: 2 points
-    - Bad: 1 point
-    - Very Bad: 0 points
-    """
-    score_map = {
-        'Very Good': 4,
-        'Good': 3,
-        'Average': 2,
-        'Bad': 1,
-        'Very Bad': 0
-    }
-    
-    total = sum(score_map.get(status, 0) for status in statuses)
-    avg = total / len(statuses)
-    
-    # Thresholds for overall status
-    if avg >= 3.5:
-        return 'Very Good'
-    elif avg >= 2.5:
+    avg = overall/len(statuses)
+    if(avg ==2):
         return 'Good'
-    elif avg >= 1.5:
-        return 'Average'
-    elif avg >= 0.5:
+    elif(avg >=1):
         return 'Bad'
     else:
         return 'Very Bad'
@@ -260,15 +192,9 @@ def process_video():
         print(f"Received request: {data}")
 
         # Initialize per-request variables (moved from global scope)
-        # pose_class_angles = {
-        #     pose: {"shoulder_tilt": [], "hip_tilt": [], "time_frame": [],
-        #         "shoulder_tilt_status": [], "hip_tilt_status": [], "overall_status": []}
-        #     for pose in class_names
-        # }
-
-        # Updated with new body angles
         pose_class_angles = {
-            pose: {field: [] for field in csv_field_order}
+            pose: {"shoulder_tilt": [], "hip_tilt": [], "time_frame": [],
+                "shoulder_tilt_status": [], "hip_tilt_status": [], "overall_status": []}
             for pose in class_names
         }
 
@@ -282,9 +208,6 @@ def process_video():
         # Extract MongoDB update fields from the request
         video_id = data['video_id']  # MongoDB document ID for the video
         video_path = data['video_path']  # Path in Google Cloud Storage
-        camera_is_face_on = True
-        if "dtl" in video_path.lower():
-            camera_is_face_on = False
         classification_model = data['classification_model']
         output_video_path_gcs = data.get('output_video_path', None)
         output_csv_path_gcs = data.get('output_csv_path', None)
@@ -328,11 +251,7 @@ def process_video():
 
         with open(output_csv_path, mode='w', newline='') as csv_file:
             csv_writer = csv.writer(csv_file)
-
-            # csv_writer.writerow(['Frame', 'Predicted Class', 'Confidence', 'Video Time(s)', 'Shoulder Tilt','Hip Tilt', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status'])  # CSV header
-
-            # Updated with new body angles
-            csv_writer.writerow(names_order_list)
+            csv_writer.writerow(['Frame', 'Predicted Class', 'Confidence', 'Video Time(s)', 'Shoulder Tilt','Hip Tilt', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status'])  # CSV header
 
             predictions = []
             frame_count = 0
@@ -354,14 +273,6 @@ def process_video():
                 video_time = frame_count / 30
                 # Convert the frame to RGB
                 img_rgb = cv2.cvtColor(img, cv2.COLOR_BGR2RGB)
-
-                # Image processing for better detection
-                img_rgb = cv2.convertScaleAbs(img_rgb, alpha=1.2, beta=15)  # enhance contrast
-                img_rgb = cv2.GaussianBlur(img_rgb, (3,3), 0)               # smooth noise
-                gamma = 1.3  # >1 brightens image
-                img_rgb = np.power(img_rgb / 255.0, 1.0 / gamma)
-                img_rgb = np.uint8(img_rgb * 255)
-
                 result = pose.process(img_rgb)
 
                 if result.pose_landmarks:
@@ -404,9 +315,9 @@ def process_video():
                     # Check if the predicted class is valid (with stabilization)
                     pose_class = class_names[current_class_index]
                     confidence = np.max(prediction)
-
-                    # Calculate tilts
                     shoulder_tilt_angle = calculate_and_draw_shoulder_tilt(img, lm_list, pose_class)
+                   
+                # Calculate hip tilt
                     hip_tilt_angle = calculate_and_draw_hip_tilt(img, lm_list, pose_class)
 
                     # Use the custom function for checking tilt status
@@ -414,40 +325,6 @@ def process_video():
                     status_list.append(shoulder_tilt_status)
                     hip_tilt_status = get_tilt_status(hip_tilt_angle, ideal_hip_tilt[pose_class])
                     status_list.append(hip_tilt_status)
-
-                    # New body angles (Rotations, forward tilt, lead arm, knee bend)
-                    if camera_is_face_on:
-                        shoulder_rotation_angle = calculate_and_draw_shoulder_rotation(img, lm_list, pose_class)
-                        hip_rotation_angle = calculate_and_draw_hip_rotation(img, lm_list, pose_class)
-                        forward_tilt_angle = None
-                        knee_bend_angle = None
-                        
-                        # Calculate statuses for new angles
-                        shoulder_rotation_status = get_tilt_status(shoulder_rotation_angle, ideal_shoulder_rotation[pose_class])
-                        status_list.append(shoulder_rotation_status)
-                        hip_rotation_status = get_tilt_status(hip_rotation_angle, ideal_hip_rotation[pose_class])
-                        status_list.append(hip_rotation_status)
-
-                        # Lead arm angle status only for P1-P9 (exclude P10)
-                        if pose_class != 'P10':
-                            lead_arm_angle = calculate_and_draw_lead_arm_angle(img, lm_list, pose_class)
-                            lead_arm_angle_status = get_lead_arm_status(lead_arm_angle)
-                            status_list.append(lead_arm_angle_status)
-                        else:
-                            lead_arm_angle = None
-                            lead_arm_angle_status = '-' # (Not applicable for P10)
-
-                    else:
-                        shoulder_rotation_angle = None
-                        shoulder_rotation_status = None
-                        hip_rotation_angle = None
-                        hip_rotation_status = None
-                        lead_arm_angle = None
-                        lead_arm_angle_status = None
-                        forward_tilt_angle = calculate_and_draw_forward_tilt_dtl(img, lm_list, pose_class)
-                        knee_bend_angle = calculate_and_draw_knee_bend(img, lm_list, pose_class)
-                    
-
                     overall_status = evaluate_overall_status(status_list)
                     # Updated logic to handle class index validity
                     # if previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index):
@@ -487,17 +364,9 @@ def process_video():
                             best_pose_frames[pose_class]['data'] = {
                                 "shoulder_tilt": shoulder_tilt_angle,
                                 "hip_tilt": hip_tilt_angle,
-                                "shoulder_rotation": shoulder_rotation_angle,
-                                "hip_rotation": hip_rotation_angle,
-                                "forward_tilt": forward_tilt_angle,
-                                "lead_arm_angle": lead_arm_angle,
-                                "knee_bend": knee_bend_angle,
                                 "time_frame": video_time,
                                 "shoulder_tilt_status": shoulder_tilt_status,
                                 "hip_tilt_status": hip_tilt_status,
-                                "shoulder_rotation_status": shoulder_rotation_status,
-                                "hip_rotation_status": hip_rotation_status,
-                                "lead_arm_angle_status": lead_arm_angle_status,
                                 "overall_status": overall_status
                             }
 
@@ -511,18 +380,11 @@ def process_video():
                     pose_class_text = class_names[current_class_index] if current_class_index != -1 else 'Unknown Pose'
                     
                     # Annotate the frame with the prediction
-                    if camera_is_face_on:
-                        cv2.putText(img, f"{pose_class} ({confidence:.2f})", (50, 50),
-                                    cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
+                    cv2.putText(img, f"{pose_class} ({confidence:.2f})", (50, 50),
+                                cv2.FONT_HERSHEY_SIMPLEX, 1, (255, 0, 0), 2, cv2.LINE_AA)
 
                     # Append prediction to CSV
-                    csv_writer.writerow([
-                        frame_count, pose_class, confidence, video_time, 
-                        shoulder_tilt_angle, hip_tilt_angle, shoulder_rotation_angle, 
-                        hip_rotation_angle, forward_tilt_angle, lead_arm_angle, knee_bend_angle,
-                        shoulder_tilt_status, hip_tilt_status, shoulder_rotation_status, 
-                        hip_rotation_status, lead_arm_angle_status, overall_status
-                    ])
+                    csv_writer.writerow([frame_count, pose_class, confidence, video_time, shoulder_tilt_angle, hip_tilt_angle, shoulder_tilt_status, hip_tilt_status, overall_status])
 
                     # Append prediction to the JSON response
                     predictions.append({
@@ -531,17 +393,9 @@ def process_video():
                         'confidence': float(confidence),
                         'video_time': video_time,
                         'shoulder_tilt_angle': shoulder_tilt_angle,
-                        'hip_tilt_angle': hip_tilt_angle,
-                        'shoulder_rotation_angle': shoulder_rotation_angle,
-                        'hip_rotation_angle': hip_rotation_angle,
-                        'forward_tilt_angle': forward_tilt_angle,
-                        'lead_arm_angle': lead_arm_angle,
-                        'knee_bend_angle': knee_bend_angle,
+                        'hip_tilt_angle':hip_tilt_angle,
                         'shoulder_tilt_status': shoulder_tilt_status,
                         'hip_tilt_status': hip_tilt_status,
-                        'shoulder_rotation_status': shoulder_rotation_status,
-                        'hip_rotation_status': hip_rotation_status,
-                        'lead_arm_angle_status': lead_arm_angle_status,
                         'overall_status': overall_status
                     })
 
@@ -563,17 +417,12 @@ def process_video():
                     pose_thumbnails[pose_class] = thumbnail_url
                     temp_thumbnail_files.append(local_thumbnail_path)
 
-                    # pose_class_angles[pose_class]["shoulder_tilt"].append(data['data']["shoulder_tilt"])
-                    # pose_class_angles[pose_class]["hip_tilt"].append(data['data']["hip_tilt"])
-                    # pose_class_angles[pose_class]["time_frame"].append(data['data']["time_frame"])
-                    # pose_class_angles[pose_class]["shoulder_tilt_status"].append(data['data']["shoulder_tilt_status"])
-                    # pose_class_angles[pose_class]["hip_tilt_status"].append(data['data']["hip_tilt_status"])
-                    # pose_class_angles[pose_class]["overall_status"].append(data['data']["overall_status"])
-
-
-                    for field in csv_field_order:
-                        pose_class_angles[pose_class][field].append(data['data'][field])
-    
+                    pose_class_angles[pose_class]["shoulder_tilt"].append(data['data']["shoulder_tilt"])
+                    pose_class_angles[pose_class]["hip_tilt"].append(data['data']["hip_tilt"])
+                    pose_class_angles[pose_class]["time_frame"].append(data['data']["time_frame"])
+                    pose_class_angles[pose_class]["shoulder_tilt_status"].append(data['data']["shoulder_tilt_status"])
+                    pose_class_angles[pose_class]["hip_tilt_status"].append(data['data']["hip_tilt_status"])
+                    pose_class_angles[pose_class]["overall_status"].append(data['data']["overall_status"])
                 except Exception as e:
                     print(f"Error uploading best-confidence thumbnail for {pose_class}: {e}")
 
@@ -585,45 +434,24 @@ def process_video():
         with open(output_angles_csv_path, mode='w', newline='') as file:
             writer = csv.writer(file)
             # --- MODIFIED: Added pose_thumbnail_url to header ---
-            # writer.writerow(['Pose Class', 'Shoulder Tilt', 'Hip Tilt', 'Time Frame', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status', 'pose_thumbnail_url'])
+            writer.writerow(['Pose Class', 'Shoulder Tilt', 'Hip Tilt', 'Time Frame', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status', 'pose_thumbnail_url'])
             
-            # ordered_classes = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
-            
-            # for pose_class in ordered_classes:
-            #     angles = pose_class_angles[pose_class]
-            #     shoulder_tilt = ', '.join(map(str, angles["shoulder_tilt"])) if angles["shoulder_tilt"] else 'No data'
-            #     hip_tilt = ', '.join(map(str, angles["hip_tilt"])) if angles["hip_tilt"] else 'No data'
-            #     time_frame = ', '.join(map(str, angles["time_frame"])) if angles["time_frame"] else 'No data'
-            #     shoulder_tilt_status = ', '.join(map(str, angles["shoulder_tilt_status"])) if angles["shoulder_tilt_status"] else 'No data'
-            #     hip_tilt_status = ', '.join(map(str, angles["hip_tilt_status"])) if angles["hip_tilt_status"] else 'No data'
-            #     overall_status = ', '.join(map(str, angles["overall_status"])) if angles["overall_status"] else 'No data'
-                
-            #     # --- NEW: Get the thumbnail URL for the current pose class ---
-            #     thumbnail_url = pose_thumbnails.get(pose_class, "") # Default to empty string if not found
-                
-            #     # --- MODIFIED: Write the thumbnail URL to the row ---
-            #     writer.writerow([pose_class, shoulder_tilt, hip_tilt, time_frame, shoulder_tilt_status, hip_tilt_status, overall_status, thumbnail_url])
-            
-            # Used list of attributes (csv_field_order) instead of hardcoding text
-            csv_header = ['Pose Class'] + [field.replace('_', ' ').title() for field in csv_field_order] + ['Pose Thumbnail URL']
-            writer.writerow(csv_header)
-
             ordered_classes = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
-
+            
             for pose_class in ordered_classes:
                 angles = pose_class_angles[pose_class]
+                shoulder_tilt = ', '.join(map(str, angles["shoulder_tilt"])) if angles["shoulder_tilt"] else 'No data'
+                hip_tilt = ', '.join(map(str, angles["hip_tilt"])) if angles["hip_tilt"] else 'No data'
+                time_frame = ', '.join(map(str, angles["time_frame"])) if angles["time_frame"] else 'No data'
+                shoulder_tilt_status = ', '.join(map(str, angles["shoulder_tilt_status"])) if angles["shoulder_tilt_status"] else 'No data'
+                hip_tilt_status = ', '.join(map(str, angles["hip_tilt_status"])) if angles["hip_tilt_status"] else 'No data'
+                overall_status = ', '.join(map(str, angles["overall_status"])) if angles["overall_status"] else 'No data'
                 
-                row_data = [pose_class]
+                # --- NEW: Get the thumbnail URL for the current pose class ---
+                thumbnail_url = pose_thumbnails.get(pose_class, "") # Default to empty string if not found
                 
-                for field in csv_field_order:
-                    value = ', '.join(map(str, angles[field])) if angles[field] else ''
-                    row_data.append(value)
-                
-                # Add thumbnail URL
-                thumbnail_url = pose_thumbnails.get(pose_class, "")
-                row_data.append(thumbnail_url)
-                
-                writer.writerow(row_data)
+                # --- MODIFIED: Write the thumbnail URL to the row ---
+                writer.writerow([pose_class, shoulder_tilt, hip_tilt, time_frame, shoulder_tilt_status, hip_tilt_status, overall_status, thumbnail_url])
 
         # Upload the output video to GCS if a path is specified
         if output_video_path_gcs:

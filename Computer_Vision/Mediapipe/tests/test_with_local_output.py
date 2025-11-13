@@ -55,8 +55,7 @@ def run_test_with_local_output():
     # Setup paths
     test_dir = os.path.dirname(os.path.abspath(__file__))
     mediapipe_dir = os.path.dirname(test_dir)
-    test_video = os.path.join(mediapipe_dir, "tests/test_videos", "Grant_FO.mp4")
-    # test_video = os.path.join(mediapipe_dir, "tests/test_videos", "Grant_DTL.mp4")
+    test_video = os.path.join(mediapipe_dir, "FO_videos", "grant.mp4")
     test_model = os.path.join(mediapipe_dir, "best_model.keras")
     
     # Create output directory
@@ -173,7 +172,7 @@ def run_test_with_local_output():
         
         payload = {
             "video_id": f"test_{timestamp}",
-            "video_path": test_video,
+            "video_path": "videos/grant.mp4",
             "classification_model": "models/best_model.keras",
             "output_video_path": "output/processed_video.mp4",
             "output_csv_path": "output/predictions.csv",
