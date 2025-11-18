@@ -152,47 +152,6 @@ def convert_to_h264(input_path, output_path):
     except ffmpeg.Error as e:
         print(f"FFmpeg error: {e.stderr.decode()}")
 
-def upload_blob(bucket_name, source_file_name, destination_blob_name):
-    """Uploads a file to the bucket and returns its public URL."""
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(destination_blob_name)
-    
-    # Determine content type for common files
-    content_type = 'application/octet-stream' # Default
-    if destination_blob_name.endswith('.csv'):
-        content_type = 'text/csv'
-    elif destination_blob_name.endswith('.jpg') or destination_blob_name.endswith('.jpeg'):
-        content_type = 'image/jpeg'
-
-    blob.upload_from_filename(source_file_name, content_type=content_type)
-    
-    # Construct the public URL
-    public_url = f"https://storage.googleapis.com/{bucket_name}/{destination_blob_name}"
-    print(f"Uploaded {source_file_name} to {public_url}")
-    return public_url
-
-def upload_video_blob(bucket_name, source_file_name, destination_blob_name):
-    """Uploads a video file to the bucket and returns its public URL."""
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(destination_blob_name)
-    blob.upload_from_filename(source_file_name, content_type="video/mp4")
-
-    # Construct the public URL
-    public_url = f"https://storage.googleapis.com/{bucket_name}/{destination_blob_name}"
-    print(f"Uploaded video to {public_url}")
-    return public_url
-
-# Google Cloud Storage download function
-def download_blob(bucket_name, source_blob_name, destination_file_name):
-    """Downloads a blob from the bucket."""
-    storage_client = storage.Client()
-    bucket = storage_client.bucket(bucket_name)
-    blob = bucket.blob(source_blob_name)
-    blob.download_to_filename(destination_file_name)
-    print(f"Downloaded {source_blob_name} from bucket {bucket_name} to {destination_file_name}")
-
 # Function to draw bounding box
 def draw_bounding_box(image, lm_list):
     min_x = min([lm.x for lm in lm_list])
@@ -237,12 +196,13 @@ def is_next_class_valid(current_class_index, previous_class_index):
     # Checks if the next class is valid
     previous_class = class_names[previous_class_index]
     current_class = class_names[current_class_index]
+    
     if current_class in valid_transitions[previous_class]:
         return True
     return False
 
 # Pose processing route
-@app.route('/process-video', methods=['POST'])
+@app.route('/process-video-local', methods=['POST'])
 def process_video():
     print("DEBUG: /process-video route accessed")
     try:
@@ -259,13 +219,6 @@ def process_video():
         data = request.json
         print(f"Received request: {data}")
 
-        # Initialize per-request variables (moved from global scope)
-        # pose_class_angles = {
-        #     pose: {"shoulder_tilt": [], "hip_tilt": [], "time_frame": [],
-        #         "shoulder_tilt_status": [], "hip_tilt_status": [], "overall_status": []}
-        #     for pose in class_names
-        # }
-
         # Updated with new body angles
         pose_class_angles = {
             pose: {field: [] for field in csv_field_order}
@@ -279,26 +232,29 @@ def process_video():
 
         previous_class_index = -1
 
-        # Extract MongoDB update fields from the request
-        video_id = data['video_id']  # MongoDB document ID for the video
-        video_path = data['video_path']  # Path in Google Cloud Storage
+        video_filename = data['video_path']  # e.g., "tom_2.mp4"
+        model_filename = data['classification_model']  # e.g., "best_model.keras"
+
+        # Set up local paths
+        video_local_path = os.path.join('FO', 'input', video_filename)
+        classification_model = os.path.join('FO', 'input', model_filename)
+        classification_model = model_filename
+
+        # Generate a unique video_id based on filename and timestamp
+        video_id = "TEST"
+
         camera_is_face_on = True
-        if "dtl" in video_path.lower():
+        if "dtl" in video_filename.lower():
             camera_is_face_on = False
-        classification_model = data['classification_model']
-        output_video_path_gcs = data.get('output_video_path', None)
-        output_csv_path_gcs = data.get('output_csv_path', None)
-        output_angle_csv_path_gcs = data.get('output_angle_csv_path', None)
-        bucket_name = data.get('bucket_name', 'golf-swing-models')
-        print(f"Using bucket: {bucket_name}")
+        
+        print(f"Processing video: {video_local_path}")
+        print(f"Using model: {classification_model}")
 
-        # Download the required files from GCS to /tmp/
-        download_blob(bucket_name, classification_model, '/tmp/' + os.path.basename(classification_model))
-        download_blob(bucket_name, video_path, '/tmp/' + os.path.basename(video_path))
-
-        # Update the paths to use the downloaded files in /tmp/
-        classification_model = '/tmp/' + os.path.basename(classification_model)
-        video_local_path = '/tmp/' + os.path.basename(video_path)
+        # Verify files exist
+        if not os.path.exists(video_local_path):
+            return jsonify({'error': f'Video file not found: {video_local_path}'}), 400
+        if not os.path.exists(classification_model):
+            return jsonify({'error': f'Model file not found: {classification_model}'}), 400
 
         # Load the classification model
         model = load_model(classification_model, compile=True)
@@ -308,9 +264,15 @@ def process_video():
         if not cap.isOpened():
             return jsonify({'error': 'Could not open the video file'}), 400
 
+        # Prepare output directories
+        os.makedirs('FO/output', exist_ok=True)
+        os.makedirs('FO/output/videos', exist_ok=True)
+        os.makedirs('FO/output/csv', exist_ok=True)
+        os.makedirs('FO/output/thumbnails', exist_ok=True)
+
         # Prepare video writer for output video
-        output_video_path = '/tmp/processed_video'+video_id+'.mp4'
-        h264_video_path = '/tmp/processed_video_h264'+video_id+'.mp4'
+        output_video_path = f'FO/output/processed_{video_id}.mp4'
+        h264_video_path = f'FO/output/processed_{video_id}_h264.mp4'
         fourcc = cv2.VideoWriter_fourcc(*'mp4v')
         fps = int(cap.get(cv2.CAP_PROP_FPS)) or 30  # Default to 30 FPS if unknown
         width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
@@ -318,20 +280,13 @@ def process_video():
         out = cv2.VideoWriter(output_video_path, fourcc, fps, (width, height))
 
         # Prepare CSV file for storing predictions
-        output_csv_path = f'/tmp/predictions_{video_id}.csv'
+        output_csv_path = f'FO/output/predictions_{video_id}.csv'
         
-        # --- NEW: ---
-        # Dictionary to store public URLs of pose class thumbnails
+        # Dictionary to store local paths of pose class thumbnails
         pose_thumbnails = {}
-        # List to keep track of temporary thumbnail files for cleanup
-        temp_thumbnail_files = []
 
         with open(output_csv_path, mode='w', newline='') as csv_file:
             csv_writer = csv.writer(csv_file)
-
-            # csv_writer.writerow(['Frame', 'Predicted Class', 'Confidence', 'Video Time(s)', 'Shoulder Tilt','Hip Tilt', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status'])  # CSV header
-
-            # Updated with new body angles
             csv_writer.writerow(names_order_list)
 
             predictions = []
@@ -450,12 +405,12 @@ def process_video():
                         lead_arm_angle_status = None
                         forward_tilt_angle = calculate_and_draw_forward_tilt_dtl(img, lm_list, pose_class)
                         knee_bend_angle = calculate_and_draw_knee_bend(img, lm_list, pose_class)
-                    
 
                     overall_status = evaluate_overall_status(status_list)
                     # Updated logic to handle class index validity
                     # if previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index):
-                    
+                    # if accept_transition:
+                    print("Confidence is ", confidence)
                     if confidence > best_pose_frames[pose_class]['confidence']:
                         best_pose_frames[pose_class]['confidence'] = confidence
                         best_pose_frames[pose_class]['frame'] = img.copy()
@@ -476,6 +431,13 @@ def process_video():
                             "overall_status": overall_status
                         }
 
+                    # previous_class_index = current_class_index
+                    # else:
+                    #     previous_class = class_names[previous_class_index]
+                    #     current_class = class_names[current_class_index]
+                    #     print(f"Invalid transition from {previous_class} to {current_class}")
+                    #     current_class_index = -1  # Reset to -1 for invalid transition
+                    
                     pose_class_text = class_names[current_class_index] if current_class_index != -1 else 'Unknown Pose'
                     
                     # Annotate the frame with the prediction
@@ -522,56 +484,30 @@ def process_video():
         for pose_class, data in best_pose_frames.items():
             if data['frame'] is not None:
                 try:
-                    os.makedirs('FO/output/thumbnails/', exist_ok=True)
-
                     local_thumbnail_path = f"FO/output/thumbnails/thumb_{video_id}_{pose_class}.jpg"
-                    gcs_thumbnail_path = f"poseClassImages/{video_id}/{pose_class}.jpg"
                     cv2.imwrite(local_thumbnail_path, data['frame'])
-                    thumbnail_url = upload_blob(bucket_name, local_thumbnail_path, gcs_thumbnail_path)
-                    pose_thumbnails[pose_class] = thumbnail_url
-                    temp_thumbnail_files.append(local_thumbnail_path)
-
-                    # pose_class_angles[pose_class]["shoulder_tilt"].append(data['data']["shoulder_tilt"])
-                    # pose_class_angles[pose_class]["hip_tilt"].append(data['data']["hip_tilt"])
-                    # pose_class_angles[pose_class]["time_frame"].append(data['data']["time_frame"])
-                    # pose_class_angles[pose_class]["shoulder_tilt_status"].append(data['data']["shoulder_tilt_status"])
-                    # pose_class_angles[pose_class]["hip_tilt_status"].append(data['data']["hip_tilt_status"])
-                    # pose_class_angles[pose_class]["overall_status"].append(data['data']["overall_status"])
-
+                    pose_thumbnails[pose_class] = local_thumbnail_path
 
                     for field in csv_field_order:
                         pose_class_angles[pose_class][field].append(data['data'][field])
     
                 except Exception as e:
-                    print(f"Error uploading best-confidence thumbnail for {pose_class}: {e}")
-
+                    print(f"Error saving thumbnail for {pose_class}: {e}")
         
-        convert_to_h264(output_video_path, h264_video_path)
-        output_angles_csv_path = f'/tmp/angles_{video_id}.csv'
+        # Convert to H264 if function exists
+        try:
+            convert_to_h264(output_video_path, h264_video_path)
+            final_video_path = h264_video_path
+        except:
+            print("H264 conversion not available, using original video")
+            final_video_path = output_video_path
+            
+        output_angles_csv_path = f'FO/output/angles_{video_id}.csv'
 
         # Write angles and thumbnail URLs to CSV
         with open(output_angles_csv_path, mode='w', newline='') as file:
             writer = csv.writer(file)
-            # --- MODIFIED: Added pose_thumbnail_url to header ---
-            # writer.writerow(['Pose Class', 'Shoulder Tilt', 'Hip Tilt', 'Time Frame', 'Shoulder Tilt Status', 'Hip Tilt Status', 'Overall Status', 'pose_thumbnail_url'])
-            
-            # ordered_classes = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
-            
-            # for pose_class in ordered_classes:
-            #     angles = pose_class_angles[pose_class]
-            #     shoulder_tilt = ', '.join(map(str, angles["shoulder_tilt"])) if angles["shoulder_tilt"] else 'No data'
-            #     hip_tilt = ', '.join(map(str, angles["hip_tilt"])) if angles["hip_tilt"] else 'No data'
-            #     time_frame = ', '.join(map(str, angles["time_frame"])) if angles["time_frame"] else 'No data'
-            #     shoulder_tilt_status = ', '.join(map(str, angles["shoulder_tilt_status"])) if angles["shoulder_tilt_status"] else 'No data'
-            #     hip_tilt_status = ', '.join(map(str, angles["hip_tilt_status"])) if angles["hip_tilt_status"] else 'No data'
-            #     overall_status = ', '.join(map(str, angles["overall_status"])) if angles["overall_status"] else 'No data'
-                
-            #     # --- NEW: Get the thumbnail URL for the current pose class ---
-            #     thumbnail_url = pose_thumbnails.get(pose_class, "") # Default to empty string if not found
-                
-            #     # --- MODIFIED: Write the thumbnail URL to the row ---
-            #     writer.writerow([pose_class, shoulder_tilt, hip_tilt, time_frame, shoulder_tilt_status, hip_tilt_status, overall_status, thumbnail_url])
-            
+
             # Used list of attributes (csv_field_order) instead of hardcoding text
             csv_header = ['Pose Class'] + [field.replace('_', ' ').title() for field in csv_field_order] + ['Pose Thumbnail URL']
             writer.writerow(csv_header)
@@ -579,7 +515,15 @@ def process_video():
             ordered_classes = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
 
             for pose_class in ordered_classes:
+                if pose_class not in pose_class_angles:
+                    continue
+
                 angles = pose_class_angles[pose_class]
+
+                has_data = any(angles.get(field) for field in csv_field_order)
+                if not has_data:
+                    print(f"Skipping {pose_class}: no angle data.")
+                    continue
                 
                 row_data = [pose_class]
                 
@@ -593,46 +537,14 @@ def process_video():
                 
                 writer.writerow(row_data)
 
-        # Upload the output video to GCS if a path is specified
-        if output_video_path_gcs:
-            output_video_url = upload_video_blob(bucket_name, h264_video_path, output_video_path_gcs)
-            print(f"Uploaded output video to GCS: {output_video_url}")
-        else:
-            output_video_url = None
-
-        # Upload the CSV files to GCS if paths are specified
-        if output_csv_path_gcs:
-            output_csv_url = upload_blob(bucket_name, output_csv_path, output_csv_path_gcs)
-            print(f"Uploaded predictions CSV to GCS: {output_csv_url}")
-            output_angle_csv_url = upload_blob(bucket_name, output_angles_csv_path, output_angle_csv_path_gcs)
-            print(f"Uploaded angles CSV to GCS: {output_angle_csv_url}")
-        else:
-            output_csv_url = None
-            output_angle_csv_url = None
-
-
-         # Clean up temporary files
-        temp_files = [
-            classification_model,
-            video_local_path,
-            output_video_path,
-            h264_video_path,
-            output_csv_path,
-            output_angles_csv_path,
-        ]
-        # --- NEW: Add temp thumbnail files to cleanup list ---
-        temp_files.extend(temp_thumbnail_files)
-
-        for temp_file in temp_files:
-            if os.path.exists(temp_file):
-                os.remove(temp_file)
         print(f"DEBUG: pose_thumbnails content: {pose_thumbnails}")
+        
         return jsonify({
             'status': 'Processing complete',
             'predictions': predictions,
-            'output_video': output_video_url,
-            'output_csv': output_csv_url,
-            'output_angle_csv': output_angle_csv_url,
+            'output_video': final_video_path,
+            'output_csv': output_csv_path,
+            'output_angle_csv': output_angles_csv_path,
             'output_pose_images': pose_thumbnails,
         }), 200
 
