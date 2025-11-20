@@ -249,7 +249,7 @@ def process_video():
         # CREATE NEW POSE INSTANCE FOR THIS REQUEST
         pose = mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=1,  # 0=Lite, 1=Full, 2=Heavy
+            model_complexity=2,  # 0=Lite, 1=Full, 2=Heavy
             smooth_landmarks=True,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
