@@ -347,6 +347,12 @@ class Video:
         """Fetches the angle CSV URL from the stored link."""
         video = Videos_Collection.find_one({'_id': ObjectId(video_id)}, {'angleCsvLink': 1})
         return video.get('angleCsvLink')
+        
+    @staticmethod
+    def get_output_csv_url(video_id):
+        """Fetches the frame-by-frame output CSV URL (used for DTL correlation)."""
+        video = Videos_Collection.find_one({'_id': ObjectId(video_id)}, {'frameByFrameCsvLink': 1})
+        return video.get('frameByFrameCsvLink')
 
     @staticmethod
     def delete_videos(video_ids):
@@ -497,7 +503,9 @@ class Video:
                 # --- [END NEW] ---
             else: # Default for golf-swing-models or any other source
                 output_bucket_for_processed = 'golf-swing-models'
-                base_output_path = f"processed/{uploader_id}/{assignee_id}"
+                # --- [MODIFIED] Simplified output path to only use a single 'processed' folder ---
+                base_output_path = "processed" 
+                # --- [END MODIFIED] ---
 
             # Prepare the request payload with user context
             payload = {
@@ -509,9 +517,11 @@ class Video:
                 "source_bucket": source_bucket_name,
                 "source_blob_name": source_blob_name,
                 "output_bucket": output_bucket_for_processed,
+                # --- [MODIFIED] Output filenames now only rely on the base_output_path and filename_base ---
                 "output_video_path": f"{base_output_path}/{filename_base}_processed.mp4",
                 "output_csv_path": f"{base_output_path}/{filename_base}.csv",
                 "output_angle_csv_path": f"{base_output_path}/{filename_base}_angles.csv",
+                # --- [END MODIFIED] ---
                 "full_gcs_path": file_path,
                 "session_id": session_id # <-- [ADDED] Pass session_id
             }

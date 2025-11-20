@@ -3,7 +3,7 @@
 
 {% block dashboard_content %}
 <div class="flex flex-col h-full w-full p-6">
-    <div class="relative flex flex-col rounded-lg bg-white shadow-lg p-4 h-full w-full">
+    <div id="data-space-page" class="relative flex flex-col rounded-lg bg-white shadow-lg p-4 h-full w-full">
         <div class="flex-grow overflow-auto pb-4">
 
             {% include 'upload_component.html' %}
@@ -717,7 +717,7 @@
         {% if videos and videos.paginator.num_pages > 1 %}
         <nav id="pagination-container" class="flex justify-center items-center space-x-2 mt-4">
             {% if videos.has_previous %}
-            <a href="?tab={{ tab }}&view={{ view }}&page={{ videos.previous_page_number }}{% if sort %}&sort={{ sort }}{% endif %}"
+            <a href="?tab={{ tab }}&view={{ view }}&page={{ videos.previous_page_number }}{% if sort %}&sort={{ sort }}{% endif %}{{ filter_query_string|safe }}"
                 class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-lg" aria-label="Previous">‹</a>
             {% else %}
             <span class="px-3 py-1 text-gray-400 text-lg">‹</span>
@@ -735,7 +735,7 @@
                     {% endcomment %}
                     {% if page_num == 1 or page_num == num_pages or page_num >= current|add:"-2" and page_num <= current|add:"2" %}
                         {# This is a page link we should display #}
-                        <a href="?tab={{ tab }}&view={{ view }}&page={{ page_num }}{% if sort %}&sort={{ sort }}{% endif %}"
+                        <a href="?tab={{ tab }}&view={{ view }}&page={{ page_num }}{% if sort %}&sort={{ sort }}{% endif %}{{ filter_query_string|safe }}"
                            class="px-3 py-1 rounded 
                                 {% if page_num == current %}
                                     bg-blue-500 text-white
@@ -752,7 +752,7 @@
             {% endwith %}
 
             {% if videos.has_next %}
-            <a href="?tab={{ tab }}&view={{ view }}&page={{ videos.next_page_number }}{% if sort %}&sort={{ sort }}{% endif %}"
+            <a href="?tab={{ tab }}&view={{ view }}&page={{ videos.next_page_number }}{% if sort %}&sort={{ sort }}{% endif %}{{ filter_query_string|safe }}"
                 class="px-3 py-1 bg-gray-200 rounded hover:bg-gray-300 text-lg" aria-label="Next">›</a>
             {% else %}
             <span class="px-3 py-1 text-gray-400 text-lg">›</span>

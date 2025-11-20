@@ -222,7 +222,6 @@ def draw_landmarks(image, lm_list, connections, point_radius=2, line_thickness=1
 
 valid_transitions = {
     'P1': ['P1','P2'],
-    'P10': ['P10'],
     'P2': ['P2', 'P3'],
     'P3': ['P3', 'P4'],
     'P4': ['P4','P5'],
@@ -230,7 +229,8 @@ valid_transitions = {
     'P6': ['P6', 'P7'],
     'P7': ['P7', 'P8'],
     'P8': ['P8', 'P9'],
-    'P9': ['P9', 'P10']
+    'P9': ['P9', 'P10'],
+    'P10': ['P10']
 }
 
 def is_next_class_valid(current_class_index, previous_class_index):
@@ -249,7 +249,7 @@ def process_video():
         # CREATE NEW POSE INSTANCE FOR THIS REQUEST
         pose = mp_pose.Pose(
             static_image_mode=False,
-            model_complexity=1,  # 0=Lite, 1=Full, 2=Heavy
+            model_complexity=2,  # 0=Lite, 1=Full, 2=Heavy
             smooth_landmarks=True,
             min_detection_confidence=0.5,
             min_tracking_confidence=0.5
@@ -396,8 +396,12 @@ def process_video():
                     consecutive_class_buffer.append(current_class_index)
                     if len(consecutive_class_buffer) > 3:
                         consecutive_class_buffer.pop(0)
+                    # if len(consecutive_class_buffer) == 3 and all(idx == current_class_index for idx in consecutive_class_buffer):
+                    #     accept_transition = True
+                    # else:
+                    #     accept_transition = (previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index))
                     if len(consecutive_class_buffer) == 3 and all(idx == current_class_index for idx in consecutive_class_buffer):
-                        accept_transition = True
+                        accept_transition = is_next_class_valid(current_class_index, previous_class_index)
                     else:
                         accept_transition = (previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index))
 
@@ -451,63 +455,27 @@ def process_video():
                     overall_status = evaluate_overall_status(status_list)
                     # Updated logic to handle class index validity
                     # if previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index):
-                    if accept_transition:
-                        # if not first_instance_added[pose_class]:
-                        #     # --- NEW: CAPTURE AND UPLOAD THUMBNAIL ---
-                        #     try:
-                        #         # Create a unique local path for the thumbnail
-                        #         local_thumbnail_path = f"/tmp/thumb_{video_id}_{pose_class}.jpg"
-                        #         # GCS path for the thumbnail
-                        #         gcs_thumbnail_path = f"poseClassImages/{video_id}/{pose_class}.jpg"
-                                
-                        #         # Save the frame as a JPEG
-                        #         cv2.imwrite(local_thumbnail_path, img)
-                                
-                        #         # Upload to GCS
-                        #         thumbnail_url = upload_blob(bucket_name, local_thumbnail_path, gcs_thumbnail_path)
-                                
-                        #         # Store the URL
-                        #         pose_thumbnails[pose_class] = thumbnail_url
-                        #         temp_thumbnail_files.append(local_thumbnail_path)
-                        #     except Exception as e:
-                        #         print(f"Error saving or uploading thumbnail for {pose_class}: {e}")
-                        #     # --- END NEW ---
-
-                        #     pose_class_angles[pose_class]["shoulder_tilt"].append(shoulder_tilt_angle)
-                        #     pose_class_angles[pose_class]["hip_tilt"].append(hip_tilt_angle)
-                        #     pose_class_angles[pose_class]["time_frame"].append(video_time)
-                        #     pose_class_angles[pose_class]["shoulder_tilt_status"].append(shoulder_tilt_status)
-                        #     pose_class_angles[pose_class]["hip_tilt_status"].append(hip_tilt_status)
-                        #     pose_class_angles[pose_class]['overall_status'].append(overall_status)
-                        #     first_instance_added[pose_class] = True
-
-                        if confidence > best_pose_frames[pose_class]['confidence']:
-                            best_pose_frames[pose_class]['confidence'] = confidence
-                            best_pose_frames[pose_class]['frame'] = img.copy()
-                            best_pose_frames[pose_class]['data'] = {
-                                "shoulder_tilt": shoulder_tilt_angle,
-                                "hip_tilt": hip_tilt_angle,
-                                "shoulder_rotation": shoulder_rotation_angle,
-                                "hip_rotation": hip_rotation_angle,
-                                "forward_tilt": forward_tilt_angle,
-                                "lead_arm_angle": lead_arm_angle,
-                                "knee_bend": knee_bend_angle,
-                                "time_frame": video_time,
-                                "shoulder_tilt_status": shoulder_tilt_status,
-                                "hip_tilt_status": hip_tilt_status,
-                                "shoulder_rotation_status": shoulder_rotation_status,
-                                "hip_rotation_status": hip_rotation_status,
-                                "lead_arm_angle_status": lead_arm_angle_status,
-                                "overall_status": overall_status
-                            }
-
-                        previous_class_index = current_class_index
-                    else:
-                        previous_class = class_names[previous_class_index]
-                        current_class = class_names[current_class_index]
-                        print(f"Invalid transition from {previous_class} to {current_class}")
-                        current_class_index = -1  # Reset to -1 for invalid transition
                     
+                    if confidence > best_pose_frames[pose_class]['confidence']:
+                        best_pose_frames[pose_class]['confidence'] = confidence
+                        best_pose_frames[pose_class]['frame'] = img.copy()
+                        best_pose_frames[pose_class]['data'] = {
+                            "shoulder_tilt": shoulder_tilt_angle,
+                            "hip_tilt": hip_tilt_angle,
+                            "shoulder_rotation": shoulder_rotation_angle,
+                            "hip_rotation": hip_rotation_angle,
+                            "forward_tilt": forward_tilt_angle,
+                            "lead_arm_angle": lead_arm_angle,
+                            "knee_bend": knee_bend_angle,
+                            "time_frame": video_time,
+                            "shoulder_tilt_status": shoulder_tilt_status,
+                            "hip_tilt_status": hip_tilt_status,
+                            "shoulder_rotation_status": shoulder_rotation_status,
+                            "hip_rotation_status": hip_rotation_status,
+                            "lead_arm_angle_status": lead_arm_angle_status,
+                            "overall_status": overall_status
+                        }
+
                     pose_class_text = class_names[current_class_index] if current_class_index != -1 else 'Unknown Pose'
                     
                     # Annotate the frame with the prediction
@@ -673,7 +641,7 @@ def process_video():
         traceback.print_exc()
         return jsonify({'error': str(e)}), 500
     finally:
-        # ✅ CLEANUP: Always close the pose instance
+        # CLEANUP: Always close the pose instance
         try:
             pose.close()
             print("Pose instance closed successfully")
