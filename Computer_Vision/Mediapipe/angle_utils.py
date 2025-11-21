@@ -362,3 +362,50 @@ def calculate_and_draw_forward_tilt_faceon(img, lm_list, pose_class):
 
     return angle
 
+
+
+def calculate_and_draw_shoulder_rotation_dtl(img, lm_list, pose_class):
+    """Calculates and draws shoulder rotation (angle in x–z plane) using a reference line."""
+    # Get shoulder landmarks
+    left_shoulder = lm_list[mp.solutions.pose.PoseLandmark.LEFT_SHOULDER.value]
+    right_shoulder = lm_list[mp.solutions.pose.PoseLandmark.RIGHT_SHOULDER.value]
+
+    # Project to top-down (x–z) plane
+    L = (left_shoulder.x * img.shape[1], left_shoulder.z * img.shape[1])
+    R = (right_shoulder.x * img.shape[1], right_shoulder.z * img.shape[1])
+
+    # Create a reference horizontal line across x-axis in x–z plane
+    ref = (right_shoulder.x * img.shape[1], left_shoulder.z * img.shape[1])
+
+    # Compute the angle between actual shoulder line and reference
+    angle = calculate_angle(L, R, ref)
+
+
+    # cv2.putText(img, f"Shoulder Rotation: {angle:.1f}",
+    #             (20, img.shape[0] - 150), cv2.FONT_HERSHEY_SIMPLEX,
+    #             0.7, (0, 255, 165), 2)
+
+    return angle
+
+def calculate_and_draw_hip_rotation_dtl(img, lm_list, pose_class):
+    """Calculates and draws hip rotation (angle in x–z plane) using a reference line."""
+    # Get hip landmarks
+    left_hip = lm_list[mp.solutions.pose.PoseLandmark.LEFT_HIP.value]
+    right_hip = lm_list[mp.solutions.pose.PoseLandmark.RIGHT_HIP.value]
+
+    # Project to top-down (x–z) plane
+    L = (left_hip.x * img.shape[1], left_hip.z * img.shape[1])
+    R = (right_hip.x * img.shape[1], right_hip.z * img.shape[1])
+
+    # Create reference horizontal line across x-axis in x–z plane
+    ref = (right_hip.x * img.shape[1], left_hip.z * img.shape[1])
+
+    # Compute the angle between actual hip line and reference
+    angle = calculate_angle(L, R, ref)
+
+
+    # cv2.putText(img, f"Hip Rotation: {angle:.1f}",
+    #             (20, img.shape[0] - 120), cv2.FONT_HERSHEY_SIMPLEX,
+    #             0.7, (255, 255, 255), 2)
+
+    return angle

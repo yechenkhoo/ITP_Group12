@@ -12,6 +12,8 @@ from angle_utils import (
     calculate_and_draw_hip_tilt,
     calculate_and_draw_shoulder_rotation,
     calculate_and_draw_hip_rotation,
+    calculate_and_draw_shoulder_rotation_dtl,
+    calculate_and_draw_hip_rotation_dtl,
     calculate_and_draw_forward_tilt_dtl,
     calculate_and_draw_forward_tilt_faceon,
     calculate_and_draw_lead_arm_angle,
@@ -93,8 +95,13 @@ def process_frame(row):
     row["hip_tilt_deg"] = hip_tilt_deg
 
     # SHOULDER AND HIP ROTATION
-    shoulder_rotation_deg = calculate_and_draw_shoulder_rotation(annotated_img, lm_list, pose_class)
-    hip_rotation_deg = calculate_and_draw_hip_rotation(annotated_img, lm_list, pose_class)
+    if row["Camera_Angle"] == "FO":
+        shoulder_rotation_deg = calculate_and_draw_shoulder_rotation(annotated_img, lm_list, pose_class)
+        hip_rotation_deg = calculate_and_draw_hip_rotation(annotated_img, lm_list, pose_class)
+    else:
+        shoulder_rotation_deg = calculate_and_draw_shoulder_rotation_dtl(annotated_img, lm_list, pose_class)
+        hip_rotation_deg = calculate_and_draw_hip_rotation_dtl(annotated_img, lm_list, pose_class)
+
     row["shoulder_rotation_deg"] = shoulder_rotation_deg
     row["hip_rotation_deg"] = hip_rotation_deg
 

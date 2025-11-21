@@ -31,7 +31,14 @@ def extract_landmarks(dataset_path, save_path):
     ##############
 
     mp_pose = mp.solutions.pose
-    pose = mp_pose.Pose()
+    pose = mp_pose.Pose(
+        static_image_mode=False,
+        model_complexity=2,  # 0=Lite, 1=Full, 2=Heavy
+        smooth_landmarks=True,
+        min_detection_confidence=0.5,
+        min_tracking_confidence=0.5
+    )
+        
 
     class_list = os.listdir(dataset_path)
     # class_list = sorted(class_list)
