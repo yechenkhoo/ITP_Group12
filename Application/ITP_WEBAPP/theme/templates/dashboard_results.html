@@ -134,9 +134,14 @@
 
             <div class="mb-4 w-full">
                 <div class="flex justify-end mb-4 relative">
+                    {# --- MODIFIED: Conditional data-video-title to include both names for dual upload without slugify --- #}
                     <button id="download-pdf-btn"
                         class="mr-2 flex-shrink-0 rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 inline-flex items-center"
-                        data-video-title="{{ video_title|slugify }}">
+                        {% if is_dual_upload %}
+                        data-video-title="{{ video1_title }} & {{ video2_title }}"
+                        {% else %}
+                        data-video-title="{{ video_title }}"
+                        {% endif %}>
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                             xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -251,9 +256,10 @@
 
             <div class="mb-4 w-full">
                 <div class="flex justify-end mb-4 relative">
+                    {# --- MODIFIED: Standard data-video-title for single upload --- #}
                     <button id="download-pdf-btn"
                         class="mr-2 flex-shrink-0 rounded-md bg-emerald-700 px-4 py-2 text-sm font-semibold text-white shadow-sm hover:bg-emerald-600 focus:outline-none focus:ring-2 focus:ring-emerald-500 inline-flex items-center"
-                        data-video-title="{{ video_title|slugify }}">
+                        data-video-title="{{ video_title }}">
                         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24"
                             xmlns="http://www.w3.org/2000/svg">
                             <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2"
@@ -378,10 +384,7 @@
             <table class="min-w-full border-b" id="pdf-data-table">
                 <thead class="bg-gray-100">
                     <tr>
-                        <th
-                            class="px-6 py-3 text-left font-medium text-gray-500 uppercase tracking-wider bg-white hide-thumbnail">
-                            Thumbnail
-                        </th>
+                        {# MODIFIED: Thumbnail column removed for PDF #}
                         {% for column in columns %}
                         {# --- MODIFIED: Added column != "Overall Status" and column != "Pose Thumbnail URL" (for single upload PDF) --- #}
                         {% if is_dual_upload %}
@@ -403,7 +406,7 @@
                     {# Row background coloring removed here, defaulting to bg-white #}
                     {% for row in full_data %}
                     <tr class="border-b bg-white table-row-border">
-                        <td class="px-3 py-4 whitespace-nowrap hide-thumbnail"></td>
+                        {# MODIFIED: Thumbnail cell removed for PDF #}
                         {% for column in columns %}
                         {# --- MODIFIED: Added column != "Overall Status" and column != "Pose Thumbnail URL" (for single upload PDF) and added 'Forward Tilt' and 'Knee Bend' --- #}
                         {% if is_dual_upload %}
@@ -412,8 +415,9 @@
                                 {# --- [FIX] MODIFIED LOGIC: Check for 'None' in PDF logic --- #}
                                 {% if row|get_item:column == 'None' %}
                                     <div class="inline-flex items-center px-3 py-1 font-medium rounded-full text-gray-800">None</div>
+                                {# --- [FIX] P10 LEAD ARM ANGLE NO STATUS COLOR --- #}
                                 {% elif column == 'Lead Arm Angle' and row|get_item:'Pose Class' == 'P10' %}
-                                    <div class="inline-flex items-center px-3 py-1 font-medium rounded-full bg-gray-200 text-gray-800">-</div>
+                                    <div class="inline-flex items-center px-3 py-1 font-medium text-gray-800">-</div>
                                 {% else %}
                                     <div class="inline-flex items-center px-3 py-1 font-medium rounded-full
                                         {% with column_status_mapping|get_item:column as status_column %}
@@ -444,8 +448,9 @@
                                 {# --- [FIX] MODIFIED LOGIC: Check for 'None' in PDF logic --- #}
                                 {% if row|get_item:column == 'None' %}
                                      <div class="inline-flex items-center px-3 py-1 font-medium rounded-full text-gray-800">None</div>
+                                {# --- [FIX] P10 LEAD ARM ANGLE NO STATUS COLOR --- #}
                                 {% elif column == 'Lead Arm Angle' and row|get_item:'Pose Class' == 'P10' %}
-                                    <div class="inline-flex items-center px-3 py-1 font-medium rounded-full bg-gray-200 text-gray-800">-</div>
+                                    <div class="inline-flex items-center px-3 py-1 font-medium text-gray-800">-</div>
                                 {% else %}
                                     <div class="inline-flex items-center px-3 py-1 font-medium rounded-full
                                         {% with column_status_mapping|get_item:column as status_column %}
