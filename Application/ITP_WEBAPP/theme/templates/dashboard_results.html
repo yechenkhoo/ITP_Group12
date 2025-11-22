@@ -181,7 +181,7 @@
                         <thead class="bg-gray-100">
                             <tr>
                                 {% for column in columns %}
-                                {% if column != "Time Frame" and column != "pose_thumbnail_url" and column != "Pose Thumbnail URL" and column != "Time (FO)" and column != "Video Time(s)" and column != "Overall Status" and column != "Shoulder Tilt Status" and column != "Hip Tilt Status" and column != "Shoulder Rotation Status" and column != "Hip Rotation Status" and column != "Lead Arm Angle Status" %}
+                                {% if column != "Time Frame" and column != "pose_thumbnail_url" and column != "Pose Thumbnail URL" and column != "Time (FO)" and column != "Overall Status" and column != "Shoulder Tilt Status" and column != "Hip Tilt Status" and column != "Shoulder Rotation Status" and column != "Hip Rotation Status" and column != "Lead Arm Angle Status" %}
                                 <th
                                     class="px-6 py-3 text-center md:text-md text-xs font-medium text-gray-500 uppercase tracking-wider bg-white table-header-border"> {{ column }}
                                 </th>
@@ -199,7 +199,7 @@
                                 {% if row|get_item:'Hip Tilt Detail' %}{{ row|get_item:'Hip Tilt Detail' }}{% endif %}
                                 ">
                                 {% for column in columns %}
-                                {% if column != "Time Frame" and column != "pose_thumbnail_url" and column != "Pose Thumbnail URL" and column != "Time (FO)" and column != "Video Time(s)" and column != "Overall Status" and column != "Shoulder Tilt Status" and column != "Hip Tilt Status" and column != "Shoulder Rotation Status" and column != "Hip Rotation Status" and column != "Lead Arm Angle Status" %}
+                                {% if column != "Time Frame" and column != "pose_thumbnail_url" and column != "Pose Thumbnail URL" and column != "Time (FO)" and column != "Overall Status" and column != "Shoulder Tilt Status" and column != "Hip Tilt Status" and column != "Shoulder Rotation Status" and column != "Hip Rotation Status" and column != "Lead Arm Angle Status" %}
                                 <td class="px-3 py-4 whitespace-nowrap text-center"> {% with row|get_item:column as cell_value %}
                                     {% with column_status_mapping|get_item:column as status_column %}
             

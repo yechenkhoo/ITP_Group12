@@ -93,11 +93,11 @@ def correlate_fo_to_dtl_data(fo_full_data, dtl_full_data):
         # Ensure Time columns are numeric for comparison
         # Note: 'None' strings from process_csv_data will become NaN here, which is fine
         fo_df['Time Frame'] = pd.to_numeric(fo_df['Time Frame'], errors='coerce')
-        dtl_df['Video Time(s)'] = pd.to_numeric(dtl_df['Video Time(s)'], errors='coerce')
+        dtl_df['Time Frame'] = pd.to_numeric(dtl_df['Time Frame'], errors='coerce')
 
         # Drop rows with invalid time data
         fo_df.dropna(subset=['Time Frame', 'Pose Class'], inplace=True)
-        dtl_df.dropna(subset=['Video Time(s)'], inplace=True)
+        dtl_df.dropna(subset=['Time Frame'], inplace=True)
         
         # 2. Extract unique Pose and Time from FO data (P1-P10)
         pose_map = fo_df[['Pose Class', 'Time Frame']].copy()
@@ -112,7 +112,7 @@ def correlate_fo_to_dtl_data(fo_full_data, dtl_full_data):
             pose_class = fo_row['Pose Class']
             
             # Calculate time difference and find the index of the minimum difference
-            dtl_df['time_diff'] = (dtl_df['Video Time(s)'] - fo_time).abs()
+            dtl_df['time_diff'] = (dtl_df['Time Frame'] - fo_time).abs()
             
             # Find the row with the minimum time difference
             # Keep all DTL data columns for merging later in dashboard_results
@@ -141,7 +141,7 @@ def correlate_fo_to_dtl_data(fo_full_data, dtl_full_data):
         final_display_cols_base = [
             'Reference Pose (FO)', 
             'Time (FO)', 
-            'Video Time(s)',
+            'Time Frame',
         ]
         
         # Collect all other non-excluded columns and append them
@@ -617,7 +617,7 @@ def dashboard_results(request, id, VideoId):
         # Copy over base FO columns and DTL time reference
         new_row['Time Frame'] = fo_row.get('Time Frame')
         new_row['Pose Class'] = pose_class
-        new_row['Video Time(s)'] = dtl_row.get('Video Time(s)', '')
+        new_row['Time Frame'] = dtl_row.get('Time Frame', '')
 
         # Iterate through the columns that need sourcing
         for col_name in angle_status_columns:
@@ -665,7 +665,7 @@ def dashboard_results(request, id, VideoId):
 
     # 4. Final column definition and status mapping for the template
     display_columns_combined = [
-        'Time Frame', 'Pose Class', 'Video Time(s)', 
+        'Time Frame', 'Pose Class', 'Time Frame', 
         'Shoulder Tilt', 'Shoulder Tilt Status', 
         'Hip Tilt', 'Hip Tilt Status', 
         'Shoulder Rotation', 'Shoulder Rotation Status', 

@@ -47,14 +47,14 @@ ideal_hip_rotation = {'P1': 4, 'P2': 18, 'P3': 36, 'P4': 44, 'P5': 7, 'P6': 32, 
 previous_class_index = -1
 
 csv_field_order = [
-    'shoulder_tilt', 'hip_tilt', 'shoulder_rotation', 'hip_rotation',
-    'forward_tilt', 'lead_arm_angle', 'knee_bend', 'time_frame',
+    'time_frame', 'shoulder_tilt', 'hip_tilt', 'shoulder_rotation', 'hip_rotation',
+    'forward_tilt', 'lead_arm_angle', 'knee_bend', 
     'shoulder_tilt_status', 'hip_tilt_status', 'shoulder_rotation_status',
     'hip_rotation_status', 'lead_arm_angle_status', 'overall_status'
 ]
 
 names_order_list = [
-    'Frame', 'Predicted Class', 'Confidence', 'Video Time(s)', 
+    'Frame', 'Predicted Class', 'Confidence', 'Time Frame', 
     'Shoulder Tilt', 'Hip Tilt', 'Shoulder Rotation', 'Hip Rotation', 
     'Forward Tilt', 'Lead Arm Angle', 'Knee Bend',
     'Shoulder Tilt Status', 'Hip Tilt Status', 'Shoulder Rotation Status', 
@@ -456,27 +456,27 @@ def process_video():
                     # Updated logic to handle class index validity
                     # if previous_class_index == -1 or is_next_class_valid(current_class_index, previous_class_index):
                     
-                    if confidence > best_pose_frames[pose_class]['confidence']:
-                        best_pose_frames[pose_class]['confidence'] = confidence
-                        best_pose_frames[pose_class]['frame'] = img.copy()
-                        best_pose_frames[pose_class]['data'] = {
-                            "shoulder_tilt": shoulder_tilt_angle,
-                            "hip_tilt": hip_tilt_angle,
-                            "shoulder_rotation": shoulder_rotation_angle,
-                            "hip_rotation": hip_rotation_angle,
-                            "forward_tilt": forward_tilt_angle,
-                            "lead_arm_angle": lead_arm_angle,
-                            "knee_bend": knee_bend_angle,
-                            "time_frame": video_time,
-                            "shoulder_tilt_status": shoulder_tilt_status,
-                            "hip_tilt_status": hip_tilt_status,
-                            "shoulder_rotation_status": shoulder_rotation_status,
-                            "hip_rotation_status": hip_rotation_status,
-                            "lead_arm_angle_status": lead_arm_angle_status,
-                            "overall_status": overall_status
-                        }
+                    # if confidence > best_pose_frames[pose_class]['confidence']:
+                    #     best_pose_frames[pose_class]['confidence'] = confidence
+                    #     best_pose_frames[pose_class]['frame'] = img.copy()
+                    #     best_pose_frames[pose_class]['data'] = {
+                    #         "shoulder_tilt": shoulder_tilt_angle,
+                    #         "hip_tilt": hip_tilt_angle,
+                    #         "shoulder_rotation": shoulder_rotation_angle,
+                    #         "hip_rotation": hip_rotation_angle,
+                    #         "forward_tilt": forward_tilt_angle,
+                    #         "lead_arm_angle": lead_arm_angle,
+                    #         "knee_bend": knee_bend_angle,
+                    #         "time_frame": video_time,
+                    #         "shoulder_tilt_status": shoulder_tilt_status,
+                    #         "hip_tilt_status": hip_tilt_status,
+                    #         "shoulder_rotation_status": shoulder_rotation_status,
+                    #         "hip_rotation_status": hip_rotation_status,
+                    #         "lead_arm_angle_status": lead_arm_angle_status,
+                    #         "overall_status": overall_status
+                    #     }
 
-                    pose_class_text = class_names[current_class_index] if current_class_index != -1 else 'Unknown Pose'
+                    # pose_class_text = class_names[current_class_index] if current_class_index != -1 else 'Unknown Pose'
                     
                     # Annotate the frame with the prediction
                     if camera_is_face_on:
@@ -494,23 +494,26 @@ def process_video():
 
                     # Append prediction to the JSON response
                     predictions.append({
-                        'frame': frame_count,
+                        'frame': frame_count, 
+                        'frame_img': img.copy(),
                         'predicted_class': pose_class,
                         'confidence': float(confidence),
-                        'video_time': video_time,
-                        'shoulder_tilt_angle': shoulder_tilt_angle,
-                        'hip_tilt_angle': hip_tilt_angle,
-                        'shoulder_rotation_angle': shoulder_rotation_angle,
-                        'hip_rotation_angle': hip_rotation_angle,
-                        'forward_tilt_angle': forward_tilt_angle,
-                        'lead_arm_angle': lead_arm_angle,
-                        'knee_bend_angle': knee_bend_angle,
-                        'shoulder_tilt_status': shoulder_tilt_status,
-                        'hip_tilt_status': hip_tilt_status,
-                        'shoulder_rotation_status': shoulder_rotation_status,
-                        'hip_rotation_status': hip_rotation_status,
-                        'lead_arm_angle_status': lead_arm_angle_status,
-                        'overall_status': overall_status
+                        'data': {
+                            'time_frame': video_time,
+                            'shoulder_tilt': shoulder_tilt_angle,
+                            'hip_tilt': hip_tilt_angle,
+                            'shoulder_rotation': shoulder_rotation_angle,
+                            'hip_rotation': hip_rotation_angle,
+                            'forward_tilt': forward_tilt_angle,
+                            'lead_arm_angle': lead_arm_angle,
+                            'knee_bend': knee_bend_angle,
+                            'shoulder_tilt_status': shoulder_tilt_status,
+                            'hip_tilt_status': hip_tilt_status,
+                            'shoulder_rotation_status': shoulder_rotation_status,
+                            'hip_rotation_status': hip_rotation_status,
+                            'lead_arm_angle_status': lead_arm_angle_status,
+                            'overall_status': overall_status
+                        }
                     })
 
                 # Write the annotated frame to the output video
@@ -519,25 +522,57 @@ def process_video():
         cap.release()
         out.release()  # Close video writer
 
+        # New top 10 logic - using post processing instead
+        ordered_classes = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
+        
+        pose_groups = {}
+
+        for pred in predictions:
+            pose = pred['predicted_class']
+            if pose not in pose_groups:
+                pose_groups[pose] = []
+            pose_groups[pose].append(pred)
+
+        best_pose_frames = {}
+        last_timestamp = -1
+
+        for pose in ordered_classes:
+            frames_for_pose = pose_groups.get(pose, [])
+
+            if not frames_for_pose:
+                print(f"[WARNING] No predictions found for {pose}")
+                best_pose_frames[pose] = None
+                continue
+
+            # Sort by confidence descending
+            frames_for_pose.sort(key=lambda x: x['confidence'], reverse=True)
+
+            # Pick the first frame whose timestamp is after the previous pose
+            selected = None
+            for candidate in frames_for_pose:
+                if candidate['data']['time_frame'] > last_timestamp:
+                    selected = candidate
+                    last_timestamp = candidate['data']['time_frame']
+                    break
+
+            if selected is None:
+                selected = frames_for_pose[0]
+                print(f"[WARNING] All frames for {pose} happened before previous pose. Picking highest confidence anyway.")
+                last_timestamp = selected['data']['time_frame']
+
+            best_pose_frames[pose] = selected
+
         for pose_class, data in best_pose_frames.items():
-            if data['frame'] is not None:
+            if data is not None:
                 try:
                     os.makedirs('FO/output/thumbnails/', exist_ok=True)
 
                     local_thumbnail_path = f"FO/output/thumbnails/thumb_{video_id}_{pose_class}.jpg"
                     gcs_thumbnail_path = f"poseClassImages/{video_id}/{pose_class}.jpg"
-                    cv2.imwrite(local_thumbnail_path, data['frame'])
+                    cv2.imwrite(local_thumbnail_path, data['frame_img'])
                     thumbnail_url = upload_blob(bucket_name, local_thumbnail_path, gcs_thumbnail_path)
                     pose_thumbnails[pose_class] = thumbnail_url
                     temp_thumbnail_files.append(local_thumbnail_path)
-
-                    # pose_class_angles[pose_class]["shoulder_tilt"].append(data['data']["shoulder_tilt"])
-                    # pose_class_angles[pose_class]["hip_tilt"].append(data['data']["hip_tilt"])
-                    # pose_class_angles[pose_class]["time_frame"].append(data['data']["time_frame"])
-                    # pose_class_angles[pose_class]["shoulder_tilt_status"].append(data['data']["shoulder_tilt_status"])
-                    # pose_class_angles[pose_class]["hip_tilt_status"].append(data['data']["hip_tilt_status"])
-                    # pose_class_angles[pose_class]["overall_status"].append(data['data']["overall_status"])
-
 
                     for field in csv_field_order:
                         pose_class_angles[pose_class][field].append(data['data'][field])
@@ -576,11 +611,19 @@ def process_video():
             csv_header = ['Pose Class'] + [field.replace('_', ' ').title() for field in csv_field_order] + ['Pose Thumbnail URL']
             writer.writerow(csv_header)
 
-            ordered_classes = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
+            # ordered_classes = ['P1', 'P2', 'P3', 'P4', 'P5', 'P6', 'P7', 'P8', 'P9', 'P10']
 
             for pose_class in ordered_classes:
+                if pose_class not in pose_class_angles:
+                    continue
+
                 angles = pose_class_angles[pose_class]
-                
+
+                has_data = any(angles.get(field) for field in csv_field_order)
+                if not has_data:
+                    print(f"Skipping {pose_class}: no angle data.")
+                    continue
+
                 row_data = [pose_class]
                 
                 for field in csv_field_order:
@@ -627,9 +670,14 @@ def process_video():
             if os.path.exists(temp_file):
                 os.remove(temp_file)
         print(f"DEBUG: pose_thumbnails content: {pose_thumbnails}")
+
+        predictions_for_json = [
+            {k: v for k, v in pred.items() if k != 'frame_img'} for pred in predictions
+        ]
+
         return jsonify({
             'status': 'Processing complete',
-            'predictions': predictions,
+            'predictions': predictions_for_json,
             'output_video': output_video_url,
             'output_csv': output_csv_url,
             'output_angle_csv': output_angle_csv_url,
