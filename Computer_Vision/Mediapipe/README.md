@@ -84,7 +84,10 @@ Example:
 ```
 python3 poseLandmark_csv.py -i data/ -o data.csv
 ```
-
+#### Creating Existing Dataset Path (pose.csv):
+```
+python poseLandmark_csv.py -i Dataset -o output/pose.csv
+```
 CSV file will be saved in **<path_to_save_csv>**
 
 ### 3.Create DeepLearinng Model to predict Human Pose
@@ -98,7 +101,10 @@ Example:
 ```
 python3 poseModel.py -i data.csv -o model.h5
 ```
-
+#### Using Existing Dataset Path (pose.csv):
+```
+python poseModel.py -i output/pose.csv -o posecsv.h5
+```
 Model will saved in **<path_to_save_model>** and Model Metrics saved in **metrics.png**
 
 ### 4.Inference
@@ -215,3 +221,54 @@ python inferenceAngle.py --model models/frontal.keras --conf 0.9 --source test/P
 Show Predicted Pose Class on Test Image or Video or Web-cam
 
 **To Exit Window - Press Q-key**
+
+---
+
+## Testing
+
+### Local Testing for `/process-video` Endpoint
+
+The `/process-video` endpoint (deployed as a Cloud Run service) can be tested locally without redeployment. The integration test mocks cloud dependencies and saves actual output files for manual inspection.
+
+#### Quick Start
+
+```bash
+# Navigate to Mediapipe directory
+cd Computer_Vision/Mediapipe
+
+# Run the integration test
+python tests/test_with_local_output.py
+```
+
+#### What This Does
+
+- Processes the complete video with real MediaPipe and TensorFlow
+- Saves all output files to `tests/test_output/test_[timestamp]/`
+- Displays detailed statistics (pose distribution, angle status, sample predictions)
+- Creates timestamped folders for each test run
+- Allows manual inspection of:
+  - Processed video with annotations
+  - CSV files with predictions and angles
+  - Pose class thumbnail images (P1-P10)
+
+#### Test Documentation
+
+- **`tests/README.md`** - Complete testing guide with setup instructions
+- **`tests/test_with_local_output.py`** - Integration test with local outputs
+
+#### What's Tested
+
+- Complete video processing workflow
+- MediaPipe pose detection integration
+- TensorFlow model predictions
+- Angle calculations (shoulder/hip tilt)
+- Output file generation (video, CSVs, images)
+- Response structure verification
+
+#### Requirements
+
+- Test video: `FO_videos/grant.mp4` (included)
+- Test model: `best_model.keras` (included)
+- Python dependencies: `flask tensorflow mediapipe opencv-python`
+
+For detailed testing instructions and mocking explanation, see **[tests/README.md](tests/README.md)** and **[tests/HOW_TESTING_WORKS.md](tests/HOW_TESTING_WORKS.md)**

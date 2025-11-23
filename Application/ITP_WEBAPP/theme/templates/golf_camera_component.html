@@ -1,10 +1,10 @@
-<!-- Golf Camera Live Feed Component -->
+<!-- Golf Camera Live Feed Component with Enhanced Recording Indicator -->
 <div class="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
   <!-- Header -->
   <div class="flex items-center justify-between mb-6">
     <h2 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
       <i class="fas fa-camera"></i>
-      Golf Swing Live Feed
+      Golf Swing Live Feed (Face-On)
     </h2>
     <div class="flex items-center gap-2">
       <i id="connectionIcon" class="fas fa-wifi text-gray-500"></i>
@@ -35,15 +35,36 @@
       />
       <div id="videoPlaceholder" class="text-white text-center">
         <i class="fas fa-camera text-6xl mb-4 opacity-50"></i>
-        <p class="text-lg">Golf Camera Ready</p>
+        <p class="text-lg">Face-On Camera Ready</p>
         <p class="text-sm opacity-75 mt-2">Click "Start Live Feed" to begin</p>
       </div>
     </div>
     
-    <!-- Recording Indicator -->
-    <div id="recordingIndicator" class="absolute top-4 left-4 bg-red-600 text-white px-3 py-1 rounded-full items-center gap-2 hidden animate-pulse">
-      <div class="w-2 h-2 bg-white rounded-full"></div>
-      RECORDING
+    <!-- Enhanced Recording Indicator with Timer -->
+    <div id="recordingIndicator" class="absolute top-6 left-6 space-y-3 hidden">
+      <!-- Main REC Badge -->
+      <div class="bg-red-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-pulse">
+        <div class="relative">
+          <div class="w-4 h-4 bg-white rounded-full"></div>
+          <div class="absolute inset-0 w-4 h-4 bg-white rounded-full animate-ping"></div>
+        </div>
+        <span class="text-2xl font-black tracking-wider">REC</span>
+      </div>
+
+      <!-- Timer Display -->
+      <div class="bg-black/80 backdrop-blur-sm text-white px-5 py-3 rounded-xl shadow-xl border-2 border-red-500">
+        <div class="text-sm font-semibold text-red-400 mb-1">RECORDING</div>
+        <div id="recordingTimer" class="text-3xl font-mono font-bold tabular-nums">0:00.0</div>
+        <div id="recordingTotal" class="text-xs text-gray-400 mt-1">/ 0:10.0</div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="bg-black/60 backdrop-blur-sm p-3 rounded-xl shadow-xl">
+        <div class="w-48 h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div id="recordingProgress" class="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-100 rounded-full" style="width: 0%"></div>
+        </div>
+        <div id="recordingPercent" class="text-white text-xs mt-2 text-center font-semibold">0% Complete</div>
+      </div>
     </div>
 
     <!-- Auto Mode Indicator -->
@@ -116,7 +137,7 @@
 
   <!-- Instructions -->
   <div class="mt-6 p-4 bg-blue-50 rounded-lg">
-    <h3 class="font-semibold text-blue-900 mb-2">How to use:</h3>
+    <h3 class="font-semibold text-blue-900 mb-2">How to use (Face-On):</h3>
     <ul class="text-sm text-blue-800 space-y-1">
       <li>• <strong>Start Live Feed:</strong> Click to begin video streaming</li>
       <li>• <strong>Manual Record:</strong> Choose duration and click "Record"</li>
@@ -127,7 +148,7 @@
 </div>
 
 <script>
-// Golf Camera Controller
+// Golf Camera Controller with Enhanced Recording Timer
 class GolfCameraController {
   constructor() {
     this.isRecording = false;
@@ -136,6 +157,11 @@ class GolfCameraController {
     this.connectionStatus = 'disconnected';
     this.streamActive = false;
     this.currentAssigneeId = null;
+    
+    // Recording timer properties
+    this.recordingStartTime = null;
+    this.recordingDuration = 10;
+    this.recordingTimerInterval = null;
     
     this.init();
   }
@@ -147,7 +173,6 @@ class GolfCameraController {
   }
 
   setupCoachOptions() {
-    // 🔧 FIXED: Get user role from global variable
     const userRole = window.currentUserRole || 'student';
     
     if (userRole === 'coach') {
@@ -185,7 +210,6 @@ class GolfCameraController {
 
   async loadStudentList() {
     try {
-      // 🔧 FIXED: Use correct endpoint
       const response = await fetch('/home/api/my-students/');
       
       if (!response.ok) {
@@ -348,7 +372,6 @@ class GolfCameraController {
     }
     
     try {
-      // 🔧 FIXED: Properly construct payload
       let payload = { 
         duration: parseInt(duration),
         user_id: userId 
@@ -368,6 +391,9 @@ class GolfCameraController {
       if (response.ok) {
         const data = await response.json();
         console.log('Recording started:', data.message);
+        
+        // Start the timer immediately
+        this.startRecordingTimer(parseInt(duration));
       } else {
         const errorData = await response.json();
         console.error('Recording failed:', errorData.error);
@@ -377,6 +403,52 @@ class GolfCameraController {
       console.error('Recording error:', error);
       alert('An error occurred while trying to start the recording.');
     }
+  }
+
+  // Enhanced timer methods
+  startRecordingTimer(durationSeconds) {
+    this.recordingStartTime = Date.now();
+    this.recordingDuration = durationSeconds;
+    
+    // Update the total duration display
+    document.getElementById('recordingTotal').textContent = `/ ${this.formatTime(this.recordingDuration)}`;
+    
+    this.recordingTimerInterval = setInterval(() => {
+      const elapsed = (Date.now() - this.recordingStartTime) / 1000;
+      const progress = (elapsed / this.recordingDuration) * 100;
+      
+      // Cap elapsed time at duration to show full time at completion
+      const displayElapsed = Math.min(elapsed, this.recordingDuration);
+      
+      // Update timer display
+      document.getElementById('recordingTimer').textContent = this.formatTime(displayElapsed);
+      document.getElementById('recordingProgress').style.width = `${Math.min(progress, 100)}%`;
+      document.getElementById('recordingPercent').textContent = `${Math.round(Math.min(progress, 100))}% Complete`;
+      
+      // Stop timer after showing full duration
+      if (elapsed >= this.recordingDuration + 0.2) {
+        this.stopRecordingTimer();
+      }
+    }, 100);
+  }
+
+  stopRecordingTimer() {
+    if (this.recordingTimerInterval) {
+      clearInterval(this.recordingTimerInterval);
+      this.recordingTimerInterval = null;
+    }
+    
+    // Reset displays
+    document.getElementById('recordingTimer').textContent = '0:00.0';
+    document.getElementById('recordingProgress').style.width = '0%';
+    document.getElementById('recordingPercent').textContent = '0% Complete';
+  }
+
+  formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 10);
+    return `${mins}:${secs.toString().padStart(2, '0')}.${ms}`;
   }
 
   async toggleAutoRecording() {
@@ -455,16 +527,35 @@ class GolfCameraController {
   }
 
   updateUI(data) {
+    const wasRecording = this.isRecording;
+    
     // Update recording state
     this.isRecording = data.is_recording;
     this.autoRecordingEnabled = data.auto_recording_enabled;
     this.poseDetectionEnabled = data.pose_detection_enabled;
 
-    // Update recording indicator
+    // Update recording indicator visibility
     if (this.isRecording) {
       document.getElementById('recordingIndicator').classList.remove('hidden');
+      
+      // Start timer if recording just started
+      if (!wasRecording && !this.recordingTimerInterval) {
+        // Determine duration: use 20s for auto recording, selected duration for manual
+        let duration;
+        if (this.autoRecordingEnabled) {
+          duration = 20; // Auto recording max duration
+        } else {
+          duration = parseInt(document.getElementById('recordingDuration').value);
+        }
+        this.startRecordingTimer(duration);
+      }
     } else {
       document.getElementById('recordingIndicator').classList.add('hidden');
+      
+      // Stop timer if recording just stopped
+      if (wasRecording) {
+        this.stopRecordingTimer();
+      }
     }
 
     // Update auto mode indicator

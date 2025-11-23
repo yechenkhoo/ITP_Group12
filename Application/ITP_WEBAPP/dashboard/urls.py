@@ -6,7 +6,9 @@ from .views import (
     golf_toggle_pose_detection, golf_reload_models, golf_health, golf_set_user_context,
     api_my_students, dashboard_compareSwings, add_video_comment_ajax, update_comment_position_ajax,
     delete_video_comment_ajax, edit_video_comment_ajax, add_video_reply_ajax,
-    edit_video_reply_ajax, delete_video_reply_ajax, mark_comment_read, check_video_status_ajax
+    edit_video_reply_ajax, delete_video_reply_ajax, mark_comment_read, check_video_status_ajax,
+    dtl_video_feed, dtl_status, dtl_health, dtl_start_recording, dtl_toggle_auto_recording,
+    dtl_toggle_pose_detection, dtl_reload_models, dtl_set_user_context
 )
 
 
@@ -49,4 +51,23 @@ urlpatterns = [
     path("golf/health/", golf_health, name="golf_health"),
     path('golf/set-user-context/', golf_set_user_context, name='golf_set_user_context'),
     path('api/my-students/', api_my_students, name='api_my_students'),
+
+    # =============================================================================
+    # DOWN-THE-LINE CAMERA URLS (FIXED - removed 'views.' prefix)
+    # =============================================================================
+    # Video feed and status endpoints
+    path('dtl_video_feed/', dtl_video_feed, name='dtl_video_feed'),
+    path('dtl_status/', dtl_status, name='dtl_status'),
+    path('dtl_health/', dtl_health, name='dtl_health'),
+    
+    # Recording control endpoints
+    path('dtl_start_recording/', dtl_start_recording, name='dtl_start_recording'),
+    path('dtl_toggle_auto_recording/', dtl_toggle_auto_recording, name='dtl_toggle_auto_recording'),
+    
+    # AI and pose detection endpoints
+    path('dtl_toggle_pose_detection/', dtl_toggle_pose_detection, name='dtl_toggle_pose_detection'),
+    path('dtl_reload_models/', dtl_reload_models, name='dtl_reload_models'),
+    
+    # User context endpoint
+    path('dtl_set_user_context/', dtl_set_user_context, name='dtl_set_user_context'),
 ]

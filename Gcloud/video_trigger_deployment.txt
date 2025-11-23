@@ -1,3 +1,4 @@
+(OLD/ITP1)
 gcloud functions deploy process-uploaded-video \
   --gen2 \
   --runtime=python311 \
@@ -10,3 +11,37 @@ gcloud functions deploy process-uploaded-video \
   --timeout=540s \
   --memory=2Gi \
   --max-instances=3
+
+(NEW/ITP2)
+
+echo "Deploying Cloud Function for golf-swing-models bucket..."
+gcloud functions deploy process-uploaded-video \
+  --gen2 \
+  --runtime=python311 \
+  --region=asia-southeast1 \
+  --source=. \
+  --entry-point=process_uploaded_video \
+  --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
+  --trigger-event-filters="bucket=golf-swing-models" \
+  --service-account=golf-analytics-service@golf-swing-analytics-461203.iam.gserviceaccount.com \
+  --timeout=540s \
+  --memory=2Gi \
+  --max-instances=3
+
+echo ""
+echo "Deploying Cloud Function for golf-swing-dtl bucket..."
+gcloud functions deploy process-video-golf-dtl \
+  --gen2 \
+  --runtime=python311 \
+  --region=asia-southeast1 \
+  --source=. \
+  --entry-point=process_uploaded_video \
+  --trigger-event-filters="type=google.cloud.storage.object.v1.finalized" \
+  --trigger-event-filters="bucket=golf-swing-dtl" \
+  --service-account=golf-analytics-service@golf-swing-analytics-461203.iam.gserviceaccount.com \
+  --timeout=540s \
+  --memory=2Gi \
+  --max-instances=3
+
+echo ""
+echo "Deployment complete! Both functions are now monitoring their respective buckets."

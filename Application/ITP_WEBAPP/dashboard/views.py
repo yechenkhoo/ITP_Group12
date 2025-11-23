@@ -20,6 +20,7 @@ import pandas as pd
 from io import StringIO
 from django.core.paginator import Paginator
 import traceback
+import re
 
 # Helper Functions
 def isCoach(request):
@@ -34,9 +35,172 @@ def isAdmin(request):
     """Checks if the user is an admin."""
     return request.session.get('Role') in ['admin']
 
+# --- [FIX] ADDED THE MISSING process_csv_data FUNCTION ---
+def process_csv_data(csv_url):
+    """
+    Fetches CSV data from a URL, processes it into a list of dictionaries,
+    and returns the data and column names.
+    """
+    if not csv_url:
+        return [], []
+    
+    try:
+        response = requests.get(csv_url)
+        if response.status_code == 200:
+            # Use StringIO to treat the string content as a file
+            csv_data = StringIO(response.content.decode('utf-8'))
+            df = pd.read_csv(csv_data)
+            
+            # Handle empty CSV
+            if df.empty:
+                return [], []
+            
+            # --- MODIFICATION: Round all numeric data values to 2 decimal points ---
+            df = df.round(2)
+            
+            # --- [FIX] NEW MODIFICATION: Replace all nan/NaN values with the string 'None' for display ---
+            df = df.fillna('None')
+            # --- END [FIX] NEW MODIFICATION ---
+                
+            # Get column names
+            display_columns = list(df.columns)
+            
+            # Convert DataFrame to list of dictionaries
+            full_data = df.to_dict('records')
+            
+            return full_data, display_columns
+        else:
+            print(f"Failed to fetch CSV data from {csv_url}. Status code: {response.status_code}")
+            return [], []
+    except Exception as e:
+        print(f"Error processing CSV data from {csv_url}: {e}")
+        traceback.print_exc()
+        return [], []
+    
+def correlate_fo_to_dtl_data(fo_full_data, dtl_full_data):
+    """
+    Correlates Down-The-Line (DTL) data to Face-On (FO) timestamps,
+    returning a dictionary of correlated DTL rows with all available columns.
+    """
+    if not fo_full_data or not dtl_full_data:
+        return [], []
+
+    try:
+        # 1. Convert lists of dicts to DataFrames
+        fo_df = pd.DataFrame(fo_full_data)
+        dtl_df = pd.DataFrame(dtl_full_data)
+        
+        # Ensure Time columns are numeric for comparison
+        # Note: 'None' strings from process_csv_data will become NaN here, which is fine
+        fo_df['Time Frame'] = pd.to_numeric(fo_df['Time Frame'], errors='coerce')
+        dtl_df['Time Frame'] = pd.to_numeric(dtl_df['Time Frame'], errors='coerce')
+
+        # Drop rows with invalid time data
+        fo_df.dropna(subset=['Time Frame', 'Pose Class'], inplace=True)
+        dtl_df.dropna(subset=['Time Frame'], inplace=True)
+        
+        # 2. Extract unique Pose and Time from FO data (P1-P10)
+        pose_map = fo_df[['Pose Class', 'Time Frame']].copy()
+        # Filter for P1 through P10 only
+        pose_map = pose_map[pose_map['Pose Class'].str.match(r'P(10|[1-9])$', na=False)]
+        
+        correlated_dtl_rows = []
+
+        # 3. For each FO Time Frame, find the closest DTL entry
+        for index, fo_row in pose_map.iterrows():
+            fo_time = fo_row['Time Frame']
+            pose_class = fo_row['Pose Class']
+            
+            # Calculate time difference and find the index of the minimum difference
+            dtl_df['time_diff'] = (dtl_df['Time Frame'] - fo_time).abs()
+            
+            # Find the row with the minimum time difference
+            # Keep all DTL data columns for merging later in dashboard_results
+            closest_dtl_row_series = dtl_df.loc[dtl_df['time_diff'].idxmin()].drop(
+                labels=['time_diff', 'Frame', 'Predicted Class', 'Confidence'], 
+                errors='ignore'
+            )
+            closest_dtl_row = closest_dtl_row_series.to_dict()
+            
+            # Add the FO Pose Class and Time Frame to the DTL result for context
+            closest_dtl_row['Reference Pose (FO)'] = pose_class
+            closest_dtl_row['Time (FO)'] = fo_time
+
+            correlated_dtl_rows.append(closest_dtl_row)
+
+        if not correlated_dtl_rows:
+            return [], []
+
+        # 4. Convert back to list of dictionaries and set columns for display
+        final_df = pd.DataFrame(correlated_dtl_rows)
+        
+        # Define columns to exclude from the returned DTL data
+        cols_to_exclude = ['Overall Status'] # Explicitly remove Overall Status as requested
+        
+        # Define a consistent order for the DTL-specific columns for stability
+        final_display_cols_base = [
+            'Reference Pose (FO)', 
+            'Time (FO)', 
+            'Time Frame',
+        ]
+        
+        # Collect all other non-excluded columns and append them
+        other_cols = [col for col in final_df.columns 
+                      if col not in final_display_cols_base and col not in cols_to_exclude]
+        
+        final_display_cols = final_display_cols_base + sorted(other_cols)
+        
+        # Ensure only columns that exist are included
+        final_display_cols = [col for col in final_display_cols if col in final_df.columns]
+        
+        final_df = final_df[final_display_cols]
+        
+        # --- [FIX] NEW MODIFICATION: Replace all nan/NaN values with the string 'None' for display ---
+        final_df = final_df.fillna('None')
+        # --- END [FIX] NEW MODIFICATION ---
+        
+        final_data = final_df.to_dict('records')
+        
+        return final_data, final_display_cols
+        
+    except Exception as e:
+        print(f"Error correlating FO and DTL data: {e}")
+        traceback.print_exc()
+        return [], []
+
 def fetch_all_students(coach_id):
     """Fetches all students associated with a coach."""
     return Coach.fetch_all_students(coach_id)
+
+def upload_single_video_helper(request, current_user_id, assignee_id):
+    """
+    Handles a single-file video upload and initiates asynchronous processing.
+    """
+    # Check for all possible file field names from the different forms
+    file = (request.FILES.get('videoDBFile_face') or
+            request.FILES.get('videoDBFile_dtl') or
+            request.FILES.get('videoFile_face') or
+            request.FILES.get('videoFile_dtl'))
+
+    if request.method == 'POST' and file:
+        title = file.name
+        video_type = request.POST.get('videoType', 'face-on') # Default to face-on
+
+        try:
+            Video.upload_video(
+                current_user_id=current_user_id,
+                assignee_id=str(assignee_id),
+                title=title,
+                video_type=video_type,
+                file=file,
+                upload_source="manual"
+            )
+            return True, "Video upload initiated successfully."
+        except Exception as e:
+            traceback.print_exc()
+            return False, f"Upload error: {str(e)}"
+    
+    return False, "No file or invalid request."
 
 # =============================================================================
 # 🏌️ CAMERA CONFIGURATION
@@ -44,6 +208,7 @@ def fetch_all_students(coach_id):
 # Define the Raspberry Pi URLs
 RASPBERRY_PI_URL = 'http://172.20.10.5:5000'  # Old camera system
 GOLF_CAMERA_URL = 'http://172.20.10.5:5000'     # New golf camera system
+DTL_CAMERA_URL = 'http://172.20.10.10:5001'      # Down-the-line golf camera system
 
 # =============================================================================
 # 📱 MAIN DASHBOARD VIEWS
@@ -83,57 +248,185 @@ def dashboard_dataSpace(request, id):
     if not is_logged_in(request):
         return redirect('login')
 
-    # Verify coach-student relationship if role is coach
     if isCoach(request) and not Coach.verify_coach_student_relationship(request.session['Id'], id):
         return redirect('home')
 
     view = request.GET.get('view', 'list')
     sort = request.GET.get('sort', 'earliest')
     tab = request.GET.get('tab', 'tab1')
+    
+    # --- [NEW] Get active video type filters from URL ---
+    active_filters = request.GET.getlist('filter_type') # Gets a list of 'filter_type' values
 
-    # --- HANDLE POST REQUESTS (Deletion or Upload) ---
+    # --- MODIFIED: HANDLE POST REQUESTS (Deletion or Upload) ---
     if request.method == 'POST':
-        # Check if it's a delete request by looking for the 'video_ids' parameter
         if 'video_ids' in request.POST:
-            video_ids_to_delete = request.POST.get("video_ids", "").split(",")
-            # Filter out any empty strings that might result from splitting
-            video_ids_to_delete = [vid for vid in video_ids_to_delete if vid]
-
+            video_ids_to_delete = [vid for vid in request.POST.get("video_ids", "").split(",") if vid]
             if video_ids_to_delete:
-                # Call the model method to handle deletion from DB and GCS
-                deletion_result = Video.delete_videos(video_ids_to_delete)
-                print(f"Deletion result: {deletion_result}")
-                # You can add a success message here using Django's messaging framework if desired
-
-            # Redirect to the same page, preserving the user's view, sort, and tab settings
+                Video.delete_videos(video_ids_to_delete)
             query_params = request.GET.urlencode()
             redirect_url = reverse('dashboard_dataSpace', args=[id])
             return HttpResponseRedirect(f'{redirect_url}?{query_params if query_params else ""}')
 
-        # Otherwise, handle it as a video upload request
+        # --- Handle video uploads (single or dual) ---
         else:
-            student_id = User.find_user_by_id(ObjectId(id))['_id']
-            upload_video(request, student_id)
-            # Redirect after upload, preserving settings
+            video_type = request.POST.get('videoType')
+            current_user_id = request.session.get('Id')
+            student_doc = User.find_user_by_id(ObjectId(id))
+            assignee_id = str(student_doc['_id'])
+
+            if video_type == 'both':
+                # [MODIFIED] Use the correct names from dashboard_popupUploadModal.js
+                face_on_file = request.FILES.get('face_on_file')
+                dtl_file = request.FILES.get('dtl_file')
+                
+                if face_on_file and dtl_file:
+                    Video.upload_dual_videos(
+                        current_user_id=current_user_id,
+                        assignee_id=assignee_id,
+                        face_on_file=face_on_file,
+                        dtl_file=dtl_file
+                    )
+                    print("Dual video upload initiated successfully.")
+                else:
+                    print("Dual upload error: one or both files were missing.")
+            else:
+                success, message = upload_single_video_helper(request, current_user_id, assignee_id)
+                print(f"Single upload status: {message}")
+
             base = reverse('dashboard_dataSpace', args=[id])
             query = f'?tab={tab}&view={view}&sort={sort}'
             return HttpResponseRedirect(base + query)
 
     # --- HANDLE GET REQUESTS (Page Load) ---
     page_num = request.GET.get('page', 1)
-    
-    # Fetch user and student details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     student = user if not isCoach(request) else User.find_user_by_id(ObjectId(id))
-
-    # Fetch and sort videos
     student_id = student['_id']
-    video_list = Video.get_all_videos(student_id)
-    video_list = convert_objectids_to_str(video_list)
-
+    video_list = convert_objectids_to_str(Video.get_all_videos(student_id))
+    
     def parse_date(s):
         return datetime.strptime(s, "%H:%M %b %d, %Y")
 
+    def clean_title(title):
+        """Removes file extension and common type identifiers from a title string."""
+        if not isinstance(title, str):
+            return ""
+        # 1. Remove file extension (e.g., .mp4, .mov)
+        title_no_ext = re.sub(r'\.[a-z0-9]+$', '', title, flags=re.IGNORECASE)
+        # 2. Remove common type identifiers
+        title_cleaned = title_no_ext.replace('_face-on', '').replace('_down-the-line', '').replace('face-on', '').replace('down-the-line', '')
+        # 3. Strip leading/trailing spaces
+        return title_cleaned.strip()
+    
+    # --- [NEW] Group videos by session_id ---
+    # [ ... existing grouping logic ... ]
+    grouped_video_list = []
+    processed_session_ids = set()
+
+    # Pass 1: Find all videos with session_ids and group them
+    session_videos = {} # {session_id: [video_doc, ...]}
+    for video in video_list:
+        session_id = video.get('session_id')
+        if session_id:
+            if session_id not in session_videos:
+                session_videos[session_id] = []
+            session_videos[session_id].append(video)
+
+    # Pass 2: Create combined entries for groups
+    for session_id, videos_in_group in session_videos.items():
+        if session_id in processed_session_ids:
+            continue
+        
+        # We only group if there's a pair (face-on and dtl)
+        if len(videos_in_group) >= 2:
+            face_on_video = next((v for v in videos_in_group if v.get('Type') == 'face-on'), None)
+            dtl_video = next((v for v in videos_in_group if v.get('Type') == 'down-the-line'), None)
+
+            # If we have both, create a combined entry
+            if face_on_video and dtl_video:
+                # Determine combined status
+                status = "Completed"
+                if face_on_video.get('Status') == 'Processing' or dtl_video.get('Status') == 'Processing':
+                    status = "Processing"
+                elif face_on_video.get('Status') == 'Failed' or dtl_video.get('Status') == 'Failed':
+                    status = "Failed"
+
+                # Use face-on video as the primary
+                combined_video = face_on_video.copy() # Start with face-on video's data
+                combined_video['Type'] = 'both'
+                combined_video['Status'] = status
+                # Use the *earlier* date
+                try:
+                    face_on_date = parse_date(face_on_video['DateUploaded'])
+                    dtl_date = parse_date(dtl_video['DateUploaded'])
+                    combined_video['DateUploaded'] = min(face_on_date, dtl_date).strftime("%H:%M %b %d, %Y")
+                except Exception:
+                    pass # Keep face-on date if parsing fails
+                
+                # Store the DTL video's ID for the results page
+                combined_video['dtl_video_id'] = dtl_video.get('id')
+                combined_video['dtl_rawVideoLink'] = dtl_video.get('rawVideoLink')
+                
+                # Use the face-on video's ID as the main 'id'
+                combined_video['id'] = face_on_video.get('id')
+                
+                # --- START MODIFIED TITLE LOGIC ---
+                fo_name = face_on_video.get('Title', 'FaceOn')
+                dtl_name = dtl_video.get('Title', 'DTL')
+                
+                # Apply the cleaning helper
+                fo_name_cleaned = clean_title(fo_name)
+                dtl_name_cleaned = clean_title(dtl_name)
+                
+                # Format the new title: "face on name & down the line name_session_id"
+                custom_title = f"{fo_name_cleaned} & {dtl_name_cleaned}_{session_id}"
+                combined_video['Title'] = custom_title
+                # --- END MODIFIED TITLE LOGIC ---
+                
+                grouped_video_list.append(combined_video)
+                processed_session_ids.add(session_id)
+            else:
+                # Not a valid pair, add them individually
+                for v in videos_in_group:
+                    grouped_video_list.append(v)
+                    processed_session_ids.add(session_id) # Mark as 'processed' to avoid re-adding
+        else:
+            # Only one video with this session_id, treat as individual
+            for v in videos_in_group:
+                grouped_video_list.append(v)
+                processed_session_ids.add(session_id)
+
+    # Pass 3: Add all non-session videos (session_id is None or "")
+    for video in video_list:
+        if not video.get('session_id'):
+            grouped_video_list.append(video)
+            
+    # Now, `grouped_video_list` replaces `video_list` for sorting and pagination
+    video_list = grouped_video_list # Overwrite video_list with our new grouped list
+    # --- [END NEW] ---
+
+    # --- [NEW] Apply Video Type Filtering from URL params ---
+    if active_filters: # Only filter if filter_type params exist
+        filtered_video_list = []
+        for video in video_list:
+            # Check if the video type is in the active filters
+            # Note: 'both' type from grouping logic becomes 'Face On & Down The Line' in template
+            # Let's check the 'Type' field which is 'both', 'face-on', 'down-the-line'
+            video_type = video.get('Type')
+            
+            # Map the 'Type' field to the filter values
+            type_to_filter_map = {
+                'face-on': 'Face On',
+                'down-the-line': 'Down The Line',
+                'both': 'Face On & Down The Line'
+            }
+            
+            if type_to_filter_map.get(video_type) in active_filters:
+                 filtered_video_list.append(video)
+        video_list = filtered_video_list # Overwrite video_list with the filtered list
+
+    # ... (Sorting and filtering logic now operates on the grouped and filtered list) ...
     if sort == 'az':
         video_list.sort(key=lambda v: v['Title'].lower())
     elif sort == 'za':
@@ -143,36 +436,34 @@ def dashboard_dataSpace(request, id):
     else:
         video_list.sort(key=lambda v: parse_date(v['DateUploaded']))
 
-    # Separate videos by status for different tabs
     video_processing = [video for video in video_list if video.get('Status') == 'Processing']
     video_completed = [video for video in video_list if video.get('Status') == 'Completed']
-    video_failed = [video for video in video_list if video.get('Status') == 'Failed'] # NEW: Filter for failed videos
+    video_failed = [video for video in video_list if video.get('Status') == 'Failed']
 
-    # Paginate each list
     per_page = 4 if view == 'list' else 10
-    videos_page = Paginator(video_list, per_page).get_page(page_num)
-    completed_page = Paginator(video_completed, per_page).get_page(page_num)
-    processing_page = Paginator(video_processing, per_page).get_page(page_num)
-    failed_page = Paginator(video_failed, per_page).get_page(page_num) # NEW: Paginate failed videos
+    paginator_map = {
+        'tab1': Paginator(video_list, per_page),
+        'tab2': Paginator(video_completed, per_page),
+        'tab3': Paginator(video_processing, per_page),
+        'tab4': Paginator(video_failed, per_page)
+    }
+    page_obj = paginator_map.get(tab, Paginator(video_list, per_page)).get_page(page_num)
 
-    page_map = {'tab1': videos_page, 'tab2': completed_page, 'tab3': processing_page, 'tab4': failed_page} # NEW: Add 'tab4' for failed videos
-    page_obj = page_map.get(tab, videos_page)
+    # --- [NEW] Pass filter params to template for pagination links ---
+    filter_query_string = ""
+    if active_filters:
+        # We must URL-encode the filter values which may contain '&'
+        from django.utils.http import urlencode
+        filter_query_string = "&" + urlencode({'filter_type': active_filters}, doseq=True)
 
-    # Render template
     return render(request, 'dashboard_dataSpace.html', {
-        'Role': user['Role'],
-        'Name': user['Name'],
-        'user_id': str(user['_id']),
-        'studentID': student_id,
-        'studentName': student['Name'],
-        'videos': videos_page,
-        'processing_video': processing_page,
-        'completed_video': completed_page,
-        'failed_video': failed_page, # NEW: Pass failed videos to the template
-        'sort': sort,
-        'view': view,
-        'tab': tab,
-        "page_obj": page_obj,
+        'Role': user['Role'], 'Name': user['Name'], 'user_id': str(user['_id']),
+        'studentID': student_id, 'studentName': student['Name'], 'videos': page_obj,
+        'processing_video': paginator_map['tab3'].get_page(page_num),
+        'completed_video': paginator_map['tab2'].get_page(page_num),
+        'failed_video': paginator_map['tab4'].get_page(page_num),
+        'sort': sort, 'view': view, 'tab': tab, "page_obj": page_obj,
+        'filter_query_string': filter_query_string # Pass the query string
     })
 
 def dashboard_videoFeed(request):
@@ -192,7 +483,10 @@ def dashboard_videoFeed(request):
     })
 
 def dashboard_results(request, id, VideoId):
-    """Displays the results dashboard."""
+    """
+    Displays the results dashboard. Modified to handle conditional single/dual video display
+    and combined/correlated data tables for dual uploads.
+    """
     if not is_logged_in(request):
         return redirect('login')
 
@@ -203,74 +497,247 @@ def dashboard_results(request, id, VideoId):
     # Fetch user and student details
     user = User.find_user_by_id(ObjectId(request.session['Id']))
     student = user if not isCoach(request) else User.find_user_by_id(ObjectId(id))
-
-    # Determine current_user_name to pass to the template
-    # Prioritize username from session, fallback to user's 'Name' field
     current_user_name = request.session.get('Username', user.get('Name', ''))
 
-    # Fetch title of the raw video
     all_videos = Video.get_all_videos(student['_id'])
     video_item = next((v for v in all_videos if v['id'] == VideoId), None)
-    video_title = video_item.get('Title', 'Untitled Video') if video_item else 'Untitled Video'
     
-    video_url = Video.get_video_url(VideoId)
-    csv_url = Video.get_csv_url(VideoId)
+    if not video_item:
+        return redirect('home')
+
+    # --- Video 1: Primary Video (Face On or Single) ---
+    video1_id = VideoId
+    video1_title = video_item.get('Title', 'Face On Video')
+    video1_processed_url = Video.get_video_url(video1_id)
+    video1_raw_url = video_item.get('rawVideoLink')
+    video1_url = video1_processed_url if video1_processed_url else video1_raw_url
+    video1_csv_url = Video.get_csv_url(video1_id)
     
-    # NEW: Fetch the pose class images URL
-    video_status_info = Video.get_video_status(VideoId)
+    # --- Video 2: Secondary Video (DTL) ---
+    video2_title = None
+    video2_url = None
+    video2_csv_url = None
+    is_dual_upload = False
+    
+    # Check for DTL pair using session_id and Type
+    session_id = video_item.get('session_id')
+    if session_id and (video_item.get('Type') == 'face-on' or video_item.get('Type') == 'both'):
+        dtl_video_item = next((
+            v for v in all_videos 
+            if v['id'] != video1_id
+            and v.get('session_id') == session_id 
+            and v.get('Type') == 'down-the-line'
+        ), None)
+        
+        if dtl_video_item:
+            is_dual_upload = True
+            video2_id = dtl_video_item['id']
+            video2_csv_url = Video.get_output_csv_url(video2_id)
+            video2_title = dtl_video_item.get('Title', 'Down The Line Video')
+
+            # fallback to raw link if no processed URL
+            processed_url = Video.get_video_url(video2_id)
+            raw_url = dtl_video_item.get('rawVideoLink')
+            video2_url = processed_url if processed_url else raw_url
+
+    # --- Process CSV Data ---
+    # MODIFIED: Capture columns from video 1
+    video1_full_data, video1_columns = process_csv_data(video1_csv_url) # FO or single data
+    video2_full_data, _ = process_csv_data(video2_csv_url) if is_dual_upload else ([], [])
+    
+    # --- [START MODIFIED LOGIC: Combine FO and DTL data into a single table] ---
+    
+    # 1. Define the mapping logic for data source
+    def get_pose_num(pose_class_str):
+        match = re.search(r'P(\d+)', pose_class_str)
+        return int(match.group(1)) if match else None
+
+    def get_data_source(column, pose_class_str):
+        p_num = get_pose_num(pose_class_str)
+        if not p_num: return 'FO'
+
+        # Shoulder Tilt: P1, P6 (FO); Others (P2, P3, P4, P5, P7, P8, P9, P10) (DTL)
+        if column == 'Shoulder Tilt':
+            return 'FO' if p_num in [1, 2, 6, 7, 8] else 'DTL'
+        
+        # Hip Tilt: 
+        # P1, P2, P3, P4, P5, P7, P8 are FO values. 
+        # Rest (P6, P9, P10) are DTL.
+        if column == 'Hip Tilt':
+            return 'FO' if p_num in [1, 2, 3, 4, 5, 7, 8] else 'DTL'
+
+        # Shoulder Rotation, Hip Rotation, Lead Arm Angle: Always FO (if value exists)
+        if column in ['Shoulder Rotation', 'Hip Rotation', 'Lead Arm Angle']:
+            return 'FO'
+            
+        # Forward Tilt, Knee Bend: Always DTL (no status)
+        if column in ['Forward Tilt', 'Knee Bend']:
+            return 'DTL'
+            
+        return 'FO' # Default to FO
+
+    # 2. Correlate FO data (video1) to DTL data (video2)
+    dtl_correlated_data, _ = (
+        correlate_fo_to_dtl_data(video1_full_data, video2_full_data) 
+        if is_dual_upload else ([], [])
+    )
+    
+    # Convert DTL correlated data to a dictionary keyed by Pose Class for quick lookup
+    # Note: dtl_correlated_data already has 'None' strings instead of nan
+    dtl_data_map = {
+        row.get('Reference Pose (FO)'): row 
+        for row in dtl_correlated_data 
+        if row.get('Reference Pose (FO)')
+    }
+
+    # Columns to handle (Angle and Status pairs)
+    angle_status_columns = [
+        'Shoulder Tilt', 'Hip Tilt', 'Shoulder Rotation', 
+        'Hip Rotation', 'Lead Arm Angle'
+    ]
+    # DTL-only columns (no Status)
+    dtl_only_columns = ['Forward Tilt', 'Knee Bend']
+    
+    # 3. Create the final combined table data
+    p_class_pattern = re.compile(r'P(10|[1-9])$')
+    final_combined_table_data = []
+    
+    # Filter FO data to only include P1 to P10 pose classes as the base structure
+    # Note: video1_full_data already has 'None' strings instead of nan
+    fo_base_rows = [
+        row.copy() for row in video1_full_data
+        if p_class_pattern.match(row.get('Pose Class', ''))
+    ]
+
+    for fo_row in fo_base_rows:
+        pose_class = fo_row.get('Pose Class', '')
+        dtl_row = dtl_data_map.get(pose_class, {})
+        new_row = {'camera_view': 'Combined'}
+
+        # Copy over base FO columns and DTL time reference
+        new_row['Time Frame'] = fo_row.get('Time Frame')
+        new_row['Pose Class'] = pose_class
+        new_row['Time Frame'] = dtl_row.get('Time Frame', '')
+
+        # Iterate through the columns that need sourcing
+        for col_name in angle_status_columns:
+            status_col_name = f'{col_name} Status'
+            source = get_data_source(col_name, pose_class)
+            
+            value = None
+            status = None
+
+            if col_name == 'Lead Arm Angle' and pose_class == 'P10':
+                # Special case: P10 Lead Arm Angle is '-' and has no status
+                value = '-'
+                status = ''
+                # (Removed 'continue', will be assigned below)
+
+            elif source == 'FO':
+                # Use value and status from FO data
+                value = fo_row.get(col_name)
+                status = fo_row.get(status_col_name)
+            elif source == 'DTL':
+                # Use value and status from DTL correlated data
+                value = dtl_row.get(col_name)
+                status = dtl_row.get(status_col_name)
+            else:
+                value = ''
+                status = ''
+                
+            # --- [FIX ADDED] ---
+            # If the final calculated value is '-', ensure its status is blank
+            # so it doesn't render a badge.
+            if value == '-':
+                status = ''
+            # --- [END FIX] ---
+
+            # Since data was cleaned, default get() to 'None' if key missing
+            new_row[col_name] = value if value is not None else 'None'
+            new_row[status_col_name] = status if status is not None else ''
+                
+        # Handle DTL-only columns (Forward Tilt and Knee Bend - NO STATUS)
+        for col_name in dtl_only_columns:
+            # Default get() to 'None' if key missing
+            new_row[col_name] = dtl_row.get(col_name, 'None')
+            
+        final_combined_table_data.append(new_row)
+
+    # 4. Final column definition and status mapping for the template
+    display_columns_combined = [
+        'Time Frame', 'Pose Class', 'Time Frame', 
+        'Shoulder Tilt', 'Shoulder Tilt Status', 
+        'Hip Tilt', 'Hip Tilt Status', 
+        'Shoulder Rotation', 'Shoulder Rotation Status', 
+        'Hip Rotation', 'Hip Rotation Status', 
+        'Lead Arm Angle', 'Lead Arm Angle Status', 
+        'Forward Tilt', 'Knee Bend'
+    ]
+    
+    column_status_mapping = {}
+    # Use the combined columns list to build the status mapping
+    for col in display_columns_combined:
+        if col.endswith(' Status'):
+            angle_col = col.replace(" Status", "")
+            column_status_mapping[angle_col] = col
+            
+    # --- [START NEW LOGIC: Set template data based on upload type] ---
+    if is_dual_upload:
+        final_data_for_template = final_combined_table_data
+        final_columns_for_template = display_columns_combined # The combined columns
+    else:
+        final_data_for_template = video1_full_data
+        final_columns_for_template = video1_columns # The original columns from video 1
+        
+        # Build status mapping from single video columns if not dual upload
+        # (This ensures the badge coloring still works for single uploads)
+        for col in final_columns_for_template:
+            if col.endswith(' Status'):
+                angle_col = col.replace(" Status", "")
+                column_status_mapping[angle_col] = col
+    # --- [END NEW LOGIC] ---
+
+    # Fetch pose classification image URL (from primary video)
+    video_status_info = Video.get_video_status(video1_id)
     pose_class_images_url = video_status_info.get('poseClassImagesLink') if video_status_info else None
 
-    # Fetch and process the CSV
-    response = requests.get(csv_url)
-    column_status_mapping = {}
-
-    if response.status_code == 200:
-        csv_data = response.content.decode('utf-8')
-        df = pd.read_csv(StringIO(csv_data))
-        
-        # Get all column names
-        all_columns = df.columns.tolist()
-        
-        # Display all columns from CSV
-        display_columns = all_columns
-        
-        # All the csv data (converted to list of dicts for JSON serialization)
-        full_data = df.to_dict('records')
-        
-        for column in all_columns:
-            if "Status" in column:
-                corresponding_column = column.replace(" Status", "")
-                column_status_mapping[corresponding_column] = column
-    else:
-        display_columns = []
-        full_data = []
-
-    # Fetch video comments with hierarchical structure using the updated Video.get_all_video_comments
-    # This method now returns a list of top-level comments, each with a 'replies' list,
-    # and all necessary formatting (id conversion, date formatting, user name, and x_pos/y_pos for top-level)
-    comments_data = Video.get_all_video_comments(VideoId, request.session['Id'])
-    
-    # --- IMPORTANT FIX: Convert all ObjectIds in comments_data to strings ---
+    # Fetch and process comments
+    comments_data = Video.get_all_video_comments(video1_id, request.session['Id'])
     processed_comments_data = convert_objectids_to_str(comments_data)
 
-    print(f"DEBUG: comments_data (from model, structured): {comments_data}")
-    print(f"DEBUG: Type of comments_data: {type(comments_data)}")
-    print(f"DEBUG: processed_comments_data (after conversion): {processed_comments_data}")
-
-
+    # Final Context
     return render(request, 'dashboard_results.html', {
         'Role': user['Role'],
         'Name': user['Name'],
         'studentID': id,
-        'videoId': VideoId,
-        'comments': processed_comments_data, # Pass the processed data to the template
-        'video_title': video_title,
-        'video_url': video_url,
-        'columns': display_columns,
-        'full_data': full_data,
-        'column_status_mapping': column_status_mapping,
-        'current_user_name': current_user_name, # ADDED THIS LINE
-        'pose_class_images_url': pose_class_images_url, # NEW: Pass the pose class images URL
+        'videoId': video1_id,
+        'comments': processed_comments_data,
+        'current_user_name': current_user_name,
+        
+        # --- Conditional View Data ---
+        'is_dual_upload': is_dual_upload, # Flag for template switch
+        
+        # Video 1 Data (Primary Source / Left Video)
+        'video1_title': video1_title,
+        'video1_url': video1_url,
+        # Dump the *original* FO data for JS charts/processing
+        'video1_full_data': json.dumps(video1_full_data), 
+        
+        # Video 2 Data (DTL / Right Video)
+        'video2_title': video2_title,
+        'video2_url': video2_url,
+        # Dump the *original* DTL data for JS charts/processing
+        'video2_full_data': json.dumps(video2_full_data), 
+        
+        # Table/Chart Data
+        'columns': final_columns_for_template, # Columns (Combined or Single)
+        'column_status_mapping': column_status_mapping, 
+        'full_data': final_data_for_template, # Data (Combined or Single)
+        
+        # Single Video Fallback Data (for the 'else' branch)
+        'video_title': video1_title, 
+        'video_url': video1_url, 
+        'pose_class_images_url': pose_class_images_url,
     })
 
 # Add these new AJAX views to handle comments
@@ -428,7 +895,7 @@ def delete_video_comment_ajax(request, id, VideoId):
         except Exception as e:
             traceback.print_exc()
             return JsonResponse({'status': 'error', 'message': str(e)}, status=500)
-    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=405)
+    return JsonResponse({'status': 'error', 'message': 'Invalid request method.'}, status=400)
 
 # New AJAX View for editing a comment
 @csrf_exempt
@@ -714,30 +1181,44 @@ def dashboard_compareSwings(request, id):
 
 def dashboard_Coach(request):
     """Displays the Coach dashboard with associated students."""
-    if not is_logged_in(request):
-        return redirect('login')
-
-    if not isCoach(request):
+    if not is_logged_in(request) or not isCoach(request):
         return redirect('home')
 
     view = request.GET.get('view', 'list')
-    user = User.find_user_by_id(ObjectId(request.session['Id']))
-    students = fetch_all_students(request.session['Id'])
+    user = convert_objectids_to_str(User.find_user_by_id(ObjectId(request.session['Id'])))
+    students = convert_objectids_to_str(fetch_all_students(request.session['Id']))
 
-    # Convert ObjectIds in user and students data
-    processed_user = convert_objectids_to_str(user)
-    processed_students = convert_objectids_to_str(students)
-
-
+    # --- MODIFIED: Handle POST requests for uploads from the coach dashboard ---
     if request.method == 'POST':
-        upload_video(request)
+        video_type = request.POST.get('videoType')
+        current_user_id = request.session.get('Id')
+        assignee_id = request.POST.get('student_id')
+
+        if not assignee_id:
+            print("Coach upload error: No student was selected.")
+            return HttpResponseRedirect(reverse('home'))
+
+        if video_type == 'both':
+            face_on_file = request.FILES.get('face_on_file')
+            dtl_file = request.FILES.get('dtl_file')
+            if face_on_file and dtl_file:
+                Video.upload_dual_videos(
+                    current_user_id=current_user_id,
+                    assignee_id=assignee_id,
+                    face_on_file=face_on_file,
+                    dtl_file=dtl_file
+                )
+                print(f"Dual video upload initiated by coach {current_user_id} for student {assignee_id}.")
+            else:
+                print("Coach dual upload error: one or both files were missing.")
+        else:
+            success, message = upload_single_video_helper(request, current_user_id, assignee_id)
+            print(f"Coach single upload status: {message}")
+
         return HttpResponseRedirect(reverse('home'))
 
     return render(request, 'dashboard_coach.html', {
-        'Role': processed_user['Role'],
-        'Name': processed_user['Name'],
-        'students': processed_students,
-        'view': view,
+        'Role': user['Role'], 'Name': user['Name'], 'students': students, 'view': view,
     })
 
 def dashboard_admin(request):
@@ -1114,7 +1595,7 @@ def golf_set_user_context(request):
     except requests.exceptions.RequestException as e:
         return JsonResponse({'error': f'RPi connection error: {str(e)}'}, status=503)
     except Exception as e:
-        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=503)
 
 def api_my_students(request):
     """API endpoint to get coach's students"""
@@ -1158,6 +1639,217 @@ def golf_health(request):
             'status': 'disconnected',
             'golf_camera_ip': '172.20.10.5',
             'golf_camera_url': GOLF_CAMERA_URL,
+            'error': str(e),
+            'timestamp': timezone.now().isoformat()
+        })
+    
+    # =============================================================================
+# 🏌️ DOWN-THE-LINE GOLF CAMERA SYSTEM (Additional Angle)
+# =============================================================================
+
+def dtl_video_feed(request):
+    """Proxy the live video feed from down-the-line golf camera"""
+    try:
+        response = requests.get(f'{DTL_CAMERA_URL}/video_feed', stream=True)
+        if response.status_code == 200:
+            return StreamingHttpResponse(
+                response.iter_content(chunk_size=1024),
+                content_type='multipart/x-mixed-replace; boundary=frame'
+            )
+        else:
+            return HttpResponse("Down-the-line camera feed unavailable", status=503)
+    except requests.exceptions.RequestException as e:
+        return HttpResponse(f"Down-the-line camera connection error: {e}", status=503)
+
+def dtl_status(request):
+    """Get down-the-line camera status"""
+    try:
+        response = requests.get(f'{DTL_CAMERA_URL}/recording_status', timeout=5)
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({
+                'error': 'Down-the-line camera offline',
+                'is_recording': False,
+                'auto_recording_enabled': False,
+                'pose_detection_enabled': False,
+                'predicted_class': 'Unknown',
+                'pose_stage': 'disconnected',
+                'p1_confidence': 0,
+                'p10_confidence': 0
+            }, status=503)
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({
+            'error': f'Down-the-line camera connection error: {str(e)}',
+            'is_recording': False,
+            'auto_recording_enabled': False,
+            'pose_detection_enabled': False,
+            'predicted_class': 'Unknown',
+            'pose_stage': 'disconnected',
+            'p1_confidence': 0,
+            'p10_confidence': 0
+        }, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_start_recording(request):
+    """Enhanced recording with assignee support for down-the-line camera"""
+    try:
+        data_from_browser = json.loads(request.body)
+        
+        # Get current user info
+        user = User.find_user_by_id(ObjectId(request.session['Id']))
+        user_id_str = str(user['_id'])
+        
+        # Prepare payload with enhanced data
+        payload = {
+            'user_id': user_id_str,
+            'role': user['Role'],
+            'duration': data_from_browser.get('duration', 10),
+            'angle': 'down-the-line'  # Specify angle for this camera
+        }
+        
+        # If assignee_id provided, include it
+        assignee_id = data_from_browser.get('assignee_id')
+        if assignee_id:
+            payload['assignee_id'] = assignee_id
+        
+        # Forward to RPi
+        response = requests.post(
+            f'{DTL_CAMERA_URL}/start_recording',
+            json=payload,
+            timeout=5
+        )
+        
+        if response.ok:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to start down-the-line recording on RPi'}, status=response.status_code)
+            
+    except Exception as e:
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_toggle_auto_recording(request):
+    """Toggle auto recording on down-the-line camera"""
+    try:
+        response = requests.post(f'{DTL_CAMERA_URL}/toggle_auto_recording', timeout=5)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to toggle auto recording'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Down-the-line camera error: {str(e)}'}, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_toggle_pose_detection(request):
+    """Toggle pose detection on down-the-line camera"""
+    try:
+        response = requests.post(f'{DTL_CAMERA_URL}/toggle_pose_detection', timeout=5)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to toggle pose detection'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Down-the-line camera error: {str(e)}'}, status=503)
+
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_reload_models(request):
+    """Reload AI models on down-the-line camera"""
+    try:
+        response = requests.post(f'{DTL_CAMERA_URL}/reload_models', timeout=30)
+        
+        if response.status_code == 200:
+            return JsonResponse(response.json())
+        else:
+            return JsonResponse({'error': 'Failed to reload models'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Down-the-line camera error: {str(e)}'}, status=503)
+    
+@csrf_exempt
+@require_http_methods(["POST"])
+def dtl_set_user_context(request):
+    """Enhanced user context setting with assignee support for down-the-line camera"""
+    try:
+        # Get user from session
+        user = User.find_user_by_id(ObjectId(request.session['Id']))
+        user_id_str = str(user['_id'])
+        user_role = user['Role']
+        
+        # Get request data
+        data = json.loads(request.body) if request.body else {}
+        assignee_id = data.get('assignee_id')  # Optional: who the video is for
+        
+        # Prepare payload for RPi
+        payload = {
+            'user_id': user_id_str,
+            'role': user_role,
+            'angle': 'down-the-line'  # Specify angle
+        }
+        
+        # If assignee_id provided, include it
+        if assignee_id:
+            payload['assignee_id'] = assignee_id
+        
+        # Send to RPi
+        response = requests.post(
+            f'{DTL_CAMERA_URL}/set_user_context',
+            json=payload,
+            timeout=5
+        )
+        
+        if response.status_code == 200:
+            response_data = response.json()
+            return JsonResponse({
+                'status': 'success', 
+                'operator_id': user_id_str,
+                'assignee_id': response_data.get('assignee_id', user_id_str),
+                'role': user_role,
+                'angle': 'down-the-line'
+            })
+        else:
+            return JsonResponse({'error': 'Failed to set user context on down-the-line RPi'}, status=503)
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({'error': f'Down-the-line RPi connection error: {str(e)}'}, status=503)
+    except Exception as e:
+        return JsonResponse({'error': f'Server error: {str(e)}'}, status=500)
+
+def dtl_health(request):
+    """Check down-the-line camera health"""
+    try:
+        response = requests.get(f'{DTL_CAMERA_URL}/recording_status', timeout=3)
+        
+        if response.status_code == 200:
+            return JsonResponse({
+                'status': 'connected',
+                'dtl_camera_ip': '172.20.10.5',
+                'dtl_camera_url': DTL_CAMERA_URL,
+                'timestamp': timezone.now().isoformat(),
+                'camera_data': response.json()
+            })
+        else:
+            return JsonResponse({
+                'status': 'error',
+                'dtl_camera_ip': '172.20.10.5',
+                'dtl_camera_url': DTL_CAMERA_URL,
+                'error': f'HTTP {response.status_code}',
+                'timestamp': timezone.now().isoformat()
+            })
+            
+    except requests.exceptions.RequestException as e:
+        return JsonResponse({
+            'status': 'disconnected',
+            'dtl_camera_ip': '172.20.10.5',
+            'dtl_camera_url': DTL_CAMERA_URL,
             'error': str(e),
             'timestamp': timezone.now().isoformat()
         })

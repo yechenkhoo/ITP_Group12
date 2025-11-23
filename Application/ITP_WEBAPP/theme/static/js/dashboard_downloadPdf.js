@@ -82,8 +82,8 @@ document.addEventListener('DOMContentLoaded', function () {
                 }
                 console.log('Determined cleaned leftTitle:', leftTitle, 'cleaned rightTitle:', rightTitle);
 
-                // Construct videoTitle for comparison using underscores as delimiters for the overall comparison string
-                videoTitle = `Swing Comparison ${leftTitle} vs ${rightTitle}`;
+                // --- MODIFIED: Use Video 1 & Video 2 titles directly for naming ---
+                videoTitle = `${leftTitle} & ${rightTitle}`;
 
                 console.log('Initial videoTitle for PDF filename:', videoTitle);
 
@@ -119,12 +119,24 @@ document.addEventListener('DOMContentLoaded', function () {
             console.log('On single video results page.');
             let rawVideoTitle = downloadPdfBtn.dataset.videoTitle || 'video_data_default';
 
-            // Use the improved cleanVideoName directly as it now handles 'mp4' without dot
-            let baseVideoName = cleanVideoName(rawVideoTitle);
-
-            // Now, append "Results"
-            videoTitle = `${baseVideoName} Results`;
-            console.log('Constructed videoTitle for single page:', videoTitle);
+            // --- MODIFIED: Check for combined title (Dual Upload) ---
+            if (rawVideoTitle.includes(' & ')) {
+                // Handle dual upload formatting: "Title1.mp4 & Title2.mp4"
+                // Split, clean individual parts to remove extension, and join back.
+                const parts = rawVideoTitle.split(' & ');
+                const cleanedParts = parts.map(part => cleanVideoName(part.trim()));
+                
+                // Join them and append " Results"
+                videoTitle = cleanedParts.join(' & ') + ' Results';
+                
+                console.log('Constructed videoTitle for dual upload:', videoTitle);
+            } else {
+                // Use the improved cleanVideoName directly
+                let baseVideoName = cleanVideoName(rawVideoTitle);
+                // Append "Results" for single upload
+                videoTitle = `${baseVideoName} Results`;
+                console.log('Constructed videoTitle for single page:', videoTitle);
+            }
 
             const videoTitleElement = document.querySelector('h1.font-poppins.text-gray-800');
             if (videoTitleElement && pdfContentContainer && pdfContentContainer.querySelector('h1')) {
@@ -342,14 +354,6 @@ document.addEventListener('DOMContentLoaded', function () {
                 console.log('Applied page-break-inside: avoid to single video table header.');
             }
 
-            // Adjust image size in the PDF for single video page thumbnails
-            pdfContentContainer.querySelectorAll('#pdf-data-table tbody tr img').forEach(img => {
-                img.style.maxWidth = '60px'; // Make thumbnails smaller
-                img.style.height = 'auto';
-                img.style.padding = '2px'; // Reduce padding around images
-            });
-            console.log('Adjusted thumbnail sizes for single video PDF.');
-
             // Adjust padding for cells in the single video table
             pdfContentContainer.querySelectorAll('#pdf-data-table th, #pdf-data-table td').forEach(cell => {
                 cell.style.paddingLeft = '8px'; // Reduce horizontal padding
@@ -447,13 +451,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         console.log('Removed page-break-inside styles from single video table header.');
                     }
 
-                    // Remove adjusted image sizes for single video page thumbnails
-                    pdfContentContainer.querySelectorAll('#pdf-data-table tbody tr img').forEach(img => {
-                        img.style.maxWidth = ''; // Reset
-                        img.style.padding = ''; // Reset
-                    });
-                    console.log('Reverted thumbnail sizes for single video PDF.');
-
                     // Remove adjusted padding for cells in the single video table
                     pdfContentContainer.querySelectorAll('#pdf-data-table th, #pdf-data-table td').forEach(cell => {
                         cell.style.paddingLeft = ''; // Reset
@@ -515,10 +512,6 @@ document.addEventListener('DOMContentLoaded', function () {
                         pdfDataTableHeader.style.pageBreakInside = '';
                         pdfDataTableHeader.style.breakInside = '';
                     }
-                    pdfContentContainer.querySelectorAll('#pdf-data-table tbody tr img').forEach(img => {
-                        img.style.maxWidth = '';
-                        img.style.padding = '';
-                    });
                     pdfContentContainer.querySelectorAll('#pdf-data-table th, #pdf-data-table td').forEach(cell => {
                         cell.style.paddingLeft = '';
                         cell.style.paddingRight = '';

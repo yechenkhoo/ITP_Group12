@@ -58,9 +58,10 @@ def process_uploaded_video(cloud_event):
 
         print(f"Processing file: {file_name} in bucket: {bucket_name}")
 
-        # Check if file is in the golf_videos folder (old structure)
-        if not file_name.startswith('golf_videos/'):
-            print(f"Ignoring file {file_name} - not in golf_videos folder")
+        # Check if file is in a valid video folder (support both structures)
+        valid_folders = ['golf_videos/', 'dtl_videos/']
+        if not any(file_name.startswith(folder) for folder in valid_folders):
+            print(f"Ignoring file {file_name} - not in a valid video folder: {valid_folders}")
             return "OK"
 
         # Check if it's a video file
@@ -82,6 +83,10 @@ def process_uploaded_video(cloud_event):
         # Generate raw video link
         raw_video_link = generate_raw_video_link(file_name, bucket_name)
 
+        # Determine video type based on folder
+        video_type = "down-the-line" if file_name.startswith('dtl_videos/') else "face-on"
+        print(f"Video type: {video_type}")
+
         # Parse both operator and assignee from filename
         user_id_str = None
         assignee_id_str = None
@@ -92,15 +97,36 @@ def process_uploaded_video(cloud_event):
         filename_parts = video_filename.split("_")
         print(f"Parsing filename: {video_filename}")
         print(f"Filename parts: {filename_parts}")
-        
-        if len(filename_parts) >= 4 and filename_parts[2] == "swing":
-            # New format: {operator_id}_{assignee_id}_swing_{timestamp}.mp4
+
+        # Extract session_id from filename
+        # Format: ...swing_{date}_{time}.mp4 -> session_id = {date}_{time}
+        session_id = None
+        try:
+            # Find the index of "swing" in filename_parts
+            if "swing" in filename_parts:
+                swing_index = filename_parts.index("swing")
+                # Session ID is the parts after "swing" (date and time), excluding the file extension
+                if len(filename_parts) > swing_index + 2:
+                    # Get date and time parts, remove .mp4 extension from the last part
+                    date_part = filename_parts[swing_index + 1]
+                    time_part = filename_parts[swing_index + 2].split('.')[0]  # Remove file extension
+                    session_id = f"{date_part}_{time_part}"
+                    print(f"Extracted session_id: {session_id}")
+        except Exception as e:
+            print(f"Could not extract session_id: {e}")
+
+        # Determine if this has camera_id in the filename
+        if len(filename_parts) >= 5 and filename_parts[3] == "swing":
+            # NEW FORMAT with different operator/assignee: 
+            # {operator_id}_{assignee_id}_{camera_id}_swing_{timestamp}.mp4
             user_id_str = filename_parts[0]      # Operator (who recorded)
             assignee_id_str = filename_parts[1]  # Assignee (who it's for)
+            camera_id = filename_parts[2]        # Camera type (face-on or down-line)
             
-            print(f"Enhanced format detected:")
+            print(f"Enhanced format detected (5 parts):")
             print(f"   Operator ID: {user_id_str}")
             print(f"   Assignee ID: {assignee_id_str}")
+            print(f"   Camera ID: {camera_id}")
             
             # Get operator info
             operator_doc = find_user_by_objectid(user_id_str)
@@ -118,10 +144,15 @@ def process_uploaded_video(cloud_event):
             else:
                 print(f"   Assignee not found: {assignee_id_str}")
                 
-        elif len(filename_parts) >= 3 and filename_parts[1] == "swing":
-            # Old format: {user_id}_swing_{timestamp}.mp4
-            user_id_str = filename_parts[0]
-            print(f"Old format detected - User ID: {user_id_str}")
+        elif len(filename_parts) >= 4 and filename_parts[2] == "swing":
+            # NEW FORMAT with same operator/assignee: 
+            # {user_id}_{camera_id}_swing_{timestamp}.mp4
+            user_id_str = filename_parts[0]      # User ID
+            camera_id = filename_parts[1]        # Camera type (face-on or down-line)
+            
+            print(f"Enhanced format detected (4 parts - same user):")
+            print(f"   User ID: {user_id_str}")
+            print(f"   Camera ID: {camera_id}")
             
             user_doc = find_user_by_objectid(user_id_str)
             if user_doc:
@@ -130,14 +161,25 @@ def process_uploaded_video(cloud_event):
                 print(f"   User found: {user_doc.get('Name')} (recording for themselves)")
             else:
                 print(f"   User not found: {user_id_str}")
+                
+        elif len(filename_parts) >= 3 and filename_parts[1] == "swing":
+            # OLD FORMAT (backward compatibility): {user_id}_swing_{timestamp}.mp4
+            user_id_str = filename_parts[0]
+            print(f"Old format detected - User ID: {user_id_str}")
+            
+            user_doc = find_user_by_objectid(user_id_str)
+            if user_doc:
+                uploaded_by = user_doc.get("_id")
+                assignee = user_doc.get("_id")  # Same person
+                print(f"   User found: {user_doc.get('Name')} (old format)")
+            else:
+                print(f"   User not found: {user_id_str}")
         else:
             print(f"Unknown filename format: {video_filename}")
-            print(f"   Expected: {{user_id}}_swing_{{timestamp}}.mp4 OR {{operator_id}}_{{assignee_id}}_swing_{{timestamp}}.mp4")
-        
-        print(f"Final assignment:")
-        print(f"   UploadedBy: {uploaded_by}")
-        print(f"   Assignee: {assignee}")
-        print(f"   Raw Video Link: {raw_video_link}")
+            print(f"   Expected formats:")
+            print(f"     1. {{user_id}}_{{camera_id}}_swing_{{timestamp}}.mp4")
+            print(f"     2. {{operator_id}}_{{assignee_id}}_{{camera_id}}_swing_{{timestamp}}.mp4")
+            print(f"     3. {{user_id}}_swing_{{timestamp}}.mp4 (old format)")
 
         # Generate output paths
         output_video_path = f"processed/{video_id}_output_{timestamp}.mp4"
@@ -149,6 +191,7 @@ def process_uploaded_video(cloud_event):
 
         payload = {
             "video_id": video_id,
+            "bucket_name": bucket_name,
             "video_path": file_name,
             "classification_model": "best_model.keras",
             "output_video_path": output_video_path,
@@ -180,21 +223,21 @@ def process_uploaded_video(cloud_event):
             try:
                 print(f"Starting MongoDB operations...")
                 
-                # Look for existing video record
+                # [MODIFIED] Query by title first
                 query_filter = {"Title": video_filename}
+                existing = collection.find_one(query_filter)
                 
-                # Add UploadedBy to query only if we have a valid user
-                if uploaded_by is not None:
+                if not existing and uploaded_by is not None:
                     query_filter["UploadedBy"] = uploaded_by
                     print(f"Searching for existing video:")
                     print(f"   Title: {video_filename}")
                     print(f"   UploadedBy: {uploaded_by}")
-                else:
+                    existing = collection.find_one(query_filter)
+                elif not existing:
                     print(f"Searching for existing video:")
                     print(f"   Title: {video_filename}")
                     print(f"   No UploadedBy filter (user not found)")
                 
-                existing = collection.find_one(query_filter)
 
                 if existing:
                     print(f"Found existing record: {existing['_id']}")
@@ -209,9 +252,14 @@ def process_uploaded_video(cloud_event):
                         "Status": "Completed",
                         "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "originalVideoPath": file_name,
-                        "processedTimestamp": datetime.now().isoformat()
+                        "processedTimestamp": datetime.now().isoformat(),
+                        # "session_id": session_id <-- [REMOVED]
                     }
                     
+                    # [NEW] Only update session_id if it was found in the filename
+                    if session_id is not None:
+                        update_fields["session_id"] = session_id
+
                     # Add assignee if we have new info
                     if assignee is not None:
                         update_fields["Assignee"] = assignee
@@ -236,7 +284,7 @@ def process_uploaded_video(cloud_event):
                     # Include raw video link in new document
                     new_doc = {
                         "Title": video_filename,
-                        "Type": "face-on",  # Default type for old structure
+                        "Type": video_type,
                         "DateUploaded": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "Status": "Completed",
                         "UploadedBy": uploaded_by,
@@ -246,7 +294,8 @@ def process_uploaded_video(cloud_event):
                         "processedVideoLink": processed_video,
                         "rawVideoLink": raw_video_link,
                         "originalVideoPath": file_name,
-                        "processedTimestamp": datetime.now().isoformat()
+                        "processedTimestamp": datetime.now().isoformat(),
+                        "session_id": session_id # This is fine (will be None)
                     }
                     
                     print(f"Inserting new document:")
@@ -272,12 +321,13 @@ def process_uploaded_video(cloud_event):
             try:
                 print(f"Handling failed API call...")
                 
-                # Look for existing record to update with error
+                # [MODIFIED] Query by title first
                 query_filter = {"Title": video_filename}
-                if uploaded_by is not None:
-                    query_filter["UploadedBy"] = uploaded_by
-
                 existing = collection.find_one(query_filter)
+                if not existing and uploaded_by is not None:
+                    query_filter["UploadedBy"] = uploaded_by
+                    existing = collection.find_one(query_filter)
+
                 
                 if existing:
                     # Include raw video link even in failed records
@@ -287,9 +337,14 @@ def process_uploaded_video(cloud_event):
                         "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "ErrorDetails": response.text[:500] if response.text else "Unknown error",
                         "originalVideoPath": file_name,
-                        "rawVideoLink": raw_video_link
+                        "rawVideoLink": raw_video_link,
+                        # "session_id": session_id <-- [REMOVED]
                     }
                     
+                    # [NEW] Only update session_id if it was found in the filename
+                    if session_id is not None:
+                        update_fields["session_id"] = session_id
+                        
                     collection.update_one(
                         {"_id": existing["_id"]},
                         {"$set": update_fields}
@@ -299,7 +354,7 @@ def process_uploaded_video(cloud_event):
                     # Include raw video link in new failed record
                     new_doc = {
                         "Title": video_filename,
-                        "Type": "face-on",
+                        "Type": video_type,
                         "DateUploaded": datetime.now().strftime("%H:%M %b %d, %Y"),
                         "Status": "Failed",
                         "Error": f"API failed with status {response.status_code}",
@@ -307,7 +362,8 @@ def process_uploaded_video(cloud_event):
                         "UploadedBy": uploaded_by,
                         "Assignee": assignee,
                         "originalVideoPath": file_name,
-                        "rawVideoLink": raw_video_link
+                        "rawVideoLink": raw_video_link,
+                        "session_id": session_id # This is fine (will be None)
                     }
                     collection.insert_one(new_doc)
                     print(f"Inserted failed record for {video_filename}")
@@ -324,17 +380,39 @@ def process_uploaded_video(cloud_event):
         try:
             video_filename = os.path.basename(file_name)
             raw_video_link = generate_raw_video_link(file_name, bucket_name)
+            video_type = "down-the-line" if file_name.startswith('dtl_videos/') else "face-on"
             print(f"Creating network error record for {video_filename}")
             
+            # Extract session_id for network error records
+            network_session_id = None
+            try:
+                filename_parts = video_filename.split("_")
+                if "swing" in filename_parts:
+                    swing_index = filename_parts.index("swing")
+                    if len(filename_parts) > swing_index + 2:
+                        date_part = filename_parts[swing_index + 1]
+                        time_part = filename_parts[swing_index + 2].split('.')[0]
+                        network_session_id = f"{date_part}_{time_part}"
+            except Exception:
+                pass
+            
+            # [MODIFIED] Query by title first
             existing = collection.find_one({"Title": video_filename})
+            
             if existing:
                 update_fields = {
                     "Status": "Failed",
                     "Error": "Network error calling ML API",
                     "ErrorDetails": str(e),
                     "LastUpdated": datetime.now().strftime("%H:%M %b %d, %Y"),
-                    "rawVideoLink": raw_video_link
+                    "rawVideoLink": raw_video_link,
+                    # "session_id": network_session_id <-- [REMOVED]
                 }
+                
+                # [NEW] Only update session_id if found
+                if network_session_id is not None:
+                    update_fields["session_id"] = network_session_id
+
                 collection.update_one(
                     {"_id": existing["_id"]},
                     {"$set": update_fields}
@@ -344,13 +422,14 @@ def process_uploaded_video(cloud_event):
                 # Include raw video link in network error record
                 new_doc = {
                     "Title": video_filename,
-                    "Type": "face-on",
+                    "Type": video_type,
                     "DateUploaded": datetime.now().strftime("%H:%M %b %d, %Y"),
                     "Status": "Failed",
                     "Error": "Network error calling ML API",
                     "ErrorDetails": str(e),
                     "originalVideoPath": file_name,
-                    "rawVideoLink": raw_video_link
+                    "rawVideoLink": raw_video_link,
+                    "session_id": network_session_id # This is fine
                 }
                 collection.insert_one(new_doc)
                 print(f"Inserted network error record for {video_filename}")

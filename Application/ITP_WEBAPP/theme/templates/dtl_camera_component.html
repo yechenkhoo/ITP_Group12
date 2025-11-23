@@ -1,0 +1,478 @@
+<!-- Down-the-Line Golf Camera Live Feed Component (Manual Recording Only) with Enhanced Recording Indicator -->
+<div class="max-w-4xl mx-auto p-6 bg-white rounded-lg shadow-lg">
+  <!-- Header -->
+  <div class="flex items-center justify-between mb-6">
+    <h2 class="text-2xl font-bold text-gray-900 flex items-center gap-2">
+      <i class="fas fa-camera"></i>
+      Golf Swing Live Feed (Down-the-Line)
+    </h2>
+    <div class="flex items-center gap-2">
+      <i id="dtlConnectionIcon" class="fas fa-wifi text-gray-500"></i>
+      <span id="dtlConnectionStatus" class="text-sm text-gray-600">connecting...</span>
+    </div>
+  </div>
+
+  <!-- Coach Options -->
+  <div id="dtlCoachOptions" class="mb-6 hidden">
+    <div class="bg-blue-50 p-4 rounded-lg">
+      <h3 class="font-semibold text-blue-900 mb-3">Coach Options:</h3>
+      <div class="flex items-center gap-4">
+        <label class="text-sm font-medium">Record video for:</label>
+        <select id="dtlAssigneeSelect" class="px-3 py-2 border border-gray-300 rounded-md">
+          <option value="">Myself (Coach)</option>
+        </select>
+      </div>
+    </div>
+  </div>
+
+  <!-- Video Stream -->
+  <div class="relative mb-6">
+    <div class="bg-black rounded-lg overflow-hidden aspect-video flex items-center justify-center">
+      <img 
+        id="dtlVideoFeed" 
+        class="w-full h-full object-contain hidden"
+        alt="Down-the-Line Golf Swing Live Feed"
+      />
+      <div id="dtlVideoPlaceholder" class="text-white text-center">
+        <i class="fas fa-camera text-6xl mb-4 opacity-50"></i>
+        <p class="text-lg">Down-the-Line Camera Ready</p>
+        <p class="text-sm opacity-75 mt-2">Click "Start Live Feed" to begin</p>
+      </div>
+    </div>
+    
+    <!-- Enhanced Recording Indicator with Timer -->
+    <div id="dtlRecordingIndicator" class="absolute top-6 left-6 space-y-3 hidden">
+      <!-- Main REC Badge -->
+      <div class="bg-red-600 text-white px-6 py-3 rounded-xl shadow-2xl flex items-center gap-3 animate-pulse">
+        <div class="relative">
+          <div class="w-4 h-4 bg-white rounded-full"></div>
+          <div class="absolute inset-0 w-4 h-4 bg-white rounded-full animate-ping"></div>
+        </div>
+        <span class="text-2xl font-black tracking-wider">REC</span>
+      </div>
+
+      <!-- Timer Display -->
+      <div class="bg-black/80 backdrop-blur-sm text-white px-5 py-3 rounded-xl shadow-xl border-2 border-red-500">
+        <div class="text-sm font-semibold text-red-400 mb-1">RECORDING</div>
+        <div id="dtlRecordingTimer" class="text-3xl font-mono font-bold tabular-nums">0:00.0</div>
+        <div id="dtlRecordingTotal" class="text-xs text-gray-400 mt-1">/ 0:10.0</div>
+      </div>
+
+      <!-- Progress Bar -->
+      <div class="bg-black/60 backdrop-blur-sm p-3 rounded-xl shadow-xl">
+        <div class="w-48 h-2 bg-gray-700 rounded-full overflow-hidden">
+          <div id="dtlRecordingProgress" class="h-full bg-gradient-to-r from-red-500 to-red-600 transition-all duration-100 rounded-full" style="width: 0%"></div>
+        </div>
+        <div id="dtlRecordingPercent" class="text-white text-xs mt-2 text-center font-semibold">0% Complete</div>
+      </div>
+    </div>
+
+    <!-- MANUAL MODE INDICATOR (Slave Camera) -->
+    <div class="absolute top-4 right-4 bg-purple-600 text-white px-3 py-1 rounded-full text-xs">
+      MANUAL MODE (SLAVE)
+    </div>
+  </div>
+
+  <!-- Controls -->
+  <div class="space-y-4">
+    <!-- Recording Duration -->
+    <div class="flex items-center justify-center gap-4">
+      <label class="text-sm font-medium">Recording Duration:</label>
+      <select id="dtlRecordingDuration" class="px-3 py-2 border border-gray-300 rounded-md">
+        <option value="5">5 seconds</option>
+        <option value="10" selected>10 seconds</option>
+        <option value="15">15 seconds</option>
+        <option value="20">20 seconds</option>
+      </select>
+    </div>
+
+    <!-- Main Controls -->
+    <div class="flex flex-wrap gap-4 justify-center">
+      <button id="dtlStartFeedBtn" class="flex items-center gap-2 px-6 py-3 bg-purple-600 text-white rounded-lg hover:bg-purple-700 transition-colors">
+        <i class="fas fa-play"></i>
+        Start Live Feed
+      </button>
+
+      <button id="dtlRecordBtn" class="flex items-center gap-2 px-6 py-3 bg-red-600 text-white rounded-lg hover:bg-red-700 disabled:bg-gray-400 disabled:cursor-not-allowed transition-colors" disabled>
+        <i class="fas fa-circle"></i>
+        <span id="dtlRecordBtnText">Record</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Instructions -->
+  <div class="mt-6 p-4 bg-purple-50 rounded-lg">
+    <h3 class="font-semibold text-purple-900 mb-2">How to use (Down-the-Line View):</h3>
+    <ul class="text-sm text-purple-800 space-y-1">
+      <li>• <strong>Start Live Feed:</strong> Click to begin video streaming</li>
+      <li>• <strong>Manual Record:</strong> Choose duration and click "Record"</li>
+      <li>• <strong>Slave Camera:</strong> This camera is controlled by Face-On camera for auto-recording</li>
+      <li>• <strong>Camera Angle:</strong> Down-the-line view provides side perspective of swing</li>
+      <li>• <strong>For Auto Recording:</strong> Use the Dual Camera view where Face-On controls both cameras</li>
+    </ul>
+  </div>
+</div>
+
+<script>
+// Down-the-Line Golf Camera Controller with Enhanced Recording Timer
+class DTLCameraController {
+  constructor() {
+    this.isRecording = false;
+    this.connectionStatus = 'disconnected';
+    this.streamActive = false;
+    this.currentAssigneeId = null;
+    
+    // Recording timer properties
+    this.recordingStartTime = null;
+    this.recordingDuration = 10;
+    this.recordingTimerInterval = null;
+    
+    this.init();
+  }
+
+  init() {
+    this.bindEvents();
+    this.setupCoachOptions();
+    this.checkHealth();
+  }
+
+  setupCoachOptions() {
+    const userRole = window.currentUserRole || 'student';
+    
+    if (userRole === 'coach') {
+      document.getElementById('dtlCoachOptions').classList.remove('hidden');
+      this.loadStudentList();
+    }
+  }
+
+  bindEvents() {
+    // Start live feed
+    document.getElementById('dtlStartFeedBtn').addEventListener('click', () => {
+      this.toggleLiveFeed();
+    });
+
+    // Manual recording
+    document.getElementById('dtlRecordBtn').addEventListener('click', () => {
+      this.startRecording();
+    });
+  }
+
+  async loadStudentList() {
+    try {
+      const response = await fetch('/home/api/my-students/');
+      
+      if (!response.ok) {
+        console.log('Student list endpoint not available - coach can only record for themselves');
+        return;
+      }
+      
+      const students = await response.json();
+      const select = document.getElementById('dtlAssigneeSelect');
+      
+      students.forEach(student => {
+        const option = document.createElement('option');
+        option.value = student.id;
+        option.textContent = student.name;
+        select.appendChild(option);
+      });
+      
+    } catch (error) {
+      console.error('Failed to load student list for DTL:', error);
+      console.log('Coach can record for themselves only');
+    }
+  }
+
+  async checkHealth() {
+    try {
+      const response = await fetch('/home/dtl_health/');
+      const data = await response.json();
+      
+      if (data.status === 'connected') {
+        this.updateConnectionStatus('connected');
+        this.startStatusPolling();
+      } else {
+        this.updateConnectionStatus('error');
+      }
+    } catch (error) {
+      console.error('DTL Health check failed:', error);
+      this.updateConnectionStatus('disconnected');
+    }
+  }
+
+  updateConnectionStatus(status) {
+    this.connectionStatus = status;
+    const statusEl = document.getElementById('dtlConnectionStatus');
+    const iconEl = document.getElementById('dtlConnectionIcon');
+    
+    switch (status) {
+      case 'connected':
+        statusEl.textContent = 'Connected (Slave Mode - Port 5001)';
+        iconEl.setAttribute('class', 'fas fa-wifi text-green-500');
+        break;
+      case 'connecting':
+        statusEl.textContent = 'Connecting...';
+        iconEl.setAttribute('class', 'fas fa-wifi text-yellow-500');
+        break;
+      case 'error':
+        statusEl.textContent = 'Error';
+        iconEl.setAttribute('class', 'fas fa-wifi text-red-500');
+        break;
+      default:
+        statusEl.textContent = 'Disconnected';
+        iconEl.setAttribute('class', 'fas fa-wifi text-gray-500');
+    }
+  }
+
+  toggleLiveFeed() {
+    const videoFeed = document.getElementById('dtlVideoFeed');
+    const placeholder = document.getElementById('dtlVideoPlaceholder');
+    const btn = document.getElementById('dtlStartFeedBtn');
+
+    if (!this.streamActive) {
+      this.setUserContextOnRPi().then(() => {
+        // Start stream
+        videoFeed.src = '/home/dtl_video_feed/';
+        videoFeed.classList.remove('hidden');
+        placeholder.classList.add('hidden');
+        
+        btn.innerHTML = '<i class="fas fa-stop"></i> Stop Feed';
+        btn.classList.remove('bg-purple-600', 'hover:bg-purple-700');
+        btn.classList.add('bg-gray-600', 'hover:bg-gray-700');
+        
+        this.streamActive = true;
+      }).catch(error => {
+        console.error('Failed to set DTL user context:', error);
+        alert('Failed to initialize DTL camera with user context. Recording may not work properly.');
+      });
+    } else {
+      // Stop stream
+      videoFeed.src = '';
+      videoFeed.classList.add('hidden');
+      placeholder.classList.remove('hidden');
+      
+      btn.innerHTML = '<i class="fas fa-play"></i> Start Live Feed';
+      btn.classList.remove('bg-gray-600', 'hover:bg-gray-700');
+      btn.classList.add('bg-purple-600', 'hover:bg-purple-700');
+      
+      this.streamActive = false;
+    }
+  }
+
+  async setUserContextOnRPi() {
+    try {
+      const userId = window.currentUserId;
+      const userRole = window.currentUserRole || 'student';
+      
+      let payload = { 
+        user_id: userId,
+        role: userRole 
+      };
+      
+      if (userRole === 'coach') {
+        const selectedStudentId = document.getElementById('dtlAssigneeSelect')?.value;
+        if (selectedStudentId) {
+          payload.assignee_id = selectedStudentId;
+          this.currentAssigneeId = selectedStudentId;
+          console.log(`Coach recording DTL for student: ${selectedStudentId}`);
+        } else {
+          this.currentAssigneeId = userId;
+          console.log('Coach recording DTL for themselves');
+        }
+      } else {
+        this.currentAssigneeId = userId;
+      }
+      
+      const response = await fetch('/home/dtl_set_user_context/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.error || 'Failed to set DTL user context');
+      }
+
+      const data = await response.json();
+      console.log('DTL User context set successfully:', data);
+      return data;
+      
+    } catch (error) {
+      console.error('Error setting DTL user context:', error);
+      throw error;
+    }
+  }
+
+  async startRecording() {
+    if (this.isRecording) return;
+
+    const duration = document.getElementById('dtlRecordingDuration').value;
+    const userId = window.currentUserId;
+
+    if (!userId) {
+      alert("CRITICAL ERROR: User ID is missing. Please refresh the page.");
+      return;
+    }
+    
+    try {
+      let payload = { 
+        duration: parseInt(duration),
+        user_id: userId 
+      };
+
+      // Add assignee if different from operator
+      if (this.currentAssigneeId && this.currentAssigneeId !== userId) {
+        payload.assignee_id = this.currentAssigneeId;
+      }
+
+      const response = await fetch('/home/dtl_start_recording/', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        console.log('DTL Recording started:', data.message);
+        
+        // Start the timer immediately
+        this.startRecordingTimer(parseInt(duration));
+      } else {
+        const errorData = await response.json();
+        console.error('DTL Recording failed:', errorData.error);
+        alert('Failed to start DTL recording: ' + errorData.error);
+      }
+    } catch (error) {
+      console.error('DTL Recording error:', error);
+      alert('An error occurred while trying to start the DTL recording.');
+    }
+  }
+
+  // Enhanced timer methods
+  startRecordingTimer(durationSeconds) {
+    this.recordingStartTime = Date.now();
+    this.recordingDuration = durationSeconds;
+    
+    // Update the total duration display
+    document.getElementById('dtlRecordingTotal').textContent = `/ ${this.formatTime(this.recordingDuration)}`;
+    
+    this.recordingTimerInterval = setInterval(() => {
+      const elapsed = (Date.now() - this.recordingStartTime) / 1000;
+      const progress = (elapsed / this.recordingDuration) * 100;
+      
+      // Cap elapsed time at duration to show full time at completion
+      const displayElapsed = Math.min(elapsed, this.recordingDuration);
+      
+      // Update timer display
+      document.getElementById('dtlRecordingTimer').textContent = this.formatTime(displayElapsed);
+      document.getElementById('dtlRecordingProgress').style.width = `${Math.min(progress, 100)}%`;
+      document.getElementById('dtlRecordingPercent').textContent = `${Math.round(Math.min(progress, 100))}% Complete`;
+      
+      // Stop timer after showing full duration
+      if (elapsed >= this.recordingDuration + 0.2) {
+        this.stopRecordingTimer();
+      }
+    }, 100);
+  }
+
+  stopRecordingTimer() {
+    if (this.recordingTimerInterval) {
+      clearInterval(this.recordingTimerInterval);
+      this.recordingTimerInterval = null;
+    }
+    
+    // Reset displays
+    document.getElementById('dtlRecordingTimer').textContent = '0:00.0';
+    document.getElementById('dtlRecordingProgress').style.width = '0%';
+    document.getElementById('dtlRecordingPercent').textContent = '0% Complete';
+  }
+
+  formatTime(seconds) {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    const ms = Math.floor((seconds % 1) * 10);
+    return `${mins}:${secs.toString().padStart(2, '0')}.${ms}`;
+  }
+
+  startStatusPolling() {
+    setInterval(() => {
+      this.fetchStatus();
+    }, 2000);
+  }
+
+  async fetchStatus() {
+    try {
+      const response = await fetch('/home/dtl_status/');
+      
+      if (response.ok) {
+        const data = await response.json();
+        this.updateUI(data);
+      }
+    } catch (error) {
+      console.error('DTL Status fetch error:', error);
+    }
+  }
+
+  updateUI(data) {
+    const wasRecording = this.isRecording;
+    
+    // Update recording state
+    this.isRecording = data.is_recording;
+
+    // Update recording indicator visibility
+    if (this.isRecording) {
+      document.getElementById('dtlRecordingIndicator').classList.remove('hidden');
+      
+      // Start timer if recording just started
+      if (!wasRecording && !this.recordingTimerInterval) {
+        // DTL is slave camera, always use selected manual duration
+        const duration = parseInt(document.getElementById('dtlRecordingDuration').value);
+        this.startRecordingTimer(duration);
+      }
+    } else {
+      document.getElementById('dtlRecordingIndicator').classList.add('hidden');
+      
+      // Stop timer if recording just stopped
+      if (wasRecording) {
+        this.stopRecordingTimer();
+      }
+    }
+
+    // Update record button
+    this.updateRecordButton();
+  }
+
+  updateRecordButton() {
+    const btn = document.getElementById('dtlRecordBtn');
+    const text = document.getElementById('dtlRecordBtnText');
+    const duration = document.getElementById('dtlRecordingDuration').value;
+    
+    if (this.connectionStatus === 'connected' && !this.isRecording) {
+      btn.disabled = false;
+      text.textContent = `Record (${duration}s)`;
+    } else {
+      btn.disabled = true;
+      text.textContent = this.isRecording ? 'Recording...' : 'Record';
+    }
+  }
+}
+
+// Initialize when DTL camera tab is active
+document.addEventListener('DOMContentLoaded', () => {
+  const dtlContent = document.getElementById('dtlCameraContent');
+  if (dtlContent && !dtlContent.classList.contains('hidden')) {
+    new DTLCameraController();
+  }
+  
+  const dtlTab = document.getElementById('dtlCameraTab');
+  if (dtlTab) {
+    dtlTab.addEventListener('click', () => {
+      setTimeout(() => {
+        if (!window.dtlCameraController) {
+          window.dtlCameraController = new DTLCameraController();
+        }
+      }, 100);
+    });
+  }
+});
+</script>
